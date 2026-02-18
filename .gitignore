@@ -1,0 +1,33 @@
+# Binaries
+miri
+miri.exe
+miri.test
+
+# Test output
+*.out
+output.test
+
+# Dependencies
+vendor/
+
+# Go workspace
+go.work
+go.work.sum
+
+# IDE / Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# User data and configs
+.miri/
+config.yaml
+*.yaml  # optional, but since sensitive API keys

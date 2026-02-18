@@ -1,0 +1,23 @@
+[Unit]
+Description=Miri Autonomous Agent Service
+
+After=network.target
+
+[Service]
+Type=simple
+User=%i
+Environment=MIRI_STORAGE_DIR=%h/.miri
+WorkingDirectory=%h
+ExecStart=%h/bin/miri  # adjust path to your miri binary
+PIDFile=%h/.miri/miri.pid
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+
+# Usage:
+# sudo cp templates/systemd/miri.service /etc/systemd/system/miri@username.service
+# sudo systemctl daemon-reload
+# sudo systemctl enable miri@username
+# sudo systemctl start miri@username

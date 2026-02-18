@@ -1,0 +1,33 @@
+&lt;?xml version=\"1.0\" encoding=\"UTF-8\"?&gt;
+&lt;!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\"&gt;
+&lt;plist version=\"1.0\"&gt;
+&lt;dict&gt;
+	&lt;key&gt;Label&lt;/key&gt;
+	&lt;string&gt;com.miri.agent&lt;/string&gt;
+	&lt;key&gt;ProgramArguments&lt;/key&gt;
+	&lt;array&gt;
+		&lt;string&gt;/usr/local/bin/miri&lt;/string&gt;
+	&lt;/array&gt;
+	&lt;key&gt;RunAtLoad&lt;/key&gt;
+	&lt;true/&gt;
+	&lt;key&gt;KeepAlive&lt;/key&gt;
+	&lt;true/&gt;
+	&lt;key&gt;WorkingDirectory&lt;/key&gt;
+	&lt;string&gt;$HOME&lt;/string&gt;
+	&lt;key&gt;EnvironmentVariables&lt;/key&gt;
+	&lt;dict&gt;
+		&lt;key&gt;MIRI_STORAGE_DIR&lt;/key&gt;
+		&lt;string&gt;$HOME/.miri&lt;/string&gt;
+	&lt;/dict&gt;
+	&lt;key&gt;StandardOutPath&lt;/key&gt;
+	&lt;string&gt;$HOME/.miri/miri.out.log&lt;/string&gt;
+	&lt;key&gt;StandardErrorPath&lt;/key&gt;
+	&lt;string&gt;$HOME/.miri/miri.err.log&lt;/string&gt;
+&lt;/dict&gt;
+&lt;/plist&gt;
+
+# Usage on macOS:
+# mkdir -p ~/Library/LaunchAgents
+# cp templates/launchd/com.miri.agent.plist ~/Library/LaunchAgents/
+# launchctl load ~/Library/LaunchAgents/com.miri.agent.plist
+# launchctl start com.miri.agent
