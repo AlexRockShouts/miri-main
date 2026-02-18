@@ -29,5 +29,4 @@ Thumbs.db
 
 # User data and configs
 .miri/
-config.yaml
 *.yaml  # optional, but since sensitive API keys
