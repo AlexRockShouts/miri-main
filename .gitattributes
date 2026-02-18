@@ -1,0 +1,1 @@
+src/internal/engine/memory/static_qwen3_embedding_0.6b_pca384.msgpack filter=lfs diff=lfs merge=lfs -text
