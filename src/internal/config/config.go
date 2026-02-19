@@ -83,7 +83,8 @@ type ChannelsConfig struct {
 	Whatsapp WhatsappConfig `mapstructure:"whatsapp" json:"whatsapp"`
 }
 
-func Load() (*Config, error) {
+func Load(override string) (*Config, error) {
+
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return nil, err
@@ -100,22 +101,19 @@ func Load() (*Config, error) {
 		_ = os.MkdirAll(appDir, 0755)
 	}
 
-	viper.SetDefault("models.mode", "merge")
-	viper.SetDefault("models.providers.xai.baseUrl", "https://api.x.ai/v1")
-	viper.SetDefault("models.providers.xai.api", "openai-completions")
-	viper.SetDefault("server.addr", ":8080")
-	viper.SetDefault("tools.enabled", false)
-	viper.SetDefault("tools.web_search_enabled", false)
-	viper.SetDefault("tools.web_fetch_enabled", false)
-	viper.SetDefault("tools.cron_enabled", false)
-	viper.SetDefault("channels.whatsapp.enabled", false)
-	viper.SetDefault("agents.subagents", 0)
-	viper.SetDefault("storage_dir", appDir)
-
-	viper.SetConfigName("config")
-	viper.SetConfigType("yaml")
-	viper.AddConfigPath(appDir)
-	viper.AddConfigPath(".")
+	if override != "" {
+		viper.AddConfigPath(".")
+		viper.SetConfigFile(override)
+		if err := viper.ReadInConfig(); err != nil {
+			if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
+				return nil, err
+			}
+		}
+	} else {
+		viper.SetConfigName("config")
+		viper.SetConfigType("yaml")
+		viper.AddConfigPath(appDir)
+	}
 
 	if err := viper.ReadInConfig(); err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
@@ -126,46 +124,6 @@ func Load() (*Config, error) {
 	var cfg Config
 	if err := viper.Unmarshal(&cfg); err != nil {
 		return nil, err
-	}
-
-	// Migrate old XAI config
-	if viper.IsSet("xai.api_key") || viper.IsSet("xai.model") {
-		xaiKey := viper.GetString("xai.api_key")
-		xaiModel := viper.GetString("xai.model")
-		if viper.IsSet("xai.api_key") && xaiKey != "" {
-			viper.Set("models.providers.xai.apiKey", xaiKey)
-		}
-		if viper.IsSet("xai.model") && xaiModel != "" {
-			viper.Set("models.providers.xai.models.0.id", xaiModel)
-			viper.Set("models.providers.xai.models.0.name", "Grok "+xaiModel)
-			viper.Set("models.providers.xai.models.0.reasoning", false)
-			viper.Set("agents.defaults.model.primary", "xai/"+xaiModel)
-		}
-		viper.Unmarshal(&cfg)
-	}
-
-	// Bootstrap defaults if no providers
-	if len(cfg.Models.Providers) == 0 {
-		cfg.Models.Providers = map[string]ProviderConfig{
-			"xai": {
-				BaseURL: "https://api.x.ai/v1",
-				API:     "openai-completions",
-				Models: []ModelConfig{{
-					ID:        "grok-beta",
-					Name:      "Grok Beta",
-					Reasoning: false,
-				}},
-			},
-		}
-		cfg.Agents.Defaults.Model.Primary = "xai/grok-beta"
-		cfg.Models.Mode = "merge"
-	}
-
-	// Final fallbacks
-	if cfg.Server.Addr == "" {
-		cfg.Server.Addr = ":8080"
-		cfg.Server.EffectiveHost = "0.0.0.0"
-		cfg.Server.Port = 8080
 	}
 
 	// Compute effective host/port from addr
@@ -185,6 +143,10 @@ func Load() (*Config, error) {
 
 	if cfg.StorageDir == "" {
 		cfg.StorageDir = appDir
+	}
+
+	if strings.HasPrefix(cfg.StorageDir, "~/") {
+		cfg.StorageDir = filepath.Join(home, cfg.StorageDir[2:])
 	}
 
 	// Override API keys from inline placeholders ($VAR) or default environment variables

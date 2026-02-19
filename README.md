@@ -31,6 +31,7 @@ The agent has its own \"soul\" defined in `~/.miri/soul.txt` (bootstrapped from 
 ```bash
 go build -o miri src/cmd/main.go
 ./miri
+./miri -config /path/to/my-config.yaml  # loads specified YAML first, then ~/.miri/config.yaml or ./config.yaml
 ```
 
 Server starts on `server.addr` (default `:8080`). Logs show bootstrap if needed.

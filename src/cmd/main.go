@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"log/slog"
 	"miri-main/src/internal/api"
@@ -17,8 +18,12 @@ import (
 )
 
 func main() {
+	var configFile string
+	flag.StringVar(&configFile, "config", "", "path to config file to load first")
+	flag.Parse()
+
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, nil)))
-	cfg, err := config.Load()
+	cfg, err := config.Load(configFile)
 	if err != nil {
 		slog.Error("failed to load config", "error", err)
 		os.Exit(1)
@@ -51,12 +56,16 @@ func main() {
 	// Check if already running
 	if pidBytes, err := os.ReadFile(pidPath); err == nil {
 		pidStr := strings.TrimSpace(string(pidBytes))
-		if pid, err := strconv.Atoi(pidStr); err == nil {
-			if proc, err := os.FindProcess(pid); err == nil {
-				if proc.Signal(syscall.Signal(0)) == nil {
-					slog.Error("miri already running", "pid", pid, "pidfile", pidPath)
-					os.Exit(1)
-				}
+		if pid, err := strconv.Atoi(pidStr); err == nil && pid > 0 {
+			if syscall.Kill(pid, 0) == nil {
+				slog.Error("miri already running", "pid", pid, "pidfile", pidPath)
+				os.Exit(1)
+			}
+			// Stale PID: clean up
+			if err := os.Remove(pidPath); err != nil {
+				slog.Warn("failed to remove stale pidfile", "path", pidPath, "error", err)
+			} else {
+				slog.Info("cleaned stale pidfile", "pid", pid)
 			}
 		}
 	}

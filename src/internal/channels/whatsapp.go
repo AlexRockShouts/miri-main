@@ -13,7 +13,6 @@ import (
 	waProto "go.mau.fi/whatsmeow/binary/proto"
 	"go.mau.fi/whatsmeow/store/sqlstore"
 	"go.mau.fi/whatsmeow/types"
-	"go.mau.fi/whatsmeow/types/events"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -21,10 +20,9 @@ type Whatsapp struct {
 	mu     sync.Mutex
 	client *whatsmeow.Client
 	dbpath string
-	chatFn func(device, prompt string) (string, error)
 }
 
-func NewWhatsapp(storageDir string, chatFn func(device, prompt string) (string, error)) *Whatsapp {
+func NewWhatsapp(storageDir string) *Whatsapp {
 	whatsappDir := filepath.Join(storageDir, "whatsapp")
 	if err := os.MkdirAll(whatsappDir, 0755); err != nil {
 		slog.Error("failed to create whatsapp dir", "error", err)
@@ -48,29 +46,6 @@ func NewWhatsapp(storageDir string, chatFn func(device, prompt string) (string, 
 
 	client := whatsmeow.NewClient(deviceStore, nil)
 	client.EnableAutoReconnect = true
-	client.AddEventHandler(func(evt interface{}) {
-		switch v := evt.(type) {
-		case *events.Message:
-			if !v.Info.IsGroup && !v.Info.IsFromMe {
-				prompt := v.Message.GetConversation()
-				if prompt != "" {
-					slog.Info("whatsapp inbound", "jid", v.Info.Sender.String(), "prompt", prompt[:50])
-					resp, err := chatFn(v.Info.Sender.String(), prompt)
-					if err != nil {
-						slog.Error("whatsapp chat failed", "jid", v.Info.Sender.String(), "error", err)
-						return
-					}
-					// send response
-					_, err = client.SendMessage(ctx, v.Info.Sender, &waProto.Message{
-						Conversation: proto.String(resp),
-					})
-					if err != nil {
-						slog.Error("whatsapp send failed", "jid", v.Info.Sender.String(), "error", err)
-					}
-				}
-			}
-		}
-	})
 
 	// Start client if logged in
 	if client.Store.ID != nil {
@@ -84,9 +59,9 @@ func NewWhatsapp(storageDir string, chatFn func(device, prompt string) (string, 
 	}
 
 	return &Whatsapp{
+		mu:     sync.Mutex{},
 		client: client,
 		dbpath: dsn,
-		chatFn: chatFn,
 	}
 }
 
@@ -97,6 +72,9 @@ func (w *Whatsapp) Name() string {
 func (w *Whatsapp) Status() map[string]any {
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	if w.client == nil {
+		return map[string]any{"connected": false, "logged_in": false}
+	}
 	connected := w.client.IsConnected()
 	loggedIn := w.client.Store.ID != nil
 	return map[string]any{
@@ -106,9 +84,10 @@ func (w *Whatsapp) Status() map[string]any {
 }
 
 func (w *Whatsapp) Enroll(ctx context.Context) error {
-	w.mu.Lock()
+	if w.client == nil {
+		return fmt.Errorf("whatsapp client not initialized")
+	}
 	client := w.client
-	w.mu.Unlock()
 	if err := client.Logout(ctx); err != nil {
 		return fmt.Errorf("whatsapp logout: %w", err)
 	}
@@ -129,23 +108,27 @@ func (w *Whatsapp) Enroll(ctx context.Context) error {
 
 func (w *Whatsapp) ListDevices(ctx context.Context) ([]string, error) {
 	w.mu.Lock()
-	client := w.client
-	w.mu.Unlock()
-	if client.Store.ID == nil {
+	defer w.mu.Unlock()
+	if w.client == nil {
+		return nil, fmt.Errorf("client not initialized")
+	}
+	if w.client.Store.ID == nil {
 		return nil, fmt.Errorf("not logged in")
 	}
-	return []string{client.Store.PushName}, nil
+	return []string{w.client.Store.PushName}, nil
 }
 
 func (w *Whatsapp) Send(ctx context.Context, deviceID string, msg string) error {
 	w.mu.Lock()
-	client := w.client
-	w.mu.Unlock()
+	defer w.mu.Unlock()
+	if w.client == nil {
+		return fmt.Errorf("client not initialized")
+	}
 	jid, err := types.ParseJID(deviceID)
 	if err != nil {
 		return fmt.Errorf("invalid JID %s: %w", deviceID, err)
 	}
-	_, err = client.SendMessage(ctx, jid, &waProto.Message{
+	_, err = w.client.SendMessage(ctx, jid, &waProto.Message{
 		Conversation: proto.String(msg),
 	})
 	return err

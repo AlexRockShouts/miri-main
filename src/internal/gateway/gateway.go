@@ -45,11 +45,14 @@ func New(cfg *config.Config, st *storage.Storage) *Gateway {
 		gw.cronMgr.Start()
 	}
 
-	if gw.Config.Channels.Whatsapp.Enabled {
-		gw.Channels["whatsapp"] = channels.NewWhatsapp(gw.Config.StorageDir, func(device, prompt string) (string, error) {
-			return gw.ChannelChat("whatsapp", device, prompt)
-		})
-	}
+ if gw.Config.Channels.Whatsapp.Enabled {
+		ch := channels.NewWhatsapp(gw.Config.StorageDir)
+		if ch != nil {
+			gw.Channels["whatsapp"] = ch
+			slog.Info("whatsapp channel initialized")
+		} else {
+			slog.Warn("failed to initialize whatsapp channel")
+		}
 
 	return gw
 }
