@@ -3,6 +3,7 @@ storage_dir: ~/.miri
 server:
   addr: :8080
   key: local-dev-key
+  host: localhost
 
 models:
   mode: merge
@@ -46,7 +47,7 @@ agents:
   defaults:
     model:
       primary: xai/grok-4
-      fallbacks: []
+      fallbacks: [kimi-k2.5]
 
 tools:
   enabled: false
@@ -56,4 +57,4 @@ tools:
 
 channels:
   whatsapp:
-    enabled: false
+    enabled: true
