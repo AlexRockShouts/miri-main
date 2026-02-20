@@ -1,10 +1,11 @@
 package agent
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"miri-main/src/internal/config"
-	"miri-main/src/internal/llm"
+	"miri-main/src/internal/engine"
 	"miri-main/src/internal/session"
 	"miri-main/src/internal/storage"
 	"strings"
@@ -15,18 +16,47 @@ type Agent struct {
 	SessionMgr *session.SessionManager `json:"-"`
 	Storage    *storage.Storage        `json:"-"`
 	Parent     *Agent                  `json:"-"`
+	Eng        engine.Engine           `json:"-"`
 }
 
 func NewAgent(cfg *config.Config, sm *session.SessionManager, st *storage.Storage) *Agent {
-	return &Agent{
+	a := &Agent{
 		Config:     cfg,
 		SessionMgr: sm,
 		Storage:    st,
 	}
+
+	a.InitEngine()
+
+	return a
 }
 
-func (a *Agent) Chat(modelStr string, messages []llm.Message) (string, *llm.Usage, error) {
-	return llm.ChatCompletion(a.Config, modelStr, messages)
+func (a *Agent) InitEngine() {
+	// Initialize engine based on configuration
+	engineKind := strings.ToLower(a.Config.Agents.Defaults.Engine)
+	if engineKind == "eino" {
+		provider, model := a.splitModel(a.PrimaryModel())
+		react, err := engine.NewEinoEngine(a.Config, provider, model)
+		if err != nil {
+			slog.Warn("failed to initialize Eino engine", "error", err)
+		} else {
+			a.Eng = react
+		}
+	} else {
+		a.Eng = engine.NewBasicEngine(a.Config)
+	}
+
+	if a.Eng == nil { // fallback to basic engine if Eino failed or was not selected
+		a.Eng = engine.NewBasicEngine(a.Config)
+	}
+}
+
+func (a *Agent) splitModel(modelStr string) (string, string) {
+	parts := strings.SplitN(modelStr, "/", 2)
+	if len(parts) != 2 {
+		return "xai", "grok-beta" // Default fallback
+	}
+	return parts[0], parts[1]
 }
 
 func (a *Agent) PrimaryModel() string {
@@ -58,36 +88,16 @@ func (a *Agent) DelegatePrompt(sessionID string, prompt string) (string, error) 
 	if err := session.SetSoulIfEmpty(a.Storage); err != nil {
 		return "", fmt.Errorf("load soul for session %s: %w", sessionID, err)
 	}
-	soul := session.GetSoul()
-
-	messages := []llm.Message{
-		{Role: "system", Content: soul + humanContext},
-		{Role: "user", Content: prompt},
+	resp, usage, err := a.Eng.Respond(context.Background(), session, prompt, humanContext)
+	if err != nil {
+		return "", err
 	}
-
-	models := []string{a.PrimaryModel()}
-	for _, fb := range a.Config.Agents.Defaults.Model.Fallbacks {
-		models = append(models, fb)
+	if usage != nil {
+		session.AddTokens(uint64(usage.PromptTokens + usage.CompletionTokens))
 	}
-
-	var lastErr error
-	for _, model := range models {
-		slog.Debug("attempting LLM", "model", model, "session", sessionID)
-		response, usage, err := a.Chat(model, messages)
-		if err == nil {
-			slog.Info("LLM success", "model", model, "session", sessionID)
-			if usage != nil {
-				session.AddTokens(uint64(usage.PromptTokens + usage.CompletionTokens))
-			}
-			a.SessionMgr.AddMessage(sessionID, prompt, response)
-
-			if strings.Contains(strings.ToLower(prompt), "write to memory") {
-				a.Storage.AppendToMemory(fmt.Sprintf("Session %s: %s", sessionID, response))
-			}
-			return response, nil
-		}
-		lastErr = fmt.Errorf("model %s failed: %w", model, err)
-		slog.Warn("LLM failed", "model", model, "session", sessionID, "error", err)
+	a.SessionMgr.AddMessage(sessionID, prompt, resp)
+	if strings.Contains(strings.ToLower(prompt), "write to memory") {
+		a.Storage.AppendToMemory(fmt.Sprintf("Session %s: %s", sessionID, resp))
 	}
-	return "", fmt.Errorf("all models failed: primary=%s fallbacks=%v: %w", a.PrimaryModel(), a.Config.Agents.Defaults.Model.Fallbacks, lastErr)
+	return resp, nil
 }

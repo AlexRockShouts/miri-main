@@ -133,6 +133,11 @@ func (gw *Gateway) NumSubAgents() int {
 func (gw *Gateway) UpdateConfig(newCfg *config.Config) {
 	gw.Config = newCfg
 	gw.PrimaryAgent.Config = newCfg
+	gw.PrimaryAgent.InitEngine()
+	for _, sub := range gw.SubAgents {
+		sub.Config = newCfg
+		sub.InitEngine()
+	}
 }
 
 func (gw *Gateway) SaveHumanInfo(info *storage.HumanInfo) error {
