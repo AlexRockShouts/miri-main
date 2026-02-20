@@ -35,6 +35,11 @@ func (b *BasicEngine) Respond(ctx context.Context, sess *session.Session, prompt
 	}
 
 	models := []string{b.PrimaryModel()}
+	// If dynamic model is provided in context, use it as the first choice
+	if opts, ok := FromContext(ctx); ok && opts.Model != "" {
+		models = []string{opts.Model}
+	}
+
 	for _, fb := range b.cfg.Agents.Defaults.Model.Fallbacks {
 		models = append(models, fb)
 	}

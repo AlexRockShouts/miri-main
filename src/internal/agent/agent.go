@@ -67,6 +67,10 @@ func (a *Agent) PrimaryModel() string {
 }
 
 func (a *Agent) DelegatePrompt(sessionID string, prompt string) (string, error) {
+	return a.DelegatePromptWithOptions(context.Background(), sessionID, prompt, engine.Options{})
+}
+
+func (a *Agent) DelegatePromptWithOptions(ctx context.Context, sessionID string, prompt string, opts engine.Options) (string, error) {
 	// Gather context from indexed human info
 	humanInfos, err := a.Storage.ListHumanInfo()
 	if err != nil {
@@ -88,7 +92,11 @@ func (a *Agent) DelegatePrompt(sessionID string, prompt string) (string, error) 
 	if err := session.SetSoulIfEmpty(a.Storage); err != nil {
 		return "", fmt.Errorf("load soul for session %s: %w", sessionID, err)
 	}
-	resp, usage, err := a.Eng.Respond(context.Background(), session, prompt, humanContext)
+
+	// Wrap context with dynamic options
+	engineCtx := engine.WithOptions(ctx, opts)
+
+	resp, usage, err := a.Eng.Respond(engineCtx, session, prompt, humanContext)
 	if err != nil {
 		return "", err
 	}
