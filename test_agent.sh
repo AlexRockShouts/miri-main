@@ -39,13 +39,21 @@ echo "Testing POST /prompt with session_id..."
 curl -s -X POST http://localhost:8080/prompt -H "Content-Type: application/json" -H "X-Server-Key: local-dev-key" -d '{"prompt": "test session", "session_id": "mysession"}' | head -c 200
 echo -e "\n"
 
+echo "Testing GET /sessions..."
+curl -s -H "X-Server-Key: local-dev-key" http://localhost:8080/sessions
+echo -e "\n"
+
+echo "Testing GET /sessions/mysession..."
+curl -s -H "X-Server-Key: local-dev-key" http://localhost:8080/sessions/mysession
+echo -e "\n"
+
 echo "Testing POST /interaction new..."
 curl -s -X POST http://localhost:8080/interaction -H "Content-Type: application/json" -H "X-Server-Key: local-dev-key" -d '{"action":"new","client_id":"testclient"}'
 echo -e "\n"
 
 echo "Testing POST /interaction status..."
- curl -s -X POST http://localhost:8080/interaction -H "Content-Type: application/json" -H "X-Server-Key: local-dev-key" -d '{"action":"status"}'
- echo -e "\n"
+curl -s -X POST http://localhost:8080/interaction -H "Content-Type: application/json" -H "X-Server-Key: local-dev-key" -d '{"action":"status"}'
+echo -e "\n"
 
 echo "Testing POST /channels whatsapp actions (expect channel not found or 400)..."
  curl -s -X POST http://localhost:8080/channels -H "Content-Type: application/json" -H "X-Server-Key: local-dev-key" -d '{"channel":"whatsapp","action":"status"}'

@@ -39,6 +39,9 @@ func (s *Server) setupRoutes() {
 	s.Engine.POST("/interaction", s.handleInteraction)
 	s.Engine.GET("/ws", s.handleWebsocket)
 	s.Engine.POST("/channels", s.handleChannels)
+	s.Engine.GET("/sessions", s.handleListSessions)
+	s.Engine.GET("/sessions/:id", s.handleGetSession)
+	s.Engine.GET("/sessions/:id/history", s.handleGetSessionHistory)
 }
 
 func (s *Server) handleGetConfig(c *gin.Context) {
@@ -74,7 +77,7 @@ func (s *Server) handlePrompt(c *gin.Context) {
 	}
 
 	gw := c.MustGet("gateway").(*gateway.Gateway)
-	response, err := gw.DelegatePrompt(req.SessionID, req.Prompt)
+	response, err := gw.PrimaryAgent.DelegatePrompt(req.SessionID, req.Prompt)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -290,7 +293,7 @@ func (s *Server) handleWebsocket(c *gin.Context) {
 			break
 		}
 
-		response, err := gw.DelegatePrompt(sessionID, msg.Prompt)
+		response, err := gw.PrimaryAgent.DelegatePrompt(sessionID, msg.Prompt)
 		if err != nil {
 			ws.WriteJSON(gin.H{"error": err.Error()})
 			continue
@@ -360,4 +363,35 @@ func (s *Server) ListenAndServe(ctx context.Context, addr string) error {
 	slog.Info("server stopped")
 
 	return nil
+}
+
+func (s *Server) handleListSessions(c *gin.Context) {
+	gw := c.MustGet("gateway").(*gateway.Gateway)
+	ids := gw.ListSessions()
+	c.JSON(http.StatusOK, ids)
+}
+
+func (s *Server) handleGetSession(c *gin.Context) {
+	gw := c.MustGet("gateway").(*gateway.Gateway)
+	id := c.Param("id")
+	sess := gw.GetSession(id)
+	if sess == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "session not found"})
+		return
+	}
+	c.JSON(http.StatusOK, sess)
+}
+
+func (s *Server) handleGetSessionHistory(c *gin.Context) {
+	gw := c.MustGet("gateway").(*gateway.Gateway)
+	id := c.Param("id")
+	sess := gw.GetSession(id)
+	if sess == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "session not found"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"messages":     sess.Messages,
+		"total_tokens": sess.TotalTokens,
+	})
 }

@@ -11,3 +11,7 @@ type Channel interface {
 	ListDevices(ctx context.Context) ([]string, error)
 	Send(ctx context.Context, deviceID string, msg string) error
 }
+
+type Processor interface {
+	ChannelChat(channel, device, prompt string) (string, error)
+}
