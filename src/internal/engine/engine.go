@@ -6,6 +6,23 @@ import (
 	"miri-main/src/internal/session"
 )
 
+type Options struct {
+	Model       string   `json:"model,omitempty"`
+	Temperature *float32 `json:"temperature,omitempty"`
+	MaxTokens   *int     `json:"max_tokens,omitempty"`
+}
+
+type optionsKey struct{}
+
+func WithOptions(ctx context.Context, opts Options) context.Context {
+	return context.WithValue(ctx, optionsKey{}, opts)
+}
+
+func FromContext(ctx context.Context) (Options, bool) {
+	opts, ok := ctx.Value(optionsKey{}).(Options)
+	return opts, ok
+}
+
 // Engine is a pluggable response engine used by the Agent.
 // Implementations can be simple chat completion engines or tool-augmented ReAct agents.
 //

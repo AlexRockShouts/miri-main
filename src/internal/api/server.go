@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"miri-main/src/internal/config"
+	"miri-main/src/internal/engine"
 	"miri-main/src/internal/gateway"
 	"miri-main/src/internal/storage"
 	"net/http"
@@ -68,16 +69,35 @@ func (s *Server) handleUpdateConfig(c *gin.Context) {
 
 func (s *Server) handlePrompt(c *gin.Context) {
 	var req struct {
-		Prompt    string `json:"prompt"`
-		SessionID string `json:"session_id,omitempty"`
+		Prompt      string          `json:"prompt"`
+		SessionID   string          `json:"session_id,omitempty"`
+		Model       string          `json:"model,omitempty"`
+		Temperature *float32        `json:"temperature,omitempty"`
+		MaxTokens   *int            `json:"max_tokens,omitempty"`
+		Options     *engine.Options `json:"options,omitempty"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
+	// Merge flat options into engine.Options if provided
+	opts := engine.Options{}
+	if req.Options != nil {
+		opts = *req.Options
+	}
+	if req.Model != "" {
+		opts.Model = req.Model
+	}
+	if req.Temperature != nil {
+		opts.Temperature = req.Temperature
+	}
+	if req.MaxTokens != nil {
+		opts.MaxTokens = req.MaxTokens
+	}
+
 	gw := c.MustGet("gateway").(*gateway.Gateway)
-	response, err := gw.PrimaryAgent.DelegatePrompt(req.SessionID, req.Prompt)
+	response, err := gw.PrimaryAgent.DelegatePromptWithOptions(c.Request.Context(), req.SessionID, req.Prompt, opts)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
