@@ -25,7 +25,7 @@ func NewAgent(cfg *config.Config, sm *session.SessionManager, st *storage.Storag
 	}
 }
 
-func (a *Agent) Chat(modelStr string, messages []llm.Message) (string, error) {
+func (a *Agent) Chat(modelStr string, messages []llm.Message) (string, *llm.Usage, error) {
 	return llm.ChatCompletion(a.Config, modelStr, messages)
 }
 
@@ -51,6 +51,9 @@ func (a *Agent) DelegatePrompt(sessionID string, prompt string) (string, error) 
 	}
 	humanContext := contextBuilder.String()
 
+	if sessionID == "" {
+		sessionID = "default"
+	}
 	session := a.SessionMgr.GetOrCreate(sessionID)
 	if err := session.SetSoulIfEmpty(a.Storage); err != nil {
 		return "", fmt.Errorf("load soul for session %s: %w", sessionID, err)
@@ -70,9 +73,12 @@ func (a *Agent) DelegatePrompt(sessionID string, prompt string) (string, error) 
 	var lastErr error
 	for _, model := range models {
 		slog.Debug("attempting LLM", "model", model, "session", sessionID)
-		response, err := a.Chat(model, messages)
+		response, usage, err := a.Chat(model, messages)
 		if err == nil {
 			slog.Info("LLM success", "model", model, "session", sessionID)
+			if usage != nil {
+				session.AddTokens(uint64(usage.PromptTokens + usage.CompletionTokens))
+			}
 			a.SessionMgr.AddMessage(sessionID, prompt, response)
 
 			if strings.Contains(strings.ToLower(prompt), "write to memory") {

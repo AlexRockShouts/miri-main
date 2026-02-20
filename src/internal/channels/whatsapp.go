@@ -5,25 +5,41 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"os/user"
 	"path/filepath"
+	"strings"
 	"sync"
 
+	_ "github.com/mattn/go-sqlite3"
 	"github.com/mdp/qrterminal/v3"
 	"go.mau.fi/whatsmeow"
 	waProto "go.mau.fi/whatsmeow/binary/proto"
 	"go.mau.fi/whatsmeow/store/sqlstore"
 	"go.mau.fi/whatsmeow/types"
+	"go.mau.fi/whatsmeow/types/events"
 	"google.golang.org/protobuf/proto"
 )
 
 type Whatsapp struct {
-	mu     sync.Mutex
-	client *whatsmeow.Client
-	dbpath string
+	mu         sync.Mutex
+	client     *whatsmeow.Client
+	dbpath     string
+	msgHandler func(string, string)
 }
 
 func NewWhatsapp(storageDir string) *Whatsapp {
-	whatsappDir := filepath.Join(storageDir, "whatsapp")
+	home, err := user.Current()
+	if err != nil {
+		slog.Error("failed to get user home dir", "error", err)
+		return nil
+	}
+
+	baseDir := storageDir
+	if strings.HasPrefix(storageDir, "~/") {
+		baseDir = filepath.Join(home.HomeDir, storageDir[2:])
+	}
+
+	whatsappDir := filepath.Join(baseDir, "whatsapp")
 	if err := os.MkdirAll(whatsappDir, 0755); err != nil {
 		slog.Error("failed to create whatsapp dir", "error", err)
 		return nil
@@ -47,10 +63,35 @@ func NewWhatsapp(storageDir string) *Whatsapp {
 	client := whatsmeow.NewClient(deviceStore, nil)
 	client.EnableAutoReconnect = true
 
+	w := &Whatsapp{
+		mu:     sync.Mutex{},
+		client: client,
+		dbpath: dsn,
+	}
+	client.AddEventHandler(func(ev interface{}) {
+		switch v := ev.(type) {
+		case *events.Message:
+			if v.Info.IsGroup || v.Info.IsFromMe {
+				return
+			}
+			text := v.Message.GetConversation()
+			if text == "" {
+				return
+			}
+			chat := v.Info.Chat.String()
+			w.mu.Lock()
+			handler := w.msgHandler
+			w.mu.Unlock()
+			if handler != nil {
+				go handler(chat, text)
+			}
+		}
+	})
+
 	// Start client if logged in
-	if client.Store.ID != nil {
+	if w.client.Store.ID != nil {
 		go func() {
-			if err := client.Connect(); err != nil {
+			if err := w.client.Connect(); err != nil {
 				slog.Error("whatsapp connect failed", "error", err)
 			}
 		}()
@@ -58,11 +99,7 @@ func NewWhatsapp(storageDir string) *Whatsapp {
 		slog.Info("whatsapp not logged in, use /channels/whatsapp/enroll to get QR")
 	}
 
-	return &Whatsapp{
-		mu:     sync.Mutex{},
-		client: client,
-		dbpath: dsn,
-	}
+	return w
 }
 
 func (w *Whatsapp) Name() string {
@@ -84,26 +121,48 @@ func (w *Whatsapp) Status() map[string]any {
 }
 
 func (w *Whatsapp) Enroll(ctx context.Context) error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
 	if w.client == nil {
 		return fmt.Errorf("whatsapp client not initialized")
 	}
+
 	client := w.client
-	if err := client.Logout(ctx); err != nil {
-		return fmt.Errorf("whatsapp logout: %w", err)
+
+	if client.Store.ID != nil {
+		slog.Info("whatsapp: logging out existing session")
+		if err := client.Logout(ctx); err != nil {
+			return fmt.Errorf("whatsapp logout: %w", err)
+		}
 	}
-	slog.Info("whatsapp logging out, starting new connect for QR")
+
+	if client.IsConnected() {
+		slog.Info("whatsapp: disconnecting")
+		client.Disconnect()
+	}
+
+	slog.Info("whatsapp: starting QR enrollment")
+
 	go func() {
-		qrChan, _ := client.GetQRChannel(ctx)
+		qrChan, _ := client.GetQRChannel(context.Background())
 		for evt := range qrChan {
 			if evt.Event == "code-ok" {
-				slog.Info("whatsapp login successful")
+				slog.Info("whatsapp: login successful")
 				break
 			}
 			slog.Info("whatsapp QR code", "code", evt.Code)
 			qrterminal.GenerateHalfBlock(evt.Code, qrterminal.L, os.Stdout)
 		}
 	}()
-	return client.Connect()
+
+	go func() {
+		if err := client.Connect(); err != nil {
+			slog.Error("whatsapp connect failed during enroll", "error", err)
+		}
+	}()
+
+	return nil
 }
 
 func (w *Whatsapp) ListDevices(ctx context.Context) ([]string, error) {
@@ -115,7 +174,7 @@ func (w *Whatsapp) ListDevices(ctx context.Context) ([]string, error) {
 	if w.client.Store.ID == nil {
 		return nil, fmt.Errorf("not logged in")
 	}
-	return []string{w.client.Store.PushName}, nil
+	return []string{w.client.Store.ID.String()}, nil
 }
 
 func (w *Whatsapp) Send(ctx context.Context, deviceID string, msg string) error {
@@ -132,4 +191,23 @@ func (w *Whatsapp) Send(ctx context.Context, deviceID string, msg string) error 
 		Conversation: proto.String(msg),
 	})
 	return err
+}
+
+func (w *Whatsapp) SetMessageHandler(handler func(deviceJID, message string)) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.msgHandler = handler
+}
+
+func (w *Whatsapp) Poll() {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.client.Store.ID != nil && !w.client.IsConnected() {
+		slog.Info("whatsapp loop reconnect")
+		go func() {
+			if err := w.client.Connect(); err != nil {
+				slog.Error("whatsapp reconnect failed", "error", err)
+			}
+		}()
+	}
 }
