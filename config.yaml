@@ -44,6 +44,7 @@ models:
           maxTokens: 8192
 
 agents:
+  debug: true
   defaults:
     engine: eino
     model:

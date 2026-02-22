@@ -43,6 +43,7 @@ type ModelConfig struct {
 type AgentsConfig struct {
 	Defaults  AgentDefaults `mapstructure:"defaults" json:"defaults"`
 	SubAgents int           `mapstructure:"subagents" json:"subagents"`
+	Debug     bool          `mapstructure:"debug" json:"debug"`
 }
 
 type AgentDefaults struct {

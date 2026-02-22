@@ -2,14 +2,12 @@ package engine
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"miri-main/src/internal/config"
+	"miri-main/src/internal/engine/tools"
 	"miri-main/src/internal/llm"
 	"miri-main/src/internal/session"
-	"miri-main/src/internal/tools/webfetch"
-	"miri-main/src/internal/tools/websearch"
 	"strings"
 
 	"github.com/cloudwego/eino-ext/components/model/openai"
@@ -77,6 +75,7 @@ type EinoEngine struct {
 	chat     model.BaseChatModel
 	tools    *compose.ToolsNode
 	maxSteps int
+	debug    bool
 }
 
 func NewEinoEngine(cfg *config.Config, providerName, modelName string) (*EinoEngine, error) {
@@ -97,11 +96,14 @@ func NewEinoEngine(cfg *config.Config, providerName, modelName string) (*EinoEng
 	var chatModel model.BaseChatModel = cm
 
 	// Define tools
-	searchTool := &searchToolWrapper{}
-	fetchTool := &fetchToolWrapper{}
+	searchTool := &tools.SearchToolWrapper{}
+	fetchTool := &tools.FetchToolWrapper{}
+	cmdTool := &tools.CmdToolWrapper{}
+	goInstallTool := &tools.GoInstallToolWrapper{}
+	curlInstallTool := &tools.CurlInstallToolWrapper{}
 
 	toolsNode, err := compose.NewToolNode(context.Background(), &compose.ToolsNodeConfig{
-		Tools: []tool.BaseTool{searchTool, fetchTool},
+		Tools: []tool.BaseTool{searchTool, fetchTool, cmdTool, goInstallTool, curlInstallTool},
 	})
 	if err != nil {
 		return nil, err
@@ -109,8 +111,11 @@ func NewEinoEngine(cfg *config.Config, providerName, modelName string) (*EinoEng
 
 	// Bind tools to model
 	toolInfos := []*schema.ToolInfo{
-		searchTool.getInfo(),
-		fetchTool.getInfo(),
+		searchTool.GetInfo(),
+		fetchTool.GetInfo(),
+		cmdTool.GetInfo(),
+		goInstallTool.GetInfo(),
+		curlInstallTool.GetInfo(),
 	}
 
 	// Prefer the safer ToolCalling API
@@ -121,7 +126,12 @@ func NewEinoEngine(cfg *config.Config, providerName, modelName string) (*EinoEng
 	}
 
 	// Return engine with model and tools node; we'll drive ReAct in code
-	return &EinoEngine{chat: chatModel, tools: toolsNode, maxSteps: 6}, nil
+	return &EinoEngine{
+		chat:     chatModel,
+		tools:    toolsNode,
+		maxSteps: 8,
+		debug:    cfg.Agents.Debug,
+	}, nil
 }
 
 // Respond builds a conversation including system prompt, history and current user prompt.
@@ -147,14 +157,26 @@ func (e *EinoEngine) Respond(ctx context.Context, sess *session.Session, promptS
 	systemPrompt := sess.GetSoul() + humanContext
 	msgs := []*schema.Message{schema.SystemMessage(systemPrompt)}
 
+	if e.debug {
+		slog.Info("EinoEngine Debug: System Prompt and Human Context initialized", "systemPrompt", systemPrompt)
+	}
+
 	// Use our new Memory to load history
 	mem := &Memory{session: sess}
 	history, err := mem.Get(ctx, nil)
 	if err == nil {
 		msgs = append(msgs, history...)
+		if e.debug {
+			slog.Info("EinoEngine Debug: History loaded", "historyCount", len(history))
+		}
+	} else if e.debug {
+		slog.Error("EinoEngine Debug: Failed to load history", "error", err)
 	}
 
 	msgs = append(msgs, schema.UserMessage(promptStr))
+	if e.debug {
+		slog.Info("EinoEngine Debug: User prompt added", "prompt", promptStr)
+	}
 
 	// Collect dynamic options from context
 	var callOpts []model.Option
@@ -171,11 +193,20 @@ func (e *EinoEngine) Respond(ctx context.Context, sess *session.Session, promptS
 	}
 
 	for i := 0; i < e.maxSteps; i++ {
+		if e.debug {
+			slog.Info("EinoEngine Debug: Step started", "step", i)
+		}
 		// Let model think/respond
 		assistant, err := e.chat.Generate(ctx, msgs, callOpts...)
 		if err != nil {
 			finalErr = err
+			if e.debug {
+				slog.Error("EinoEngine Debug: Model generation failed", "step", i, "error", err)
+			}
 			return "", nil, err
+		}
+		if e.debug {
+			slog.Info("EinoEngine Debug: Model responded", "step", i, "content", assistant.Content, "toolCalls", len(assistant.ToolCalls))
 		}
 		// If model doesn't call tools, we are done
 		if len(assistant.ToolCalls) == 0 {
@@ -188,89 +219,32 @@ func (e *EinoEngine) Respond(ctx context.Context, sess *session.Session, promptS
 		toolMsgs, err := e.tools.Invoke(ctx, assistant)
 		if err != nil {
 			finalErr = err
+			if e.debug {
+				slog.Error("EinoEngine Debug: Tool invocation failed", "step", i, "error", err)
+			}
 			return "", nil, err
+		}
+		if e.debug {
+			for idx, tm := range toolMsgs {
+				slog.Info("EinoEngine Debug: Tool result", "step", i, "index", idx, "name", tm.ToolName, "id", tm.ToolCallID, "result", tm.Content)
+			}
 		}
 		// Feed tool results back into the conversation
 		msgs = append(msgs, toolMsgs...)
 	}
 
 	// Safety: if loop exhausted, return the latest assistant content without tools
+	if e.debug {
+		slog.Info("EinoEngine Debug: Max steps reached, final generation")
+	}
 	final, err := e.chat.Generate(ctx, msgs, callOpts...)
 	if err != nil {
 		finalErr = err
+		if e.debug {
+			slog.Error("EinoEngine Debug: Final model generation failed", "error", err)
+		}
 		return "", nil, err
 	}
 	finalResp = final.Content
 	return final.Content, nil, nil
-}
-
-// Tool Wrappers
-
-type searchToolWrapper struct{}
-
-func (s *searchToolWrapper) getInfo() *schema.ToolInfo {
-	return &schema.ToolInfo{
-		Name: "web_search",
-		Desc: "Search the web for current information.",
-		ParamsOneOf: schema.NewParamsOneOfByParams(map[string]*schema.ParameterInfo{
-			"query": {
-				Type:     schema.String,
-				Desc:     "The search query",
-				Required: true,
-			},
-		}),
-	}
-}
-
-func (s *searchToolWrapper) Info(_ context.Context) (*schema.ToolInfo, error) {
-	return s.getInfo(), nil
-}
-
-func (s *searchToolWrapper) InvokableRun(ctx context.Context, argumentsInJSON string, _ ...tool.Option) (string, error) {
-	var args struct {
-		Query string `json:"query"`
-	}
-	if err := json.Unmarshal([]byte(argumentsInJSON), &args); err != nil {
-		return "", err
-	}
-	results, err := websearch.Search(ctx, args.Query)
-	if err != nil {
-		return "", err
-	}
-	b, _ := json.Marshal(results)
-	return string(b), nil
-}
-
-type fetchToolWrapper struct{}
-
-func (f *fetchToolWrapper) getInfo() *schema.ToolInfo {
-	return &schema.ToolInfo{
-		Name: "web_fetch",
-		Desc: "Fetch the content of a web page.",
-		ParamsOneOf: schema.NewParamsOneOfByParams(map[string]*schema.ParameterInfo{
-			"url": {
-				Type:     schema.String,
-				Desc:     "The URL to fetch",
-				Required: true,
-			},
-		}),
-	}
-}
-
-func (f *fetchToolWrapper) Info(_ context.Context) (*schema.ToolInfo, error) {
-	return f.getInfo(), nil
-}
-
-func (f *fetchToolWrapper) InvokableRun(ctx context.Context, argumentsInJSON string, _ ...tool.Option) (string, error) {
-	var args struct {
-		URL string `json:"url"`
-	}
-	if err := json.Unmarshal([]byte(argumentsInJSON), &args); err != nil {
-		return "", err
-	}
-	_, _, body, err := webfetch.Fetch(ctx, args.URL, 0)
-	if err != nil {
-		return "", err
-	}
-	return body, nil
 }

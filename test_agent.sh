@@ -69,3 +69,6 @@ echo "Testing POST /channels whatsapp actions (expect channel not found or 400).
 
 # Kill the agent
  kill $PID
+
+
+curl -s -X POST http://localhost:8080/prompt -H "Content-Type: application/json" -H "X-Server-Key: local-dev-key" -d '{"prompt": "im developing this is a test prompt: can you install grype"}' | head -c 200
