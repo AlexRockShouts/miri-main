@@ -26,8 +26,7 @@ func Install(ctx context.Context, url string) (stdout, stderr string, exitCode i
 	err = cmd.Run()
 
 	exitCode = 0
-	var exitErr *exec.ExitError
-	if errors.As(err, &exitErr) {
+	if exitErr, ok := errors.AsType[*exec.ExitError](err); ok {
 		exitCode = exitErr.ExitCode()
 	}
 
@@ -50,8 +49,7 @@ func InstallStream(ctx context.Context, url string) (io.ReadCloser, error) {
 	go func() {
 		err := cmd.Wait()
 		if err != nil {
-			var exitErr *exec.ExitError
-			if errors.As(err, &exitErr) {
+			if exitErr, ok := errors.AsType[*exec.ExitError](err); ok {
 				pw.CloseWithError(fmt.Errorf("exit code %d: %w", exitErr.ExitCode(), err))
 			} else {
 				pw.CloseWithError(err)

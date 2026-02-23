@@ -6,25 +6,28 @@ The agent has its own \"soul\" defined in `~/.miri/soul.txt` (bootstrapped from 
 
 ## Features
 
-- **Persistent storage**: Config in `~/.miri/config.yaml`, human info in `~/.miri/human_info/*.json`, soul in `~/.miri/soul.txt`.
-- **REST API** configurable via `server.addr` (default `:8080`):
-  - `GET /config` - Get current config (incl. computed `effectiveHost`, `port`)
-  - `POST /config` - Update config (persists to YAML)
-  - `POST /human` - Store human info `{&quot;id&quot;: &quot;user123&quot;, &quot;data&quot;: {...}, &quot;notes&quot;: &quot;...&quot;}`
-  - `GET /human` - List stored human infos
-  - `POST /new` - Create new session bound to client: `{"client_id": "dev123"}` → `{"session_id": "uuid"}`
-  - `GET /status` - Current primary model + active sessions: `{"primary_model": "xai/grok-4", "sessions": ["uuid1", ...]}`
-  - `POST /prompt` - Delegate prompt to xAI: `{&quot;prompt&quot;: &quot;...&quot;}` (prepends soul + human context)
-- **Logging**: Structured logs via `slog`.
-- **Multi-model LLM**: Configurable providers/models (xAI grok-4, NVIDIA kimi-k2.5...) via OpenAI-compat `/chat/completions`. Supports fallback on primary failure via `agents.defaults.model.fallbacks` array (e.g., `["nvidia/kimi-k2.5"]`).
-- **Sessions**: In-memory prompt/response history by `session_id` (UUID, optional in `/prompt`).
-- **Persistent Memory**: Prompts with "write to memory" append response to `~/.miri/memory.txt`.
+- **Eino Engine**: A powerful ReAct agent powered by [Eino](https://github.com/cloudwego/eino), supporting tool-augmented generation and autonomous reasoning loops.
+- **Graph Orchestration**: Core logic is modeled as an Eino Graph with specialized nodes:
+  - `retriever`: Proactively injects long-term memory into conversations.
+  - `flush`: Automatically compacts and appends memory to disk when context usage is high (~65%).
+  - `compact`: Summarizes older history into structured JSON when context is nearly full (~88%).
+  - `agent`: Executes the ReAct loop with real-time tool calls and reasoning.
+- **Checkpointing**: Eino-native graph persistence using `FileCheckPointStore` ensures long-running tasks can resume from the last successful tool execution.
+- **Long-term Memory**: Durable storage in `memory.md`, `user.md`, and `facts.json` (NDJSON) with automated early-flush compaction.
+- **System Awareness**: Automatically provides the LLM with system context (OS, Architecture, Go version) for more efficient command execution.
+- **REST API** & **WebSocket**:
+  - `POST /prompt`: Blocking prompt execution.
+  - `GET /prompt/stream`: SSE streaming for real-time thoughts and tool execution.
+  - `GET /ws`: WebSocket support for full-duplex interactive streaming.
+  - Session and history management via `/sessions` endpoints.
+- **Streamable Tools**: Real-time output streaming for installation tools like `curl_install` and `go_install`.
+- **Logging**: Structured logs via `slog` with Eino callback integration for deep visibility.
 
 
 ## Prerequisites
 
-- Go 1.21+
-- xAI API key (set via env `XAI_API_KEY` or `/config`)
+- Go 1.25+
+- xAI API key (set via env `XAI_API_KEY` or `config.yaml`)
 
 ## Build & Run
 
@@ -41,41 +44,54 @@ Server starts on `server.addr` (default `:8080`). Logs show bootstrap if needed.
 ### 1. Update Config
 
 ```bash
-curl -X POST http://localhost:8080/config \\
-  -H 'Content-Type: application/json' \\
+curl -X POST http://localhost:8080/config \
+  -H 'Content-Type: application/json' \
+  -H 'X-Server-Key: local-dev-key' \
   -d '{
-    \"xai\": {
-      \"api_key\": \"your_xai_key\",
-      \"model\": \"grok-beta\"
+    "models": {
+      "providers": {
+        "xai": {
+          "apiKey": "your_xai_key"
+        }
+      }
     },
-    \"storage_dir\": \"'$HOME'/.miri\"
+    "storage_dir": "/home/user/.miri"
   }'
 ```
 
 ### 2. Store Human Info
 
 ```bash
-curl -X POST http://localhost:8080/human \\
-  -H 'Content-Type: application/json' \\
+curl -X POST http://localhost:8080/human \
+  -H 'Content-Type: application/json' \
+  -H 'X-Server-Key: local-dev-key' \
   -d '{
-    \"id\": \"user123\",
-    \"data\": {\"name\": \"Alice\", \"pref\": \"coffee\"},
-    \"notes\": \"Loves dark roast\"
+    "id": "user123",
+    "data": {"name": "Alice", "pref": "coffee"},
+    "notes": "Loves dark roast"
   }'
 ```
 
 List:
 
 ```bash
-curl http://localhost:8080/human
+curl -H 'X-Server-Key: local-dev-key' http://localhost:8080/human
 ```
 
 ### 3. Delegate Prompt
 
 ```bash
-curl -X POST http://localhost:8080/prompt \\
-  -H 'Content-Type: application/json' \\
-  -d '{\"prompt\": \"Plan my week with gym and coding.\"}'
+curl -X POST http://localhost:8080/prompt \
+  -H 'Content-Type: application/json' \
+  -H 'X-Server-Key: local-dev-key' \
+  -d '{"prompt": "Plan my week with gym and coding."}'
+```
+
+Streaming with SSE:
+
+```bash
+curl -N "http://localhost:8080/prompt/stream?prompt=Plan+my+week&session_id=mysession" \
+  -H 'X-Server-Key: local-dev-key'
 ```
 
 ## Authentication
@@ -85,8 +101,9 @@ If `server.key` is set, **all** requests require header `X-Server-Key: &lt;key&g
 **Set key:**
 
 ```bash
-curl -X POST http://localhost:8080/config \\
-  -H 'Content-Type: application/json' \\
+curl -X POST http://localhost:8080/config \
+  -H 'Content-Type: application/json' \
+  -H 'X-Server-Key: local-dev-key' \
   -d '{
     "server": {
       "addr": ":8080",
@@ -98,9 +115,9 @@ curl -X POST http://localhost:8080/config \\
 **Use with key:**
 
 ```bash
-curl -X POST http://localhost:8080/prompt \\
-  -H 'Content-Type: application/json' \\
-  -H 'X-Server-Key: your-secret-key' \\
+curl -X POST http://localhost:8080/prompt \
+  -H 'Content-Type: application/json' \
+  -H 'X-Server-Key: your-secret-key' \
   -d '{"prompt": "Plan my week."}'
 ```
 
@@ -161,10 +178,10 @@ Restart server. QR code printed in logs via qrterminal (stdout), scan with Whats
 
 **Single POST /channels** (all channels: whatsapp/telegram/slack future):
 - `{"channel":"whatsapp","action":"status"}` → `{"connected":bool,"logged_in":bool}`
-- `{"channel":"whatsapp","action":"enroll"}` → `{"status":"enroll started"}` (check logs QR)
+- `{"channel":"whatsapp","action":"enroll"}` → `{"status":"enroll started"}` (check logs for QR)
 - `{"channel":"whatsapp","action":"devices"}` → `{"devices":[...]}`
 - `{"channel":"whatsapp","action":"send","device":"123@s.whatsapp.net","message":"hi"}` → `{"status":"sent"}`
-- `{"channel":"whatsapp","action":"chat","device":"123@s.whatsapp.net","prompt":"hi"}` → LLM resp + auto-send `{"response":"..."}`
+- `{"channel":"whatsapp","action":"chat","device":"123@s.whatsapp.net","prompt":"hi"}` → `{"response":"..."}`
 
 **WS unchanged**: `ws://localhost:8080/ws?channel=whatsapp&device=123@s.whatsapp.net` → stream chat.
 
