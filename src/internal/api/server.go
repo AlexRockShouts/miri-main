@@ -74,7 +74,6 @@ func (s *Server) handlePrompt(c *gin.Context) {
 		Prompt      string          `json:"prompt"`
 		SessionID   string          `json:"session_id,omitempty"`
 		Model       string          `json:"model,omitempty"`
-		Engine      string          `json:"engine,omitempty"`
 		Temperature *float32        `json:"temperature,omitempty"`
 		MaxTokens   *int            `json:"max_tokens,omitempty"`
 		Options     *engine.Options `json:"options,omitempty"`
@@ -91,9 +90,6 @@ func (s *Server) handlePrompt(c *gin.Context) {
 	}
 	if req.Model != "" {
 		opts.Model = req.Model
-	}
-	if req.Engine != "" {
-		opts.Engine = req.Engine
 	}
 	if req.Temperature != nil {
 		opts.Temperature = req.Temperature
@@ -115,7 +111,6 @@ func (s *Server) handlePrompt(c *gin.Context) {
 func (s *Server) handlePromptStream(c *gin.Context) {
 	prompt := c.Query("prompt")
 	sessionID := c.Query("session_id")
-	engineReq := c.Query("engine")
 	modelReq := c.Query("model")
 
 	if prompt == "" {
@@ -124,8 +119,7 @@ func (s *Server) handlePromptStream(c *gin.Context) {
 	}
 
 	opts := engine.Options{
-		Engine: engineReq,
-		Model:  modelReq,
+		Model: modelReq,
 	}
 
 	gw := c.MustGet("gateway").(*gateway.Gateway)

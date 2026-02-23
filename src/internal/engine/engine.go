@@ -7,7 +7,6 @@ import (
 )
 
 type Options struct {
-	Engine      string   `json:"engine,omitempty"`
 	Model       string   `json:"model,omitempty"`
 	Temperature *float32 `json:"temperature,omitempty"`
 	MaxTokens   *int     `json:"max_tokens,omitempty"`

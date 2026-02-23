@@ -47,8 +47,7 @@ type AgentsConfig struct {
 }
 
 type AgentDefaults struct {
-	Model  ModelSelection `mapstructure:"model" json:"model"`
-	Engine string         `mapstructure:"engine" json:"engine"`
+	Model ModelSelection `mapstructure:"model" json:"model"`
 }
 
 type ModelSelection struct {

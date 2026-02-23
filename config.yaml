@@ -46,7 +46,6 @@ models:
 agents:
   debug: true
   defaults:
-    engine: eino
     model:
       primary: xai/grok-4
       fallbacks: [kimi-k2.5]

@@ -33,26 +33,12 @@ func NewAgent(cfg *config.Config, sm *session.SessionManager, st *storage.Storag
 }
 
 func (a *Agent) InitEngine() {
-	// Initialize engine based on configuration
-	engineKind := strings.ToLower(a.Config.Agents.Defaults.Engine)
-	if opts, ok := engine.FromContext(context.Background()); ok && opts.Engine != "" {
-		engineKind = strings.ToLower(opts.Engine)
-	}
-
-	if engineKind == "eino" {
-		provider, model := a.splitModel(a.PrimaryModel())
-		react, err := engine.NewEinoEngine(a.Config, provider, model)
-		if err != nil {
-			slog.Warn("failed to initialize Eino engine", "error", err)
-		} else {
-			a.Eng = react
-		}
+	provider, model := a.splitModel(a.PrimaryModel())
+	react, err := engine.NewEinoEngine(a.Config, provider, model)
+	if err != nil {
+		slog.Error("failed to initialize Eino engine", "error", err)
 	} else {
-		a.Eng = engine.NewBasicEngine(a.Config)
-	}
-
-	if a.Eng == nil { // fallback to basic engine if Eino failed or was not selected
-		a.Eng = engine.NewBasicEngine(a.Config)
+		a.Eng = react
 	}
 }
 
@@ -108,21 +94,16 @@ func (a *Agent) DelegatePromptWithOptions(ctx context.Context, sessionID string,
 	// Wrap context with dynamic options
 	engineCtx := engine.WithOptions(ctx, opts)
 
-	// If a specific engine is requested, we might need to re-initialize it or use a temporary one
-	// For now, if the engine requested is different from current, we use a basic one or warn
+	// If a specific model is requested, we might need to re-initialize it or use a temporary one
 	eng := a.Eng
-	if opts.Engine != "" && strings.ToLower(opts.Engine) != strings.ToLower(a.Config.Agents.Defaults.Engine) {
-		if strings.ToLower(opts.Engine) == "eino" {
-			provider, model := a.splitModel(a.PrimaryModel())
-			if opts.Model != "" {
-				provider, model = a.splitModel(opts.Model)
-			}
-			eino, err := engine.NewEinoEngine(a.Config, provider, model)
-			if err == nil {
-				eng = eino
-			}
+	if opts.Model != "" {
+		provider, model := a.splitModel(a.PrimaryModel())
+		provider, model = a.splitModel(opts.Model)
+		eino, err := engine.NewEinoEngine(a.Config, provider, model)
+		if err == nil {
+			eng = eino
 		} else {
-			eng = engine.NewBasicEngine(a.Config)
+			slog.Error("failed to initialize dynamic Eino engine", "error", err)
 		}
 	}
 
@@ -170,18 +151,14 @@ func (a *Agent) DelegatePromptStreamWithOptions(ctx context.Context, sessionID s
 	engineCtx := engine.WithOptions(ctx, opts)
 
 	eng := a.Eng
-	if opts.Engine != "" && strings.ToLower(opts.Engine) != strings.ToLower(a.Config.Agents.Defaults.Engine) {
-		if strings.ToLower(opts.Engine) == "eino" {
-			provider, model := a.splitModel(a.PrimaryModel())
-			if opts.Model != "" {
-				provider, model = a.splitModel(opts.Model)
-			}
-			eino, err := engine.NewEinoEngine(a.Config, provider, model)
-			if err == nil {
-				eng = eino
-			}
+	if opts.Model != "" {
+		provider, model := a.splitModel(a.PrimaryModel())
+		provider, model = a.splitModel(opts.Model)
+		eino, err := engine.NewEinoEngine(a.Config, provider, model)
+		if err == nil {
+			eng = eino
 		} else {
-			eng = engine.NewBasicEngine(a.Config)
+			slog.Error("failed to initialize dynamic Eino engine (stream)", "error", err)
 		}
 	}
 
