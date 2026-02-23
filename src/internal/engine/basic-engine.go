@@ -57,3 +57,20 @@ func (b *BasicEngine) Respond(ctx context.Context, sess *session.Session, prompt
 	}
 	return "", nil, fmt.Errorf("all models failed: primary=%s fallbacks=%v: %w", b.PrimaryModel(), b.cfg.Agents.Defaults.Model.Fallbacks, lastErr)
 }
+
+func (b *BasicEngine) StreamRespond(ctx context.Context, sess *session.Session, prompt string, humanContext string) (<-chan string, error) {
+	ch := make(chan string, 2)
+	go func() {
+		defer close(ch)
+		resp, usage, err := b.Respond(ctx, sess, prompt, humanContext)
+		if err != nil {
+			ch <- fmt.Sprintf("Error: %v", err)
+			return
+		}
+		ch <- resp
+		if usage != nil {
+			ch <- fmt.Sprintf("[Usage: %d prompt, %d completion, %d total tokens]", usage.PromptTokens, usage.CompletionTokens, usage.TotalTokens)
+		}
+	}()
+	return ch, nil
+}

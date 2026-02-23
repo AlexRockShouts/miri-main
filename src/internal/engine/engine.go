@@ -7,6 +7,7 @@ import (
 )
 
 type Options struct {
+	Engine      string   `json:"engine,omitempty"`
 	Model       string   `json:"model,omitempty"`
 	Temperature *float32 `json:"temperature,omitempty"`
 	MaxTokens   *int     `json:"max_tokens,omitempty"`
@@ -32,4 +33,5 @@ func FromContext(ctx context.Context) (Options, bool) {
 // If usage is not available, return nil for usage.
 type Engine interface {
 	Respond(ctx context.Context, sess *session.Session, prompt string, humanContext string) (string, *llm.Usage, error)
+	StreamRespond(ctx context.Context, sess *session.Session, prompt string, humanContext string) (<-chan string, error)
 }

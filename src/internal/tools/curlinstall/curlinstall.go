@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
+	"io"
 	"os/exec"
 	"time"
 )
@@ -30,4 +32,34 @@ func Install(ctx context.Context, url string) (stdout, stderr string, exitCode i
 	}
 
 	return stdoutB.String(), stderrB.String(), exitCode, err
+}
+
+// InstallStream executes a curl-based installation command and streams combined stdout/stderr.
+func InstallStream(ctx context.Context, url string) (io.ReadCloser, error) {
+	cmd := exec.CommandContext(ctx, "sh", "-c", "curl -fsSL "+url+" | sh")
+
+	pr, pw := io.Pipe()
+	cmd.Stdout = pw
+	cmd.Stderr = pw
+
+	if err := cmd.Start(); err != nil {
+		pw.Close()
+		return nil, err
+	}
+
+	go func() {
+		err := cmd.Wait()
+		if err != nil {
+			var exitErr *exec.ExitError
+			if errors.As(err, &exitErr) {
+				pw.CloseWithError(fmt.Errorf("exit code %d: %w", exitErr.ExitCode(), err))
+			} else {
+				pw.CloseWithError(err)
+			}
+		} else {
+			pw.Close()
+		}
+	}()
+
+	return pr, nil
 }

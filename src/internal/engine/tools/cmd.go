@@ -37,6 +37,15 @@ func (c *CmdToolWrapper) InvokableRun(ctx context.Context, argumentsInJSON strin
 		return "", err
 	}
 	stdout, stderr, exitCode, err := cmd.Execute(ctx, args.Command)
+
+	const maxOutput = 4096
+	if len(stdout) > maxOutput {
+		stdout = stdout[:maxOutput] + "\n... (stdout truncated)"
+	}
+	if len(stderr) > maxOutput {
+		stderr = stderr[:maxOutput] + "\n... (stderr truncated)"
+	}
+
 	res := struct {
 		Stdout   string `json:"stdout"`
 		Stderr   string `json:"stderr"`

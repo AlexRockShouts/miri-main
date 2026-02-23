@@ -8,6 +8,7 @@ import (
 	"miri-main/src/internal/config"
 	"net/http"
 	"strings"
+	"time"
 )
 
 type Message struct {
@@ -75,7 +76,9 @@ func ChatCompletion(cfg *config.Config, modelStr string, messages []Message) (st
 		req.Header.Set("Authorization", "Bearer "+prov.APIKey)
 	}
 
-	client := &http.Client{}
+	client := &http.Client{
+		Timeout: 300 * time.Second,
+	}
 	resp, err := client.Do(req)
 	if err != nil {
 		return "", nil, err

@@ -40,5 +40,11 @@ func (f *FetchToolWrapper) InvokableRun(ctx context.Context, argumentsInJSON str
 	if err != nil {
 		return "", err
 	}
+
+	const maxOutput = 8192 // Web content can be a bit larger
+	if len(body) > maxOutput {
+		body = body[:maxOutput] + "\n... (content truncated)"
+	}
+
 	return body, nil
 }

@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"io"
 	"log/slog"
 	"miri-main/src/internal/config"
 	"miri-main/src/internal/engine"
@@ -33,6 +34,7 @@ func NewServer(gw *gateway.Gateway) *Server {
 
 func (s *Server) setupRoutes() {
 	s.Engine.GET("/config", s.handleGetConfig)
+	s.Engine.GET("/prompt/stream", s.handlePromptStream)
 	s.Engine.POST("/config", s.handleUpdateConfig)
 	s.Engine.POST("/prompt", s.handlePrompt)
 	s.Engine.POST("/human", s.handleSaveHumanInfo)
@@ -72,6 +74,7 @@ func (s *Server) handlePrompt(c *gin.Context) {
 		Prompt      string          `json:"prompt"`
 		SessionID   string          `json:"session_id,omitempty"`
 		Model       string          `json:"model,omitempty"`
+		Engine      string          `json:"engine,omitempty"`
 		Temperature *float32        `json:"temperature,omitempty"`
 		MaxTokens   *int            `json:"max_tokens,omitempty"`
 		Options     *engine.Options `json:"options,omitempty"`
@@ -89,6 +92,9 @@ func (s *Server) handlePrompt(c *gin.Context) {
 	if req.Model != "" {
 		opts.Model = req.Model
 	}
+	if req.Engine != "" {
+		opts.Engine = req.Engine
+	}
 	if req.Temperature != nil {
 		opts.Temperature = req.Temperature
 	}
@@ -104,6 +110,39 @@ func (s *Server) handlePrompt(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"response": response})
+}
+
+func (s *Server) handlePromptStream(c *gin.Context) {
+	prompt := c.Query("prompt")
+	sessionID := c.Query("session_id")
+	engineReq := c.Query("engine")
+	modelReq := c.Query("model")
+
+	if prompt == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "prompt query param required"})
+		return
+	}
+
+	opts := engine.Options{
+		Engine: engineReq,
+		Model:  modelReq,
+	}
+
+	gw := c.MustGet("gateway").(*gateway.Gateway)
+	stream, err := gw.PrimaryAgent.DelegatePromptStreamWithOptions(c.Request.Context(), sessionID, prompt, opts)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.Stream(func(w io.Writer) bool {
+		chunk, ok := <-stream
+		if !ok {
+			return false
+		}
+		c.SSEvent("message", chunk)
+		return true
+	})
 }
 
 func (s *Server) handleSaveHumanInfo(c *gin.Context) {
@@ -243,6 +282,7 @@ func (s *Server) handleWebsocket(c *gin.Context) {
 	device := c.Query("device")
 	sessionID := c.Query("session_id")
 	clientID := c.Query("client_id")
+	streamReq := c.Query("stream") == "true"
 
 	if channel != "" && device != "" {
 		slog.Info("channel WS connected", "channel", channel, "device", device)
@@ -268,14 +308,28 @@ func (s *Server) handleWebsocket(c *gin.Context) {
 				break
 			}
 
-			resp, err := gw.ChannelChat(channel, device, msg.Prompt)
-			if err != nil {
-				ws.WriteJSON(gin.H{"error": err.Error()})
-				continue
-			}
+			if streamReq {
+				stream, err := gw.PrimaryAgent.DelegatePromptStream(device, msg.Prompt)
+				if err != nil {
+					ws.WriteJSON(gin.H{"error": err.Error()})
+					continue
+				}
+				for chunk := range stream {
+					if err := ws.WriteJSON(gin.H{"response": chunk, "stream": true}); err != nil {
+						break
+					}
+				}
+				ws.WriteJSON(gin.H{"stream": false}) // End of stream
+			} else {
+				resp, err := gw.ChannelChat(channel, device, msg.Prompt)
+				if err != nil {
+					ws.WriteJSON(gin.H{"error": err.Error()})
+					continue
+				}
 
-			if err := ws.WriteJSON(gin.H{"response": resp}); err != nil {
-				break
+				if err := ws.WriteJSON(gin.H{"response": resp}); err != nil {
+					break
+				}
 			}
 		}
 		return
@@ -307,20 +361,46 @@ func (s *Server) handleWebsocket(c *gin.Context) {
 
 	for {
 		var msg struct {
-			Prompt string `json:"prompt"`
+			Prompt  string          `json:"prompt"`
+			Options *engine.Options `json:"options,omitempty"`
+			Stream  *bool           `json:"stream,omitempty"`
 		}
 		if err := ws.ReadJSON(&msg); err != nil {
 			break
 		}
 
-		response, err := gw.PrimaryAgent.DelegatePrompt(sessionID, msg.Prompt)
-		if err != nil {
-			ws.WriteJSON(gin.H{"error": err.Error()})
-			continue
+		isStreaming := streamReq
+		if msg.Stream != nil {
+			isStreaming = *msg.Stream
 		}
 
-		if err := ws.WriteJSON(gin.H{"response": response}); err != nil {
-			break
+		opts := engine.Options{}
+		if msg.Options != nil {
+			opts = *msg.Options
+		}
+
+		if isStreaming {
+			stream, err := gw.PrimaryAgent.DelegatePromptStreamWithOptions(c.Request.Context(), sessionID, msg.Prompt, opts)
+			if err != nil {
+				ws.WriteJSON(gin.H{"error": err.Error()})
+				continue
+			}
+			for chunk := range stream {
+				if err := ws.WriteJSON(gin.H{"response": chunk, "stream": true}); err != nil {
+					break
+				}
+			}
+			ws.WriteJSON(gin.H{"stream": false})
+		} else {
+			response, err := gw.PrimaryAgent.DelegatePromptWithOptions(c.Request.Context(), sessionID, msg.Prompt, opts)
+			if err != nil {
+				ws.WriteJSON(gin.H{"error": err.Error()})
+				continue
+			}
+
+			if err := ws.WriteJSON(gin.H{"response": response}); err != nil {
+				break
+			}
 		}
 	}
 }
@@ -358,10 +438,10 @@ func (s *Server) ListenAndServe(ctx context.Context, addr string) error {
 	srv := &http.Server{
 		Addr:              addr,
 		Handler:           s.Engine,
-		ReadHeaderTimeout: 30 * time.Second,
-		ReadTimeout:       30 * time.Second,
-		WriteTimeout:      30 * time.Second,
-		IdleTimeout:       120 * time.Second,
+		ReadHeaderTimeout: 60 * time.Second,
+		ReadTimeout:       600 * time.Second,
+		WriteTimeout:      600 * time.Second,
+		IdleTimeout:       1200 * time.Second,
 	}
 
 	go func() {

@@ -32,6 +32,39 @@ func (g *GoInstallToolWrapper) Info(_ context.Context) (*schema.ToolInfo, error)
 	return g.GetInfo(), nil
 }
 
+func (g *GoInstallToolWrapper) InvokableRun(ctx context.Context, argumentsInJSON string, _ ...tool.Option) (string, error) {
+	var args struct {
+		Package string `json:"package"`
+	}
+	if err := json.Unmarshal([]byte(argumentsInJSON), &args); err != nil {
+		return "", err
+	}
+	slog.Debug("installing tool over go cli", "args", argumentsInJSON)
+	stdout, stderr, exitCode, err := goinstall.Install(ctx, args.Package)
+
+	const maxOutput = 4096
+	if len(stdout) > maxOutput {
+		stdout = stdout[:maxOutput] + "\n... (stdout truncated)"
+	}
+	if len(stderr) > maxOutput {
+		stderr = stderr[:maxOutput] + "\n... (stderr truncated)"
+	}
+
+	res := map[string]any{
+		"stdout":    stdout,
+		"stderr":    stderr,
+		"exit_code": exitCode,
+	}
+	if err != nil {
+		slog.Error("error occurred during go install", "error", err, "stderr", stderr)
+		res["error"] = err.Error()
+	}
+
+	slog.Debug("go installation complete", "stdout", stdout, "stderr", stderr)
+	b, _ := json.Marshal(res)
+	return string(b), nil
+}
+
 func (g *GoInstallToolWrapper) StreamableRun(ctx context.Context, argumentsInJSON string, _ ...tool.Option) (*schema.StreamReader[string], error) {
 	var args struct {
 		Package string `json:"package"`
@@ -39,7 +72,7 @@ func (g *GoInstallToolWrapper) StreamableRun(ctx context.Context, argumentsInJSO
 	if err := json.Unmarshal([]byte(argumentsInJSON), &args); err != nil {
 		return nil, err
 	}
-	slog.Debug("installing tool over go cli (streaming), %s", argumentsInJSON)
+	slog.Debug("installing tool over go cli (streaming)", "args", argumentsInJSON)
 
 	rc, err := goinstall.InstallStream(ctx, args.Package)
 	if err != nil {
