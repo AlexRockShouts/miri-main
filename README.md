@@ -21,6 +21,7 @@ The agent has its own \"soul\" defined in `~/.miri/soul.txt` (bootstrapped from 
   - `GET /ws`: WebSocket support for full-duplex interactive streaming.
   - Session and history management via `/sessions` endpoints.
 - **Streamable Tools**: Real-time output streaming for installation tools like `curl_install` and `go_install`.
+- **Skills System**: Anthropic-style skill loading from `SKILL.md` files with dynamic context injection and automatic script-to-tool inference.
 - **Logging**: Structured logs via `slog` with Eino callback integration for deep visibility.
 
 
@@ -132,11 +133,43 @@ Response includes xAI completion (soul + human context prepended).
 ├── src/          # Go source
 │   ├── cmd/main.go
 │   └── internal/
-├── templates/    # soul.txt template
+├── scripts/      # Automated tool scripts (.sh, .py, .js)
+├── skills/       # Skill definitions (folders with SKILL.md)
+├── templates/    # soul.txt and system templates
 ├── go.mod
 ├── .gitignore
 └── README.md
 ```
+
+## Skills & Scripts
+
+Miri supports dynamic extension through **Skills** and **Script Inference**.
+
+### 1. Skills System
+Skills are stored in `~/.miri/skills/` (or your configured storage dir). Each skill is a folder containing a `SKILL.md` file.
+
+**SKILL.md Format:**
+```markdown
+---
+name: Web Analysis
+description: Advanced web page analysis and data extraction instructions.
+version: 1.2.0
+tags: [web, scraper, analysis]
+---
+# Instructions
+When performing web analysis, always follow these steps...
+```
+
+**Skill Tools:**
+- `skill_search`: Allows the agent to find skills by name, description, or tags.
+- `skill_use`: Activates a skill by injecting its full content into the agent's context as a `SystemMessage`.
+
+### 2. Script Inference
+Any script placed in the root `/scripts/` directory is automatically registered as a tool.
+- Supported extensions: `.sh`, `.py`, `.js`.
+- The tool name is derived from the filename (e.g., `hello.sh` becomes tool `hello`).
+- Scripts receive arguments as positional parameters.
+- Output (stdout/stderr) is returned to the agent.
 
 ## Customization
 
