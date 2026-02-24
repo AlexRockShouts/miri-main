@@ -98,3 +98,9 @@ func GetSkill(ctx context.Context, slug string) (*SkillDetailResponse, error) {
 	}
 	return &out, nil
 }
+
+// InstallSkill is unavailable in the rollback state and returns an error.
+// Kept to satisfy callers in the engine during rollback.
+func InstallSkill(_ context.Context, _ string, _ string) (string, error) {
+	return "", fmt.Errorf("InstallSkill is not available in the current rollback state")
+}
