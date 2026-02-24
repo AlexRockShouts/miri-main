@@ -1,0 +1,12 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="go build miri-main/src/cmd/server" type="GoApplicationRunConfiguration" factoryName="Go Application" nameIsGenerated="true">
+    <module name="miri-main" />
+    <working_directory value="$PROJECT_DIR$" />
+    <parameters value="-config config.yaml" />
+    <kind value="PACKAGE" />
+    <package value="miri-main/src/cmd/server" />
+    <directory value="$PROJECT_DIR$" />
+    <filePath value="$PROJECT_DIR$/../miri-main|$PROJECT_DIR$/src/cmd/server/main.go" />
+    <method v="2" />
+  </configuration>
+</component>
