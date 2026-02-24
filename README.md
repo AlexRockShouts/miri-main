@@ -46,10 +46,12 @@ go build -o miri-tui src/cmd/tui/main.go
 ```
 
 ### TUI Features:
-- **Channels**: Enroll and manage WhatsApp (scan QR codes from stdout).
-- **Server**: Start/Stop/Restart the Miri gateway and view active sessions/models.
-- **Config**: Interactively set API keys and primary models. Persists to `~/.miri/config.yaml`.
-- **Install**: Automatically setup Miri as a system service (`launchd` on macOS, `systemd` on Linux).
+- **Navigation**: Intuitive left-hand navigation bar with Tab/Shift+Tab focus switching.
+- **Mouse & Keyboard**: Full support for both mouse clicks and keyboard (Arrows, Tab, Enter).
+- **Channels**: Manage multiple integrations (WhatsApp, IRC). Enroll WhatsApp via QR, configure allowlists/blocklists, and IRC server details.
+- **Models**: Manage multiple LLM Providers (xAI, NVIDIA, etc.) and their specific model metadata (context windows, costs, capabilities).
+- **Config**: Configure global Gateway settings (address, security key) and LLM defaults. Start/Stop/Restart the Miri service directly.
+- **Install**: One-click setup for Miri as a system service (`launchd` on macOS, `systemd` on Linux).
 
 ## Build & Run (CLI Server)
 
@@ -182,6 +184,60 @@ Any script placed in the root `/scripts/` directory is automatically registered 
 - Scripts receive arguments as positional parameters.
 - Output (stdout/stderr) is returned to the agent.
 
+## Configuration
+
+Miri uses a YAML configuration file located at `~/.miri/config.yaml`.
+
+### Example `config.yaml`:
+```yaml
+storage_dir: ~/.miri
+
+server:
+  addr: :8080
+  key: your-secret-key
+
+models:
+  mode: merge
+  providers:
+    xai:
+      baseUrl: https://api.x.ai/v1
+      apiKey: "$XAI_API_KEY"
+      api: openai
+      models:
+        - id: xai/grok-4
+          name: xai/grok-4
+          contextWindow: 131072
+          maxTokens: 8192
+    nvidia:
+      baseUrl: https://integrate.api.nvidia.com/v1
+      apiKey: "$NVIDIA_API_KEY"
+      api: openai-completions
+      models:
+        - id: kimi-k2.5
+          name: Kimi K2.5
+          contextWindow: 131072
+          maxTokens: 8192
+
+agents:
+  defaults:
+    model:
+      primary: xai/grok-4
+  debug: true
+
+channels:
+  whatsapp:
+    enabled: true
+    allowlist: []
+    blocklist: []
+  irc:
+    enabled: false
+    host: "irc.libera.chat"
+    port: 6697
+    tls: true
+    nick: "MiriBot"
+    channels: ["#miri-test"]
+```
+
 ## Customization
 
 - Edit `templates/soul.txt` for default agent behavior.
@@ -205,20 +261,20 @@ Verifies endpoints without xAI key.
 
 ## Channels
 
+Miri supports multiple communication channels with a unified filtering policy:
+- **Allowlist**: If non-empty, only these senders can trigger the AI agent.
+- **Blocklist**: Senders here are silently ignored.
+- **Default Reply**: Senders not in allowlist (and not blocked) receive: "thanks for contact, we call you back !".
+
 ### WhatsApp
-
-Enable in config:
-
-```yaml
-channels:
-  whatsapp:
-    enabled: true
-```
-
-Restart server. QR code printed in logs via qrterminal (stdout), scan with WhatsApp > Linked Devices > Link a Device.
-
-- Incoming text DMs (non-group) auto-chat via agent (LLM response sent back).
+Enable in config or TUI. Scan QR code from stdout/TUI.
+- Supports JID-based allowlist/blocklist.
 - Persistent sqlite DB `~/.miri/whatsapp/whatsapp.db`.
+
+### IRC
+Enable in config or TUI.
+- Configure server, TLS, NickServ authentication, and channels.
+- Supports Nick/Channel-based allowlist/blocklist.
 
 **Single POST /channels** (all channels: whatsapp/telegram/slack future):
 - `{"channel":"whatsapp","action":"status"}` → `{"connected":bool,"logged_in":bool}`
