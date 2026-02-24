@@ -1,6 +1,6 @@
 module miri-main
 
-go 1.26
+go 1.25.6
 
 require (
 	github.com/charmbracelet/bubbles v1.0.0

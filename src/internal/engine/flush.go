@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -55,6 +56,8 @@ func (e *EinoEngine) flushIfNeeded(ctx context.Context, msgs []*schema.Message, 
 	if usagePromptTokens < limit {
 		return false, nil
 	}
+
+	slog.Info("Triggering memory flush", "usage", usagePromptTokens, "limit", limit)
 	// prepare paths
 	base := e.storageBaseDir
 	if base == "" {
@@ -84,10 +87,17 @@ func (e *EinoEngine) flushIfNeeded(ctx context.Context, msgs []*schema.Message, 
 		return false, nil
 	}
 	if err := appendLine(memoryPath, "\n\n# Flush @ "+time.Now().UTC().Format(time.RFC3339)+"\n\n"+out+"\n"); err != nil {
+		slog.Error("Failed to append to memory.md", "error", err)
 		return false, err
 	}
+	jsonCount := 0
 	for _, blk := range extractJSONBlocks(out) {
-		_ = appendLine(factsPath, blk)
+		if err := appendLine(factsPath, blk); err != nil {
+			slog.Error("Failed to append to facts.json", "error", err)
+		} else {
+			jsonCount++
+		}
 	}
+	slog.Info("Memory flush completed", "json_blocks", jsonCount)
 	return true, nil
 }

@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"strings"
 
@@ -59,6 +60,8 @@ func (e *EinoEngine) summarizeIfNeeded(ctx context.Context, systemPrompt string,
 	if usagePromptTokens < limit {
 		return msgs, false, nil
 	}
+
+	slog.Info("Triggering conversation summary", "usage", usagePromptTokens, "limit", limit)
 
 	// Identify messages excluding the leading system message
 	if len(msgs) == 0 {

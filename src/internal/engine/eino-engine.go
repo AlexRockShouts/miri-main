@@ -2,10 +2,13 @@ package engine
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"miri-main/src/internal/config"
+	"miri-main/src/internal/engine/skills"
 	"miri-main/src/internal/engine/tools"
 	"miri-main/src/internal/llm"
 	"miri-main/src/internal/session"
@@ -29,7 +32,9 @@ func newSlogHandler(out chan<- string) callbacks.Handler {
 			slog.Info("Eino Component Start",
 				"name", info.Name,
 				"type", info.Type,
-				"component", info.Component)
+				"component", info.Component,
+				"input_type", fmt.Sprintf("%T", input))
+
 			if out != nil && info.Component == components.ComponentOfChatModel {
 				out <- fmt.Sprintf("[Thought: %s started]\n", info.Name)
 			}
@@ -39,7 +44,9 @@ func newSlogHandler(out chan<- string) callbacks.Handler {
 			slog.Info("Eino Component End",
 				"name", info.Name,
 				"type", info.Type,
-				"component", info.Component)
+				"component", info.Component,
+				"output_type", fmt.Sprintf("%T", output))
+
 			if out != nil && info.Component == compose.ComponentOfToolsNode {
 				out <- fmt.Sprintf("[Tools: %s finished]\n", info.Name)
 			}
@@ -93,6 +100,7 @@ type EinoEngine struct {
 	contextWindow   int
 	storageBaseDir  string
 	compiledGraph   compose.Runnable[*graphInput, *graphOutput]
+	skillLoader     *skills.SkillLoader
 }
 
 type graphInput struct {
@@ -185,6 +193,65 @@ func NewEinoEngine(cfg *config.Config, providerName, modelName string) (*EinoEng
 		storageBaseDir:  filepath.Join(cfg.StorageDir, "memory"),
 	}
 
+	// Initialize skills
+	skillsDir := filepath.Join(cfg.StorageDir, "skills")
+	scriptsDir := "scripts" // default scripts directory
+	ee.skillLoader = skills.NewSkillLoader(skillsDir, scriptsDir)
+	if err := ee.skillLoader.Load(); err != nil {
+		slog.Warn("Failed to load skills", "dir", skillsDir, "error", err)
+	}
+
+	// Add skill tools
+	skillSearchTool := skills.NewSearchTool(ee.skillLoader)
+	skillUseTool := skills.NewUseTool(ee.skillLoader)
+
+	// Update tools node with skill tools and inferred script tools
+	allTools := []tool.BaseTool{searchTool, fetchTool, cmdTool, goInstallTool, curlInstallTool, skillSearchTool, skillUseTool}
+	allTools = append(allTools, ee.skillLoader.GetExtraTools()...)
+
+	toolsNode, err = compose.NewToolNode(context.Background(), &compose.ToolsNodeConfig{
+		Tools: allTools,
+	})
+	if err != nil {
+		return nil, err
+	}
+	ee.tools = toolsNode
+
+	// Bind tools to model (including skill tools and inferred script tools)
+	toolInfos = append(toolInfos, &schema.ToolInfo{
+		Name: "skill_search",
+		Desc: "Search for available skills and capabilities. Returns matching skill names and descriptions.",
+		ParamsOneOf: schema.NewParamsOneOfByParams(map[string]*schema.ParameterInfo{
+			"query": {
+				Type:     schema.String,
+				Desc:     "The search query to match against skill names, descriptions, or tags.",
+				Required: false,
+			},
+		}),
+	}, &schema.ToolInfo{
+		Name: "skill_use",
+		Desc: "Load a specific skill's instructions and capabilities into the current context.",
+		ParamsOneOf: schema.NewParamsOneOfByParams(map[string]*schema.ParameterInfo{
+			"skill_name": {
+				Type:     schema.String,
+				Desc:     "The exact name of the skill to load.",
+				Required: true,
+			},
+		}),
+	})
+
+	for _, t := range ee.skillLoader.GetExtraTools() {
+		info, _ := t.Info(context.Background())
+		toolInfos = append(toolInfos, info)
+	}
+
+	// Re-bind with updated toolInfos
+	if tc, err2 := cm.WithTools(toolInfos); err2 == nil {
+		ee.chat = tc
+	} else if err := cm.BindTools(toolInfos); err != nil {
+		return nil, err
+	}
+
 	// Compile the graph
 	chain := compose.NewChain[*graphInput, *graphOutput]()
 
@@ -250,6 +317,7 @@ func NewEinoEngine(cfg *config.Config, providerName, modelName string) (*EinoEng
 }
 
 func (e *EinoEngine) agentInvoke(ctx context.Context, input *graphInput) (*graphOutput, error) {
+	slog.Info("Agent loop start", "session_id", input.SessionID, "max_steps", e.maxSteps)
 	msgs := input.Messages
 	// Add user prompt if not already there (it might be restored from checkpoint)
 	if len(msgs) == 0 || msgs[len(msgs)-1].Role != schema.User || msgs[len(msgs)-1].Content != input.Prompt {
@@ -260,8 +328,10 @@ func (e *EinoEngine) agentInvoke(ctx context.Context, input *graphInput) (*graph
 	systemPrompt := input.Soul + input.HumanContext
 
 	for i := 0; i < e.maxSteps; i++ {
+		slog.Debug("Agent loop iteration", "step", i, "messages_count", len(msgs))
 		assistant, err := e.chat.Generate(ctx, msgs, input.CallOpts...)
 		if err != nil {
+			slog.Error("Chat generate failed", "step", i, "error", err)
 			return nil, err
 		}
 
@@ -270,15 +340,19 @@ func (e *EinoEngine) agentInvoke(ctx context.Context, input *graphInput) (*graph
 			totalUsage.CompletionTokens += assistant.ResponseMeta.Usage.CompletionTokens
 			totalUsage.TotalTokens += assistant.ResponseMeta.Usage.TotalTokens
 
+			slog.Debug("Usage update", "step", i, "total_tokens", totalUsage.TotalTokens)
+
 			if _, err := e.flushIfNeeded(ctx, msgs, totalUsage.PromptTokens, input.CallOpts); err != nil {
 				slog.Warn("flush failed", "error", err)
 			}
 			if newMsgs, summarized, err := e.summarizeIfNeeded(ctx, systemPrompt, msgs, totalUsage.PromptTokens, input.CallOpts); err == nil && summarized {
+				slog.Info("Memory summarized", "step", i, "old_count", len(msgs), "new_count", len(newMsgs))
 				msgs = newMsgs
 			}
 		}
 
 		if len(assistant.ToolCalls) == 0 {
+			slog.Info("Agent loop finished (no tool calls)", "steps", i+1, "total_tokens", totalUsage.TotalTokens)
 			return &graphOutput{
 				Answer:   assistant.Content,
 				Messages: msgs,
@@ -286,15 +360,35 @@ func (e *EinoEngine) agentInvoke(ctx context.Context, input *graphInput) (*graph
 			}, nil
 		}
 
+		slog.Info("Agent tool calls triggered", "step", i, "calls", len(assistant.ToolCalls))
 		msgs = append(msgs, assistant)
+
+		// Handle skill injection
+		for _, tc := range assistant.ToolCalls {
+			if tc.Function.Name == "skill_use" {
+				var args struct {
+					SkillName string `json:"skill_name"`
+				}
+				if err := json.Unmarshal([]byte(tc.Function.Arguments), &args); err == nil {
+					if skill, ok := e.skillLoader.GetSkill(args.SkillName); ok {
+						slog.Info("Injecting skill into context", "skill", skill.Name)
+						// Inject skill content as a system message to guide future steps
+						msgs = append(msgs, schema.SystemMessage(fmt.Sprintf("SKILL LOADED: %s\n\n%s", skill.Name, skill.FullContent)))
+					}
+				}
+			}
+		}
+
 		toolMsgs, err := e.tools.Invoke(ctx, assistant)
 		if err != nil {
+			slog.Error("Tool invoke failed", "step", i, "error", err)
 			return nil, err
 		}
 		msgs = append(msgs, toolMsgs...)
 	}
 
 	// Final generation if loop exhausted
+	slog.Info("Agent loop exhausted, final generation", "max_steps", e.maxSteps)
 	final, err := e.chat.Generate(ctx, msgs, input.CallOpts...)
 	if err != nil {
 		return nil, err
@@ -340,6 +434,7 @@ func (e *EinoEngine) agentStream(ctx context.Context, input *graphInput) (*schem
 
 // Respond builds a conversation including system prompt, history and current user prompt.
 func (e *EinoEngine) Respond(ctx context.Context, sess *session.Session, promptStr string, humanContext string) (string, *llm.Usage, error) {
+	slog.Info("EinoEngine Respond", "session_id", sess.ID, "prompt_len", len(promptStr))
 	// Initialize callbacks with slog handler
 	ctx = callbacks.InitCallbacks(ctx, &callbacks.RunInfo{
 		Name: "EinoEngine",
@@ -386,9 +481,17 @@ func (e *EinoEngine) Respond(ctx context.Context, sess *session.Session, promptS
 
 	output, err := e.compiledGraph.Invoke(ctx, input, compose.WithCheckPointID(sess.ID))
 	if err != nil {
+		// Eino wraps node errors in an internal error type that isn't exported.
+		// We can't type-assert it, so log the error and its immediate cause if any.
+		slog.Error("Graph error", "error", err, "session_id", sess.ID)
+		if cause := errors.Unwrap(err); cause != nil {
+			slog.Error("Cause", "cause", cause)
+		}
 		finalErr = err
 		return "", nil, err
 	}
+
+	slog.Info("EinoEngine Respond complete", "session_id", sess.ID, "total_tokens", output.Usage.TotalTokens)
 
 	// Clear checkpoint on success
 	if e.checkPointStore != nil {
@@ -400,6 +503,7 @@ func (e *EinoEngine) Respond(ctx context.Context, sess *session.Session, promptS
 }
 
 func (e *EinoEngine) StreamRespond(ctx context.Context, sess *session.Session, promptStr string, humanContext string) (<-chan string, error) {
+	slog.Info("EinoEngine StreamRespond", "session_id", sess.ID, "prompt_len", len(promptStr))
 	out := make(chan string, 100)
 
 	// Initialize callbacks with our streaming handler

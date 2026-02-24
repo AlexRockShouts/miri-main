@@ -3,6 +3,9 @@
     <module name="miri-main" />
     <working_directory value="$PROJECT_DIR$" />
     <parameters value="-config config.yaml" />
+    <envs>
+      <env name="EINO_LOG_LEVEL" value="debug" />
+    </envs>
     <kind value="PACKAGE" />
     <package value="miri-main/src/cmd/server" />
     <directory value="$PROJECT_DIR$" />
