@@ -38,9 +38,20 @@ go build -o miri src/cmd/main.go
 ./miri -config /path/to/my-config.yaml  # loads specified YAML first, then ~/.miri/config.yaml or ./config.yaml
 ```
 
-Server starts on `server.addr` (default `:8080`). Logs show bootstrap if needed.
+Miri starts by default with a CLI TUI for easy configuration and management.
 
-## Example Usage
+```bash
+go build -o miri-tui src/cmd/tui/main.go
+./miri-tui
+```
+
+### TUI Features:
+- **Channels**: Enroll and manage WhatsApp (scan QR codes from stdout).
+- **Server**: Start/Stop/Restart the Miri gateway and view active sessions/models.
+- **Config**: Interactively set API keys and primary models. Persists to `~/.miri/config.yaml`.
+- **Install**: Automatically setup Miri as a system service (`launchd` on macOS, `systemd` on Linux).
+
+## Build & Run (CLI Server)
 
 ### 1. Update Config
 

@@ -42,20 +42,28 @@ func New(cfg *config.Config, st *storage.Storage) *Gateway {
 		gw.SubAgents[i].Parent = gw.PrimaryAgent
 	}
 
-	if cfg.Tools.CronEnabled {
-		gw.cronMgr = cron.NewCronManager(gw.Storage, func(sessionID, prompt string) (string, error) {
-			return gw.PrimaryAgent.DelegatePrompt(sessionID, prompt)
-		})
-		gw.cronMgr.Start()
-	}
+	gw.cronMgr = cron.NewCronManager(gw.Storage, func(sessionID, prompt string) (string, error) {
+		return gw.PrimaryAgent.DelegatePrompt(sessionID, prompt)
+	})
+	gw.cronMgr.Start()
 
 	if gw.Config.Channels.Whatsapp.Enabled {
-		ch := channels.NewWhatsapp(gw.Config.StorageDir)
+		ch := channels.NewWhatsapp(gw.Config.StorageDir, gw.Config.Channels.Whatsapp.Allowlist, gw.Config.Channels.Whatsapp.Blocklist)
 		if ch != nil {
 			gw.Channels["whatsapp"] = ch
 			slog.Info("whatsapp channel initialized")
 		} else {
 			slog.Warn("failed to initialize whatsapp channel")
+		}
+	}
+
+	if gw.Config.Channels.IRC.Enabled {
+		ch := channels.NewIRC(gw.Config.Channels.IRC)
+		if ch != nil {
+			gw.Channels["irc"] = ch
+			slog.Info("irc channel initialized")
+		} else {
+			slog.Warn("failed to initialize irc channel")
 		}
 	}
 
@@ -74,6 +82,26 @@ func New(cfg *config.Config, st *storage.Storage) *Gateway {
 			}
 		})
 		gw.engine.Register(w.Poll)
+	}
+
+	if i, ok := gw.Channels["irc"].(*channels.IRC); ok {
+		i.SetMessageHandler(func(target, msg string) {
+			// For IRC, we use the target (channel or nick) as the session ID prefix or client ID
+			sessionID := gw.CreateNewSession("irc:" + target)
+			resp, err := gw.PrimaryAgent.DelegatePrompt(sessionID, msg)
+			if err != nil {
+				slog.Error("failed to handle incoming irc msg", "target", target, "error", err)
+				return
+			}
+			if err := gw.ChannelSend("irc", target, resp); err != nil {
+				slog.Error("failed to send irc response", "target", target, "error", err)
+			}
+		})
+		gw.engine.Register(func() {
+			if err := i.Run(); err != nil {
+				slog.Error("IRC run error", "error", err)
+			}
+		})
 	}
 
 	return gw

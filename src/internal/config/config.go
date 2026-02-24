@@ -16,7 +16,6 @@ type Config struct {
 	Agents     AgentsConfig   `mapstructure:"agents" json:"agents"`
 	Server     ServerConfig   `mapstructure:"server" json:"server"`
 	StorageDir string         `mapstructure:"storage_dir" json:"storage_dir"`
-	Tools      ToolsConfig    `mapstructure:"tools" json:"tools"`
 	Channels   ChannelsConfig `mapstructure:"channels" json:"channels"`
 }
 
@@ -33,11 +32,20 @@ type ProviderConfig struct {
 }
 
 type ModelConfig struct {
-	ID            string `mapstructure:"id" json:"id"`
-	Name          string `mapstructure:"name" json:"name"`
-	ContextWindow int    `mapstructure:"contextWindow" json:"contextWindow"`
-	MaxTokens     int    `mapstructure:"maxTokens" json:"maxTokens"`
-	Reasoning     bool   `mapstructure:"reasoning" json:"reasoning"`
+	ID            string    `mapstructure:"id" json:"id"`
+	Name          string    `mapstructure:"name" json:"name"`
+	ContextWindow int       `mapstructure:"contextWindow" json:"contextWindow"`
+	MaxTokens     int       `mapstructure:"maxTokens" json:"maxTokens"`
+	Reasoning     bool      `mapstructure:"reasoning" json:"reasoning"`
+	Input         []string  `mapstructure:"input" json:"input"`
+	Cost          ModelCost `mapstructure:"cost" json:"cost"`
+}
+
+type ModelCost struct {
+	Input      float64 `mapstructure:"input" json:"input"`
+	Output     float64 `mapstructure:"output" json:"output"`
+	CacheRead  float64 `mapstructure:"cacheRead" json:"cacheRead"`
+	CacheWrite float64 `mapstructure:"cacheWrite" json:"cacheWrite"`
 }
 
 type AgentsConfig struct {
@@ -69,19 +77,35 @@ type ServerConfig struct {
 	Port          int    `mapstructure:"-" json:"port"`
 }
 
-type ToolsConfig struct {
-	Enabled          bool `mapstructure:"enabled" json:"enabled"`
-	WebSearchEnabled bool `mapstructure:"web_search_enabled" json:"web_search_enabled"`
-	WebFetchEnabled  bool `mapstructure:"web_fetch_enabled" json:"web_fetch_enabled"`
-	CronEnabled      bool `mapstructure:"cron_enabled" json:"cron_enabled"`
+type WhatsappConfig struct {
+	Enabled   bool     `mapstructure:"enabled" json:"enabled"`
+	Allowlist []string `mapstructure:"allowlist" json:"allowlist"`
+	Blocklist []string `mapstructure:"blocklist" json:"blocklist"`
 }
 
-type WhatsappConfig struct {
-	Enabled bool `mapstructure:"enabled" json:"enabled"`
+type IRCConfig struct {
+	Enabled   bool           `mapstructure:"enabled" json:"enabled"`
+	Host      string         `mapstructure:"host" json:"host"`
+	Port      int            `mapstructure:"port" json:"port"`
+	TLS       bool           `mapstructure:"tls" json:"tls"`
+	Nick      string         `mapstructure:"nick" json:"nick"`
+	User      string         `mapstructure:"user" json:"user"`
+	Realname  string         `mapstructure:"realname" json:"realname"`
+	Channels  []string       `mapstructure:"channels" json:"channels"`
+	Password  *string        `mapstructure:"password" json:"password"`
+	NickServ  NickServConfig `mapstructure:"nickserv" json:"nickserv"`
+	Allowlist []string       `mapstructure:"allowlist" json:"allowlist"`
+	Blocklist []string       `mapstructure:"blocklist" json:"blocklist"`
+}
+
+type NickServConfig struct {
+	Enabled  bool   `mapstructure:"enabled" json:"enabled"`
+	Password string `mapstructure:"password" json:"password"`
 }
 
 type ChannelsConfig struct {
 	Whatsapp WhatsappConfig `mapstructure:"whatsapp" json:"whatsapp"`
+	IRC      IRCConfig      `mapstructure:"irc" json:"irc"`
 }
 
 func Load(override string) (*Config, error) {
@@ -193,6 +217,11 @@ func Save(cfg *Config) error {
 			viper.Set("models.providers."+p+".models."+strconv.Itoa(i)+".contextWindow", m.ContextWindow)
 			viper.Set("models.providers."+p+".models."+strconv.Itoa(i)+".maxTokens", m.MaxTokens)
 			viper.Set("models.providers."+p+".models."+strconv.Itoa(i)+".reasoning", m.Reasoning)
+			viper.Set("models.providers."+p+".models."+strconv.Itoa(i)+".input", m.Input)
+			viper.Set("models.providers."+p+".models."+strconv.Itoa(i)+".cost.input", m.Cost.Input)
+			viper.Set("models.providers."+p+".models."+strconv.Itoa(i)+".cost.output", m.Cost.Output)
+			viper.Set("models.providers."+p+".models."+strconv.Itoa(i)+".cost.cacheRead", m.Cost.CacheRead)
+			viper.Set("models.providers."+p+".models."+strconv.Itoa(i)+".cost.cacheWrite", m.Cost.CacheWrite)
 		}
 	}
 	viper.Set("agents.defaults.model.primary", cfg.Agents.Defaults.Model.Primary)
@@ -201,11 +230,22 @@ func Save(cfg *Config) error {
 	}
 	viper.Set("server.addr", cfg.Server.Addr)
 	viper.Set("server.key", cfg.Server.Key)
-	viper.Set("tools.enabled", cfg.Tools.Enabled)
-	viper.Set("tools.web_search_enabled", cfg.Tools.WebSearchEnabled)
-	viper.Set("tools.web_fetch_enabled", cfg.Tools.WebFetchEnabled)
-	viper.Set("tools.cron_enabled", cfg.Tools.CronEnabled)
 	viper.Set("channels.whatsapp.enabled", cfg.Channels.Whatsapp.Enabled)
+	viper.Set("channels.whatsapp.allowlist", cfg.Channels.Whatsapp.Allowlist)
+	viper.Set("channels.whatsapp.blocklist", cfg.Channels.Whatsapp.Blocklist)
+	viper.Set("channels.irc.enabled", cfg.Channels.IRC.Enabled)
+	viper.Set("channels.irc.host", cfg.Channels.IRC.Host)
+	viper.Set("channels.irc.port", cfg.Channels.IRC.Port)
+	viper.Set("channels.irc.tls", cfg.Channels.IRC.TLS)
+	viper.Set("channels.irc.nick", cfg.Channels.IRC.Nick)
+	viper.Set("channels.irc.user", cfg.Channels.IRC.User)
+	viper.Set("channels.irc.realname", cfg.Channels.IRC.Realname)
+	viper.Set("channels.irc.channels", cfg.Channels.IRC.Channels)
+	viper.Set("channels.irc.password", cfg.Channels.IRC.Password)
+	viper.Set("channels.irc.nickserv.enabled", cfg.Channels.IRC.NickServ.Enabled)
+	viper.Set("channels.irc.nickserv.password", cfg.Channels.IRC.NickServ.Password)
+	viper.Set("channels.irc.allowlist", cfg.Channels.IRC.Allowlist)
+	viper.Set("channels.irc.blocklist", cfg.Channels.IRC.Blocklist)
 	viper.Set("storage_dir", cfg.StorageDir)
 
 	configPath := filepath.Join(cfg.StorageDir, "config.yaml")

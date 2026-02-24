@@ -11,7 +11,7 @@ models:
     xai:
       baseUrl: https://api.x.ai/v1
       apiKey: "$XAI_API_KEY"
-      api: openai-completions
+      api: openai
       models:
         - id: xai/grok-4
           name: xai/grok-4
@@ -50,12 +50,23 @@ agents:
       primary: xai/grok-4
       fallbacks: [kimi-k2.5]
 
-tools:
-  enabled: false
-  web_search_enabled: false
-  web_fetch_enabled: false
-  cron_enabled: false
-
 channels:
   whatsapp:
     enabled: true
+    allowlist: []
+    blocklist: []
+  irc:
+    enabled: false
+    host: "irc.libera.chat"
+    port: 6697
+    tls: true
+    nick: "MiriBot"
+    user: "miri"
+    realname: "Miri Autonomous Agent"
+    channels: ["#miri-test"]
+    allowlist: []
+    blocklist: []
+    nickserv:
+      enabled: false
+      password: ""
+

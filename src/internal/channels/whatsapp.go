@@ -18,6 +18,7 @@ import (
 	"go.mau.fi/whatsmeow/types"
 	"go.mau.fi/whatsmeow/types/events"
 	"google.golang.org/protobuf/proto"
+	"slices"
 )
 
 type Whatsapp struct {
@@ -25,9 +26,11 @@ type Whatsapp struct {
 	client     *whatsmeow.Client
 	dbpath     string
 	msgHandler func(string, string)
+	allowlist  []string
+	blocklist  []string
 }
 
-func NewWhatsapp(storageDir string) *Whatsapp {
+func NewWhatsapp(storageDir string, allowlist, blocklist []string) *Whatsapp {
 	home, err := user.Current()
 	if err != nil {
 		slog.Error("failed to get user home dir", "error", err)
@@ -64,9 +67,11 @@ func NewWhatsapp(storageDir string) *Whatsapp {
 	client.EnableAutoReconnect = true
 
 	w := &Whatsapp{
-		mu:     sync.Mutex{},
-		client: client,
-		dbpath: dsn,
+		mu:        sync.Mutex{},
+		client:    client,
+		dbpath:    dsn,
+		allowlist: allowlist,
+		blocklist: blocklist,
 	}
 	client.AddEventHandler(func(ev interface{}) {
 		switch v := ev.(type) {
@@ -79,11 +84,33 @@ func NewWhatsapp(storageDir string) *Whatsapp {
 				return
 			}
 			chat := v.Info.Chat.String()
-			w.mu.Lock()
-			handler := w.msgHandler
-			w.mu.Unlock()
-			if handler != nil {
-				go handler(chat, text)
+			sender := v.Info.Sender.String()
+
+			// 1) If sender/chat is in blocklist -> silently ignore
+			if slices.Contains(w.blocklist, chat) || slices.Contains(w.blocklist, sender) {
+				return
+			}
+
+			// 2) If sender/chat is in allowlist -> deliver to agent
+			if slices.Contains(w.allowlist, chat) || slices.Contains(w.allowlist, sender) {
+				w.mu.Lock()
+				handler := w.msgHandler
+				w.mu.Unlock()
+				if handler != nil {
+					go handler(chat, text)
+				}
+				return
+			}
+
+			// 3) Otherwise -> send default auto-reply and do not deliver to agent
+			jid, err := types.ParseJID(chat)
+			if err != nil {
+				slog.Warn("whatsapp default reply: invalid JID", "chat", chat, "error", err)
+				return
+			}
+			_, err = w.client.SendMessage(context.Background(), jid, &waProto.Message{Conversation: proto.String("thanks for contact, we call you back !")})
+			if err != nil {
+				slog.Error("whatsapp default reply send failed", "chat", chat, "error", err)
 			}
 		}
 	})
