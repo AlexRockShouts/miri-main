@@ -19,6 +19,7 @@ The agent has its own \"soul\" defined in `~/.miri/soul.txt` (bootstrapped from 
   - `GET /api/v1/prompt/stream`: SSE streaming for real-time thoughts and tool execution.
   - `GET /ws`: WebSocket support for full-duplex interactive streaming.
   - **OpenAPI Specification**: Detailed API documentation is available in `api/openapi.yaml`.
+  - **SDKs**: Clients for [TypeScript](api/sdk/typescript) and [WebAssembly](api/sdk/wasm).
 - **Streamable Tools**: Real-time output streaming for installation tools like `curl_install` and `go_install`.
 - **Skills System**: Anthropic-style skill loading from `SKILL.md` files with dynamic context injection and automatic script-to-tool inference.
 - **Logging**: Structured logs via `slog` with Eino callback integration for deep visibility.
@@ -105,7 +106,7 @@ curl -N "http://localhost:8080/api/v1/prompt/stream?prompt=Plan+my+week&session_
 Miri uses two types of authentication:
 
 1. **Server Key Authentication**: Standard API endpoints (`/api/v1/*` and `/ws`) require the `X-Server-Key` header if `server.key` is set in the configuration.
-2. **Basic Authentication**: Administrative endpoints (`/api/admin/v1/*`) require HTTP Basic Auth using `admin_user` and `admin_pass` from the configuration.
+2. **Basic Authentication**: Administrative endpoints (`/api/admin/v1/*`) require HTTP Basic Auth using `admin_user` and `admin_pass` from the configuration. (Defaults: `admin` / `admin-password`)
 
 **Set server key (Admin):**
 

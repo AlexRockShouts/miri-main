@@ -1,0 +1,28 @@
+{
+  "name": "@miri/sdk",
+  "version": "1.0.0",
+  "description": "TypeScript SDK for Miri Autonomous Agent",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "miri",
+    "agent",
+    "sdk",
+    "typescript"
+  ],
+  "author": "Miri Team",
+  "license": "MIT",
+  "dependencies": {
+    "axios": "^1.7.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  }
+}

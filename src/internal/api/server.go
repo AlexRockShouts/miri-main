@@ -22,12 +22,29 @@ func NewServer(gw *gateway.Gateway) *Server {
 		Gateway: gw,
 		Engine:  e,
 	}
+	s.Engine.Use(s.corsMiddleware())
 	s.Engine.Use(s.injectMiddleware())
 	s.Engine.Use(s.authMiddleware())
 	s.setupRoutesRest()
 	s.setupRoutesWebSocket()
 	s.setupRoutesAdmin()
 	return s
+}
+
+func (s *Server) corsMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
+		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With, X-Server-Key")
+		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS, GET, PUT")
+
+		if c.Request.Method == "OPTIONS" {
+			c.AbortWithStatus(204)
+			return
+		}
+
+		c.Next()
+	}
 }
 
 func (s *Server) setupRoutesAdmin() {
@@ -74,6 +91,13 @@ func (s *Server) authMiddleware() gin.HandlerFunc {
 			c.Next()
 			return
 		}
+
+		// Skip auth for OPTIONS requests (CORS preflight)
+		if c.Request.Method == http.MethodOptions {
+			c.Next()
+			return
+		}
+
 		gw := c.MustGet("gateway").(*gateway.Gateway)
 		key := gw.Config.Server.Key
 		if key == "" {

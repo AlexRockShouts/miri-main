@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Miri WASM SDK Test</title>
+    <script src="wasm_exec.js"></script>
+    <script>
+        const go = new Go();
+        WebAssembly.instantiateStreaming(fetch("miri.wasm"), go.importObject).then((result) => {
+            go.run(result.instance);
+            console.log("Miri WASM SDK Loaded");
+        });
+
+        async function sendPrompt() {
+            const baseUrl = document.getElementById("baseUrl").value;
+            const key = document.getElementById("key").value;
+            const prompt = document.getElementById("prompt").value;
+            const output = document.getElementById("output");
+
+            output.innerText = "Processing...";
+            try {
+                const response = await miriPrompt(baseUrl, key, prompt);
+                output.innerText = response;
+            } catch (e) {
+                output.innerText = "Error: " + e;
+            }
+        }
+    </script>
+</head>
+<body>
+    <h1>Miri WASM SDK Test</h1>
+    <div>
+        <label>Base URL: <input type="text" id="baseUrl" value="http://localhost:8080"></label><br>
+        <label>Server Key: <input type="text" id="key" value="local-dev-key"></label><br>
+        <label>Prompt: <input type="text" id="prompt" value="Hi Miri!"></label><br>
+        <button onclick="sendPrompt()">Send</button>
+    </div>
+    <pre id="output"></pre>
+</body>
+</html>

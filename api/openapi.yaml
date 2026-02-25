@@ -72,8 +72,10 @@ components:
               type: string
             admin_user:
               type: string
+              default: admin
             admin_pass:
               type: string
+              default: admin-password
         models:
           type: object
           properties:
