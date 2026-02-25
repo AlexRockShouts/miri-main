@@ -45,7 +45,7 @@ func (a *Agent) InitEngine() {
 func (a *Agent) splitModel(modelStr string) (string, string) {
 	parts := strings.SplitN(modelStr, "/", 2)
 	if len(parts) != 2 {
-		return "xai", "grok-beta" // Default fallback
+		return "xai", "grok-4-1-fast-reasoning" // Default fallback
 	}
 	return parts[0], parts[1]
 }
@@ -54,7 +54,7 @@ func (a *Agent) PrimaryModel() string {
 	if a.Config.Agents.Defaults.Model.Primary != "" {
 		return a.Config.Agents.Defaults.Model.Primary
 	}
-	return "xai/grok-beta"
+	return "xai/grok-4-1-fast-reasoning"
 }
 
 func (a *Agent) DelegatePrompt(sessionID string, prompt string) (string, error) {
@@ -209,4 +209,20 @@ func (a *Agent) DelegatePromptStreamWithOptions(ctx context.Context, sessionID s
 	}()
 
 	return proxy, nil
+}
+
+func (a *Agent) ListSkills() []any {
+	return a.Eng.ListSkills()
+}
+
+func (a *Agent) ListRemoteSkills(ctx context.Context) (any, error) {
+	return a.Eng.ListRemoteSkills(ctx)
+}
+
+func (a *Agent) InstallSkill(ctx context.Context, name string) (string, error) {
+	return a.Eng.InstallSkill(ctx, name)
+}
+
+func (a *Agent) RemoveSkill(name string) error {
+	return a.Eng.RemoveSkill(name)
 }

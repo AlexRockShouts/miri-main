@@ -11,6 +11,7 @@ The agent has its own \"soul\" defined in `~/.miri/soul.txt` (bootstrapped from 
   - `flush`: Automatically compacts and appends memory to disk when context usage is high (~65%).
   - `compact`: Summarizes older history into structured JSON when context is nearly full (~88%).
   - `agent`: Executes the ReAct loop with real-time tool calls and reasoning.
+- **Grokipedia**: Built-in tool for looking up facts and summaries from [Grokipedia.com](https://grokipedia.com) directly.
 - **Checkpointing**: Eino-native graph persistence using `FileCheckPointStore` ensures long-running tasks can resume from the last successful tool execution.
 - **Long-term Memory**: Durable storage in `memory.md`, `user.md`, and `facts.json` (NDJSON) with automated early-flush compaction.
 - **System Awareness**: Automatically provides the LLM with system context (OS, Architecture, Go version) for more efficient command execution.
@@ -20,8 +21,15 @@ The agent has its own \"soul\" defined in `~/.miri/soul.txt` (bootstrapped from 
   - `GET /ws`: WebSocket support for full-duplex interactive streaming.
   - **OpenAPI Specification**: Detailed API documentation is available in `api/openapi.yaml`.
   - **SDKs**: Clients for [TypeScript](api/sdk/typescript) and [WebAssembly](api/sdk/wasm). Includes automated generation and publishing for TypeScript.
-- **Streamable Tools**: Real-time output streaming for installation tools like `curl_install` and `go_install`.
-- **Skills System**: Anthropic-style skill loading from `SKILL.md` files with dynamic context injection and automatic script-to-tool inference.
+  - **Skill Management**:
+    - `GET /api/admin/v1/skills`: List all locally installed skills.
+    - `GET /api/admin/v1/skills/remote`: Fetch available skills from agentskill.sh (supports `?query=...`).
+    - `POST /api/admin/v1/skills`: Install a new skill by name.
+    - `DELETE /api/admin/v1/skills/:name`: Uninstall a skill.
+- **Streamable Tools**: Real-time output streaming for installation tools like `skill_install`, `curl_install` and `go_install`.
+- **Skills System**: Anthropic-style skill loading from `SKILL.md` files with dynamic context injection and automatic script-to-tool inference. Includes integrated support for [agentskill.sh](https://agentskill.sh) for discovering and installing remote skills.
+- **Enhanced Search**: Wildcard support (`*`, `?`) for both local and remote skill searches.
+- **Administrative Control**: Unified API for managing skills (list, search, install, remove) via the administrative interface.
 - **Logging**: Structured logs via `slog` with Eino callback integration for deep visibility.
 
 
@@ -182,8 +190,14 @@ When performing web analysis, always follow these steps...
 ```
 
 **Skill Tools:**
-- `skill_search`: Allows the agent to find skills by name, description, or tags.
-- `skill_use`: Activates a skill by injecting its full content into the agent's context as a `SystemMessage`.
+- `skill_search`: Find local skills. Supports wildcards like `*test*`.
+- `skill_list_remote`: Discover skills on [agentskill.sh](https://agentskill.sh). Supports search queries and wildcards.
+- `skill_install`: Download and install a skill locally. Features automatic fallback to GitHub if the primary repository is unavailable.
+- `skill_use`: Activates a skill by injecting its full content into the agent's context.
+- `skill_remove`: Uninstall a local skill.
+- `grokipedia`: Direct fact lookup and summary from Grokipedia.com.
+
+**Name Matching:** Skill tools automatically handle variations between hyphens and underscores (e.g., `frontend_design` matches `frontend-design`).
 
 ### 2. Script Inference
 Any script placed in the root `/scripts/` directory is automatically registered as a tool.

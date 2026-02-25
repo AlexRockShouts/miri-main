@@ -33,4 +33,8 @@ func FromContext(ctx context.Context) (Options, bool) {
 type Engine interface {
 	Respond(ctx context.Context, sess *session.Session, prompt string, humanContext string) (string, *llm.Usage, error)
 	StreamRespond(ctx context.Context, sess *session.Session, prompt string, humanContext string) (<-chan string, error)
+	ListSkills() []any
+	ListRemoteSkills(ctx context.Context) (any, error)
+	InstallSkill(ctx context.Context, name string) (string, error)
+	RemoveSkill(name string) error
 }

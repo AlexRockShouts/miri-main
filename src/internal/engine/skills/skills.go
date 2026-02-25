@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"log/slog"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 
@@ -52,6 +53,9 @@ func (l *SkillLoader) loadSkills() error {
 	if _, err := os.Stat(l.SkillsDir); os.IsNotExist(err) {
 		return nil
 	}
+
+	// Clear existing skills to allow refresh
+	l.skills = make(map[string]*Skill)
 
 	return filepath.WalkDir(l.SkillsDir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -101,14 +105,55 @@ func (l *SkillLoader) parseSkillDir(dir string) (*Skill, error) {
 }
 
 func (l *SkillLoader) GetSkill(name string) (*Skill, bool) {
-	s, ok := l.skills[name]
-	return s, ok
+	// Try exact match
+	if s, ok := l.skills[name]; ok {
+		return s, true
+	}
+
+	// Try with name variations (hyphen/underscore)
+	normalized := strings.ReplaceAll(name, "_", "-")
+	if s, ok := l.skills[normalized]; ok {
+		return s, true
+	}
+
+	normalized = strings.ReplaceAll(name, "-", "_")
+	if s, ok := l.skills[normalized]; ok {
+		return s, true
+	}
+
+	// Try case-insensitive exact match
+	for _, s := range l.skills {
+		if strings.EqualFold(s.Name, name) {
+			return s, true
+		}
+	}
+
+	// Try case-insensitive normalized match
+	normalized = strings.ReplaceAll(strings.ToLower(name), "_", "-")
+	for _, s := range l.skills {
+		if strings.ReplaceAll(strings.ToLower(s.Name), "_", "-") == normalized {
+			return s, true
+		}
+	}
+
+	return nil, false
+}
+
+func (l *SkillLoader) GetSkills() []*Skill {
+	res := make([]*Skill, 0, len(l.skills))
+	for _, s := range l.skills {
+		res = append(res, s)
+	}
+	return res
 }
 
 func (l *SkillLoader) loadScripts() error {
 	if _, err := os.Stat(l.ScriptsDir); os.IsNotExist(err) {
 		return nil
 	}
+
+	// Clear existing extra tools to allow refresh
+	l.extraTools = nil
 
 	return filepath.WalkDir(l.ScriptsDir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -233,14 +278,33 @@ func (t *SearchTool) InvokableRun(ctx context.Context, argumentsInJSON string, _
 		match := false
 		if query == "" {
 			match = true
-		} else if strings.Contains(strings.ToLower(s.Name), query) ||
-			strings.Contains(strings.ToLower(s.Description), query) {
-			match = true
 		} else {
-			for _, tag := range s.Tags {
-				if strings.Contains(strings.ToLower(tag), query) {
+			name := strings.ToLower(s.Name)
+			desc := strings.ToLower(s.Description)
+
+			if strings.Contains(query, "*") || strings.Contains(query, "?") {
+				match, _ = path.Match(query, name)
+				if !match {
+					match, _ = path.Match(query, desc)
+				}
+				if !match {
+					for _, tag := range s.Tags {
+						match, _ = path.Match(query, strings.ToLower(tag))
+						if match {
+							break
+						}
+					}
+				}
+			} else {
+				if strings.Contains(name, query) || strings.Contains(desc, query) {
 					match = true
-					break
+				} else {
+					for _, tag := range s.Tags {
+						if strings.Contains(strings.ToLower(tag), query) {
+							match = true
+							break
+						}
+					}
 				}
 			}
 		}
@@ -292,7 +356,7 @@ func (t *UseTool) InvokableRun(ctx context.Context, argumentsInJSON string, _ ..
 
 	skill, ok := t.loader.GetSkill(args.SkillName)
 	if !ok {
-		return fmt.Sprintf("Skill %q not found.", args.SkillName), nil
+		return fmt.Sprintf("Skill %q not found locally. Check available skills with `/skill_search`.", args.SkillName), nil
 	}
 
 	// We'll use a callback or context-based injection to actually add the content to the prompt.

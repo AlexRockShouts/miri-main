@@ -100,6 +100,57 @@ func (s *Server) handleListHumanInfo(c *gin.Context) {
 	c.JSON(http.StatusOK, infos)
 }
 
+func (s *Server) handleListSkills(c *gin.Context) {
+	gw := c.MustGet("gateway").(*gateway.Gateway)
+	skills := gw.ListSkills()
+	c.JSON(http.StatusOK, skills)
+}
+
+func (s *Server) handleListRemoteSkills(c *gin.Context) {
+	gw := c.MustGet("gateway").(*gateway.Gateway)
+	skills, err := gw.ListRemoteSkills(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, skills)
+}
+
+func (s *Server) handleInstallSkill(c *gin.Context) {
+	var req struct {
+		Name string `json:"name" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	gw := c.MustGet("gateway").(*gateway.Gateway)
+	output, err := gw.InstallSkill(c.Request.Context(), req.Name)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error(), "output": output})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": "skill installed", "output": output})
+}
+
+func (s *Server) handleRemoveSkill(c *gin.Context) {
+	name := c.Param("name")
+	if name == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "skill name is required"})
+		return
+	}
+
+	gw := c.MustGet("gateway").(*gateway.Gateway)
+	if err := gw.RemoveSkill(name); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": "skill removed"})
+}
+
 type interactionRequest struct {
 	Action   string `json:"action" binding:"required,oneof=new status"`
 	ClientID string `json:"client_id,omitempty"`

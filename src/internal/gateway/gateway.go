@@ -185,3 +185,19 @@ func (gw *Gateway) StartEngine(ctx context.Context) {
 func (gw *Gateway) GetSession(id string) *session.Session {
 	return gw.SessionMgr.GetSession(id)
 }
+
+func (gw *Gateway) ListSkills() []any {
+	return gw.PrimaryAgent.ListSkills()
+}
+
+func (gw *Gateway) ListRemoteSkills(ctx context.Context) (any, error) {
+	return gw.PrimaryAgent.ListRemoteSkills(ctx)
+}
+
+func (gw *Gateway) InstallSkill(ctx context.Context, name string) (string, error) {
+	return gw.PrimaryAgent.InstallSkill(ctx, name)
+}
+
+func (gw *Gateway) RemoveSkill(name string) error {
+	return gw.PrimaryAgent.RemoveSkill(name)
+}

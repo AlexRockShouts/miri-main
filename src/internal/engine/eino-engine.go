@@ -12,6 +12,7 @@ import (
 	"miri-main/src/internal/engine/tools"
 	"miri-main/src/internal/llm"
 	"miri-main/src/internal/session"
+	"miri-main/src/internal/tools/skillmanager"
 	"path/filepath"
 	"strings"
 	"time"
@@ -151,32 +152,10 @@ func NewEinoEngine(cfg *config.Config, providerName, modelName string) (*EinoEng
 	// Define tools
 	searchTool := &tools.SearchToolWrapper{}
 	fetchTool := &tools.FetchToolWrapper{}
+	grokipediaTool := &tools.GrokipediaToolWrapper{}
 	cmdTool := &tools.CmdToolWrapper{}
 	goInstallTool := &tools.GoInstallToolWrapper{}
 	curlInstallTool := &tools.CurlInstallToolWrapper{}
-
-	toolsNode, err := compose.NewToolNode(context.Background(), &compose.ToolsNodeConfig{
-		Tools: []tool.BaseTool{searchTool, fetchTool, cmdTool, goInstallTool, curlInstallTool},
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	// Bind tools to model
-	toolInfos := []*schema.ToolInfo{
-		searchTool.GetInfo(),
-		fetchTool.GetInfo(),
-		cmdTool.GetInfo(),
-		goInstallTool.GetInfo(),
-		curlInstallTool.GetInfo(),
-	}
-
-	// Prefer the safer ToolCalling API
-	if tc, err2 := cm.WithTools(toolInfos); err2 == nil {
-		chatModel = tc
-	} else if err := cm.BindTools(toolInfos); err != nil {
-		return nil, err
-	}
 
 	cpStore, err := NewFileCheckPointStore(cfg.StorageDir)
 	if err != nil {
@@ -185,7 +164,6 @@ func NewEinoEngine(cfg *config.Config, providerName, modelName string) (*EinoEng
 
 	ee := &EinoEngine{
 		chat:            chatModel,
-		tools:           toolsNode,
 		maxSteps:        12,
 		debug:           cfg.Agents.Debug,
 		checkPointStore: cpStore,
@@ -193,7 +171,19 @@ func NewEinoEngine(cfg *config.Config, providerName, modelName string) (*EinoEng
 		storageBaseDir:  filepath.Join(cfg.StorageDir, "memory"),
 	}
 
-	// Initialize skills
+	skillInstallTool := tools.NewSkillInstallTool(cfg, func() {
+		if ee.skillLoader != nil {
+			ee.skillLoader.Load()
+		}
+	})
+	skillRemoteListTool := &tools.SkillRemoteListToolWrapper{}
+	skillRemoveTool := tools.NewSkillRemoveTool(cfg, func() {
+		if ee.skillLoader != nil {
+			ee.skillLoader.Load()
+		}
+	})
+
+	// Add skill tools
 	skillsDir := filepath.Join(cfg.StorageDir, "skills")
 	scriptsDir := "scripts" // default scripts directory
 	ee.skillLoader = skills.NewSkillLoader(skillsDir, scriptsDir)
@@ -201,15 +191,14 @@ func NewEinoEngine(cfg *config.Config, providerName, modelName string) (*EinoEng
 		slog.Warn("Failed to load skills", "dir", skillsDir, "error", err)
 	}
 
-	// Add skill tools
 	skillSearchTool := skills.NewSearchTool(ee.skillLoader)
 	skillUseTool := skills.NewUseTool(ee.skillLoader)
 
-	// Update tools node with skill tools and inferred script tools
-	allTools := []tool.BaseTool{searchTool, fetchTool, cmdTool, goInstallTool, curlInstallTool, skillSearchTool, skillUseTool}
+	// Update tools node with all tools
+	allTools := []tool.BaseTool{searchTool, fetchTool, grokipediaTool, cmdTool, goInstallTool, curlInstallTool, skillInstallTool, skillRemoteListTool, skillRemoveTool, skillSearchTool, skillUseTool}
 	allTools = append(allTools, ee.skillLoader.GetExtraTools()...)
 
-	toolsNode, err = compose.NewToolNode(context.Background(), &compose.ToolsNodeConfig{
+	toolsNode, err := compose.NewToolNode(context.Background(), &compose.ToolsNodeConfig{
 		Tools: allTools,
 	})
 	if err != nil {
@@ -217,35 +206,32 @@ func NewEinoEngine(cfg *config.Config, providerName, modelName string) (*EinoEng
 	}
 	ee.tools = toolsNode
 
-	// Bind tools to model (including skill tools and inferred script tools)
-	toolInfos = append(toolInfos, &schema.ToolInfo{
-		Name: "skill_search",
-		Desc: "Search for available skills and capabilities. Returns matching skill names and descriptions.",
-		ParamsOneOf: schema.NewParamsOneOfByParams(map[string]*schema.ParameterInfo{
-			"query": {
-				Type:     schema.String,
-				Desc:     "The search query to match against skill names, descriptions, or tags.",
-				Required: false,
-			},
-		}),
-	}, &schema.ToolInfo{
-		Name: "skill_use",
-		Desc: "Load a specific skill's instructions and capabilities into the current context.",
-		ParamsOneOf: schema.NewParamsOneOfByParams(map[string]*schema.ParameterInfo{
-			"skill_name": {
-				Type:     schema.String,
-				Desc:     "The exact name of the skill to load.",
-				Required: true,
-			},
-		}),
-	})
+	// Bind tools to model
+	toolInfos := []*schema.ToolInfo{
+		searchTool.GetInfo(),
+		fetchTool.GetInfo(),
+		cmdTool.GetInfo(),
+		goInstallTool.GetInfo(),
+		curlInstallTool.GetInfo(),
+		skillInstallTool.GetInfo(),
+		skillRemoteListTool.GetInfo(),
+		skillRemoveTool.GetInfo(),
+		grokipediaTool.GetInfo(),
+	}
+
+	if info, err := skillSearchTool.Info(context.Background()); err == nil {
+		toolInfos = append(toolInfos, info)
+	}
+	if info, err := skillUseTool.Info(context.Background()); err == nil {
+		toolInfos = append(toolInfos, info)
+	}
 
 	for _, t := range ee.skillLoader.GetExtraTools() {
 		info, _ := t.Info(context.Background())
 		toolInfos = append(toolInfos, info)
 	}
 
-	// Re-bind with updated toolInfos
+	// Prefer the safer ToolCalling API
 	if tc, err2 := cm.WithTools(toolInfos); err2 == nil {
 		ee.chat = tc
 	} else if err := cm.BindTools(toolInfos); err != nil {
@@ -586,4 +572,45 @@ func (e *EinoEngine) StreamRespond(ctx context.Context, sess *session.Session, p
 	}()
 
 	return out, nil
+}
+
+func (e *EinoEngine) ListSkills() []any {
+	if e.skillLoader == nil {
+		return nil
+	}
+	e.skillLoader.Load() // Refresh
+	skills := e.skillLoader.GetSkills()
+	res := make([]any, 0, len(skills))
+	for _, s := range skills {
+		res = append(res, s)
+	}
+	return res
+}
+
+func (e *EinoEngine) ListRemoteSkills(ctx context.Context) (any, error) {
+	return skillmanager.ListRemoteSkills(ctx)
+}
+
+func (e *EinoEngine) InstallSkill(ctx context.Context, name string) (string, error) {
+	storageDir := filepath.Dir(e.storageBaseDir)
+	stdout, stderr, _, err := skillmanager.SearchAndInstall(ctx, name, storageDir)
+	if err != nil {
+		return stderr, err
+	}
+	if e.skillLoader != nil {
+		e.skillLoader.Load() // Reload after install
+	}
+	return stdout, nil
+}
+
+func (e *EinoEngine) RemoveSkill(name string) error {
+	storageDir := filepath.Dir(e.storageBaseDir)
+	err := skillmanager.RemoveSkill(name, storageDir)
+	if err != nil {
+		return err
+	}
+	if e.skillLoader != nil {
+		e.skillLoader.Load() // Reload after removal
+	}
+	return nil
 }

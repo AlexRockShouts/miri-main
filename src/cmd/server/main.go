@@ -104,6 +104,15 @@ func main() {
 	defer cancel()
 
 	gw := gateway.New(cfg, s)
+
+	// Copy skills from templates
+	templateSkillsPath := filepath.Join(".", "templates", "skills")
+	if err := s.CopySkills(templateSkillsPath); err != nil {
+		slog.Warn("failed to copy skills from templates", "error", err)
+	} else {
+		slog.Info("copied skills from templates")
+	}
+
 	gw.StartEngine(ctx)
 
 	server := api.NewServer(gw)

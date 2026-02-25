@@ -2,6 +2,7 @@ package storage
 
 import (
 	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -36,7 +37,62 @@ func New(baseDir string) (*Storage, error) {
 			return nil, err
 		}
 	}
+	skillsDir := filepath.Join(baseDir, "skills")
+	if _, err := os.Stat(skillsDir); os.IsNotExist(err) {
+		if err := os.MkdirAll(skillsDir, 0755); err != nil {
+			return nil, err
+		}
+	}
 	return &Storage{baseDir: baseDir}, nil
+}
+
+func (s *Storage) CopySkills(srcDir string) error {
+	destDir := filepath.Join(s.baseDir, "skills")
+	if _, err := os.Stat(srcDir); os.IsNotExist(err) {
+		return nil // Source doesn't exist, nothing to copy
+	}
+
+	return filepath.Walk(srcDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		relPath, err := filepath.Rel(srcDir, path)
+		if err != nil {
+			return err
+		}
+		if relPath == "." {
+			return nil
+		}
+
+		destPath := filepath.Join(destDir, relPath)
+		if info.IsDir() {
+			return os.MkdirAll(destPath, info.Mode())
+		}
+
+		// Don't overwrite if exists
+		if _, err := os.Stat(destPath); err == nil {
+			return nil
+		}
+
+		srcFile, err := os.Open(path)
+		if err != nil {
+			return err
+		}
+		defer srcFile.Close()
+
+		destFile, err := os.Create(destPath)
+		if err != nil {
+			return err
+		}
+		defer destFile.Close()
+
+		_, err = io.Copy(destFile, srcFile)
+		if err != nil {
+			return err
+		}
+		return os.Chmod(destPath, info.Mode())
+	})
 }
 
 func (s *Storage) SaveHumanInfo(info *HumanInfo) error {
