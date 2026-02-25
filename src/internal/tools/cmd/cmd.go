@@ -21,7 +21,8 @@ func Execute(ctx context.Context, command string) (stdout, stderr string, exitCo
 	err = cmd.Run()
 
 	exitCode = 0
-	if exitErr, ok := errors.AsType[*exec.ExitError](err); ok {
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) {
 		exitCode = exitErr.ExitCode()
 	}
 
