@@ -13,7 +13,7 @@ The agent has its own \"soul\" defined in `~/.miri/soul.txt` (bootstrapped from 
   - `agent`: Executes the ReAct loop with real-time tool calls and reasoning.
 - **Grokipedia**: Built-in tool for looking up facts and summaries from [Grokipedia.com](https://grokipedia.com) directly.
 - **Checkpointing**: Eino-native graph persistence using `FileCheckPointStore` ensures long-running tasks can resume from the last successful tool execution.
-- **Long-term Memory**: Durable storage in `memory.md`, `user.md`, and `facts.json` (NDJSON) with automated early-flush compaction.
+- **Long-term Memory**: Durable storage in `memory.md`, `user.md`, and `facts.json` (NDJSON) with automated early-flush compaction. Content from `memory.md` is automatically read and injected into new sessions and reasoning loops to provide long-term context. `memory.md` follows a structured template (Identity, Personality, Rules, Tech Stack, etc.) for better organization of project-wide information.
 - **System Awareness**: Automatically provides the LLM with system context (OS, Architecture, Go version) for more efficient command execution.
 - **REST API** & **WebSocket**:
   - `POST /api/v1/prompt`: Blocking prompt execution.

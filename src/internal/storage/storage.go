@@ -213,12 +213,50 @@ func (s *Storage) GetSoul() (string, error) {
 	return strings.TrimSpace(string(data)), nil
 }
 
+func (s *Storage) ReadMemory() (string, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	path := filepath.Join(s.baseDir, "memory.md")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", nil
+		}
+		return "", err
+	}
+	return string(data), nil
+}
+
 func (s *Storage) AppendToMemory(content string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	path := filepath.Join(s.baseDir, "memory.txt")
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	path := filepath.Join(s.baseDir, "memory.md")
+	data, err := os.ReadFile(path)
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+
+	if os.IsNotExist(err) || len(data) == 0 {
+		return os.WriteFile(path, []byte(content+"\n"), 0644)
+	}
+
+	// If file exists, try to insert into section 8
+	strData := string(data)
+	section8Header := "## 8. Memory Log / Decisions Changelog / What We Learned"
+	section9Header := "## 9. Optional: Quick Reference / Cheat Sheet"
+
+	if strings.Contains(strData, section8Header) && strings.Contains(strData, section9Header) {
+		parts := strings.Split(strData, section9Header)
+		if len(parts) >= 2 {
+			newContent := parts[0] + content + "\n\n" + section9Header + parts[1]
+			return os.WriteFile(path, []byte(newContent), 0644)
+		}
+	}
+
+	// Fallback to append if headers not found
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND, 0644)
 	if err != nil {
 		return err
 	}

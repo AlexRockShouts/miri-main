@@ -34,7 +34,7 @@ func NewAgent(cfg *config.Config, sm *session.SessionManager, st *storage.Storag
 
 func (a *Agent) InitEngine() {
 	provider, model := a.splitModel(a.PrimaryModel())
-	react, err := engine.NewEinoEngine(a.Config, provider, model)
+	react, err := engine.NewEinoEngine(a.Config, a.Storage, provider, model)
 	if err != nil {
 		slog.Error("failed to initialize Eino engine", "error", err)
 	} else {
@@ -99,7 +99,7 @@ func (a *Agent) DelegatePromptWithOptions(ctx context.Context, sessionID string,
 	if opts.Model != "" {
 		provider, model := a.splitModel(a.PrimaryModel())
 		provider, model = a.splitModel(opts.Model)
-		eino, err := engine.NewEinoEngine(a.Config, provider, model)
+		eino, err := engine.NewEinoEngine(a.Config, a.Storage, provider, model)
 		if err == nil {
 			eng = eino
 		} else {
@@ -115,8 +115,11 @@ func (a *Agent) DelegatePromptWithOptions(ctx context.Context, sessionID string,
 		session.AddTokens(uint64(usage.PromptTokens + usage.CompletionTokens))
 	}
 	a.SessionMgr.AddMessage(sessionID, prompt, resp)
-	if strings.Contains(strings.ToLower(prompt), "write to memory") {
-		a.Storage.AppendToMemory(fmt.Sprintf("Session %s: %s", sessionID, resp))
+	lowerPrompt := strings.ToLower(prompt)
+	if strings.Contains(lowerPrompt, "write to memory") || strings.Contains(lowerPrompt, "save a fact to memory") {
+		if err := a.Storage.AppendToMemory(fmt.Sprintf("Session %s: %s", sessionID, resp)); err != nil {
+			slog.Error("failed to append to memory", "error", err)
+		}
 	}
 	return resp, nil
 }
@@ -154,7 +157,7 @@ func (a *Agent) DelegatePromptStreamWithOptions(ctx context.Context, sessionID s
 	if opts.Model != "" {
 		provider, model := a.splitModel(a.PrimaryModel())
 		provider, model = a.splitModel(opts.Model)
-		eino, err := engine.NewEinoEngine(a.Config, provider, model)
+		eino, err := engine.NewEinoEngine(a.Config, a.Storage, provider, model)
 		if err == nil {
 			eng = eino
 		} else {
@@ -202,8 +205,11 @@ func (a *Agent) DelegatePromptStreamWithOptions(ctx context.Context, sessionID s
 			if totalTokens > 0 {
 				session.AddTokens(totalTokens)
 			}
-			if strings.Contains(strings.ToLower(prompt), "write to memory") {
-				a.Storage.AppendToMemory(fmt.Sprintf("Session %s: %s", sessionID, resp))
+			lowerPrompt := strings.ToLower(prompt)
+			if strings.Contains(lowerPrompt, "write to memory") || strings.Contains(lowerPrompt, "save a fact to memory") {
+				if err := a.Storage.AppendToMemory(fmt.Sprintf("Session %s: %s", sessionID, resp)); err != nil {
+					slog.Error("failed to append to memory (stream)", "error", err)
+				}
 			}
 		}
 	}()

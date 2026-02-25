@@ -12,6 +12,7 @@ import (
 	"miri-main/src/internal/engine/tools"
 	"miri-main/src/internal/llm"
 	"miri-main/src/internal/session"
+	"miri-main/src/internal/storage"
 	"miri-main/src/internal/tools/skillmanager"
 	"path/filepath"
 	"strings"
@@ -100,6 +101,7 @@ type EinoEngine struct {
 	checkPointStore *FileCheckPointStore
 	contextWindow   int
 	storageBaseDir  string
+	storage         *storage.Storage
 	compiledGraph   compose.Runnable[*graphInput, *graphOutput]
 	skillLoader     *skills.SkillLoader
 }
@@ -119,7 +121,7 @@ type graphOutput struct {
 	Usage    llm.Usage
 }
 
-func NewEinoEngine(cfg *config.Config, providerName, modelName string) (*EinoEngine, error) {
+func NewEinoEngine(cfg *config.Config, st *storage.Storage, providerName, modelName string) (*EinoEngine, error) {
 	prov, ok := cfg.Models.Providers[providerName]
 	if !ok {
 		return nil, fmt.Errorf("provider %q not found", providerName)
@@ -156,6 +158,7 @@ func NewEinoEngine(cfg *config.Config, providerName, modelName string) (*EinoEng
 	cmdTool := &tools.CmdToolWrapper{}
 	goInstallTool := &tools.GoInstallToolWrapper{}
 	curlInstallTool := &tools.CurlInstallToolWrapper{}
+	saveFactTool := tools.NewSaveFactTool(st)
 
 	cpStore, err := NewFileCheckPointStore(cfg.StorageDir)
 	if err != nil {
@@ -168,7 +171,8 @@ func NewEinoEngine(cfg *config.Config, providerName, modelName string) (*EinoEng
 		debug:           cfg.Agents.Debug,
 		checkPointStore: cpStore,
 		contextWindow:   ctxWindow,
-		storageBaseDir:  filepath.Join(cfg.StorageDir, "memory"),
+		storageBaseDir:  cfg.StorageDir,
+		storage:         st,
 	}
 
 	skillInstallTool := tools.NewSkillInstallTool(cfg, func() {
@@ -195,7 +199,7 @@ func NewEinoEngine(cfg *config.Config, providerName, modelName string) (*EinoEng
 	skillUseTool := skills.NewUseTool(ee.skillLoader)
 
 	// Update tools node with all tools
-	allTools := []tool.BaseTool{searchTool, fetchTool, grokipediaTool, cmdTool, goInstallTool, curlInstallTool, skillInstallTool, skillRemoteListTool, skillRemoveTool, skillSearchTool, skillUseTool}
+	allTools := []tool.BaseTool{searchTool, fetchTool, grokipediaTool, cmdTool, goInstallTool, curlInstallTool, skillInstallTool, skillRemoteListTool, skillRemoveTool, skillSearchTool, skillUseTool, saveFactTool}
 	allTools = append(allTools, ee.skillLoader.GetExtraTools()...)
 
 	toolsNode, err := compose.NewToolNode(context.Background(), &compose.ToolsNodeConfig{
@@ -217,6 +221,7 @@ func NewEinoEngine(cfg *config.Config, providerName, modelName string) (*EinoEng
 		skillRemoteListTool.GetInfo(),
 		skillRemoveTool.GetInfo(),
 		grokipediaTool.GetInfo(),
+		saveFactTool.GetInfo(),
 	}
 
 	if info, err := skillSearchTool.Info(context.Background()); err == nil {

@@ -11,13 +11,22 @@ import (
 // retrieveMemory loads content from memory.md, user.md, and facts.json
 // and formats them into a system message to be injected into the conversation.
 func (e *EinoEngine) retrieveMemory(ctx context.Context) (*schema.Message, bool) {
-	if e.storageBaseDir == "" {
+	if e.storageBaseDir == "" && e.storage == nil {
 		return nil, false
 	}
 
-	memoryMD := readFileIfExists(filepath.Join(e.storageBaseDir, "memory.md"))
-	userMD := readFileIfExists(filepath.Join(e.storageBaseDir, "user.md"))
-	factsJSON := readFileIfExists(filepath.Join(e.storageBaseDir, "facts.json"))
+	var memoryMD, userMD, factsJSON string
+	if e.storage != nil {
+		memoryMD, _ = e.storage.ReadMemory()
+		// user.md and facts.json are still read from storageBaseDir for now,
+		// or we could add methods to Storage for them too.
+		userMD = readFileIfExists(filepath.Join(e.storageBaseDir, "user.md"))
+		factsJSON = readFileIfExists(filepath.Join(e.storageBaseDir, "facts.json"))
+	} else {
+		memoryMD = readFileIfExists(filepath.Join(e.storageBaseDir, "memory.md"))
+		userMD = readFileIfExists(filepath.Join(e.storageBaseDir, "user.md"))
+		factsJSON = readFileIfExists(filepath.Join(e.storageBaseDir, "facts.json"))
+	}
 
 	if memoryMD == "" && userMD == "" && factsJSON == "" {
 		return nil, false
