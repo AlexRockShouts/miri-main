@@ -5,7 +5,6 @@ Miri is a local autonomous agent written in Go. It integrates the xAI API as bac
 The agent has its own \"soul\" defined in `~/.miri/soul.txt` (bootstrapped from `templates/soul.txt` on first run if missing).
 
 ## Features
-
 - **Eino Engine**: A powerful ReAct agent powered by [Eino](https://github.com/cloudwego/eino), supporting tool-augmented generation and autonomous reasoning loops.
 - **Graph Orchestration**: Core logic is modeled as an Eino Graph with specialized nodes:
   - `retriever`: Proactively injects long-term memory into conversations.
