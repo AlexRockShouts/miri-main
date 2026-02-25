@@ -55,30 +55,38 @@ go build -o miri-tui src/cmd/tui/main.go
 
 ## Build & Run (CLI Server)
 
-### 1. Update Config
+### 1. Update Config (Admin)
 
 ```bash
-curl -X POST http://localhost:8080/config \
+curl -X POST http://localhost:8080/api/admin/v1/config \
   -H 'Content-Type: application/json' \
-  -H 'X-Server-Key: local-dev-key' \
+  -u admin:admin-password \
   -d '{
     "models": {
       "providers": {
         "xai": {
-          "apiKey": "your_xai_key"
+          "apiKey": "your_xai_key",
+          "baseUrl": "https://api.x.ai/v1",
+          "api": "openai"
         }
       }
+    },
+    "server": {
+      "addr": ":8080",
+      "key": "local-dev-key",
+      "admin_user": "admin",
+      "admin_pass": "admin-password"
     },
     "storage_dir": "/home/user/.miri"
   }'
 ```
 
-### 2. Store Human Info
+### 2. Store Human Info (Admin)
 
 ```bash
-curl -X POST http://localhost:8080/human \
+curl -X POST http://localhost:8080/api/admin/v1/human \
   -H 'Content-Type: application/json' \
-  -H 'X-Server-Key: local-dev-key' \
+  -u admin:admin-password \
   -d '{
     "id": "user123",
     "data": {"name": "Alice", "pref": "coffee"},
@@ -89,13 +97,13 @@ curl -X POST http://localhost:8080/human \
 List:
 
 ```bash
-curl -H 'X-Server-Key: local-dev-key' http://localhost:8080/human
+curl -u admin:admin-password http://localhost:8080/api/admin/v1/human
 ```
 
 ### 3. Delegate Prompt
 
 ```bash
-curl -X POST http://localhost:8080/prompt \
+curl -X POST http://localhost:8080/api/v1/prompt \
   -H 'Content-Type: application/json' \
   -H 'X-Server-Key: local-dev-key' \
   -d '{"prompt": "Plan my week with gym and coding."}'
@@ -104,24 +112,29 @@ curl -X POST http://localhost:8080/prompt \
 Streaming with SSE:
 
 ```bash
-curl -N "http://localhost:8080/prompt/stream?prompt=Plan+my+week&session_id=mysession" \
+curl -N "http://localhost:8080/api/v1/prompt/stream?prompt=Plan+my+week&session_id=mysession" \
   -H 'X-Server-Key: local-dev-key'
 ```
 
 ## Authentication
 
-If `server.key` is set, **all** requests require header `X-Server-Key: &lt;key&gt;`.
+Miri uses two types of authentication:
 
-**Set key:**
+1. **Server Key Authentication**: Standard API endpoints (`/api/v1/*` and `/ws`) require the `X-Server-Key` header if `server.key` is set in the configuration.
+2. **Basic Authentication**: Administrative endpoints (`/api/admin/v1/*`) require HTTP Basic Auth using `admin_user` and `admin_pass` from the configuration.
+
+**Set server key (Admin):**
 
 ```bash
-curl -X POST http://localhost:8080/config \
+curl -X POST http://localhost:8080/api/admin/v1/config \
   -H 'Content-Type: application/json' \
-  -H 'X-Server-Key: local-dev-key' \
+  -u admin:admin-password \
   -d '{
     "server": {
       "addr": ":8080",
-      "key": "your-secret-key"
+      "key": "your-secret-key",
+      "admin_user": "admin",
+      "admin_pass": "admin-password"
     }
   }'
 ```
@@ -129,7 +142,7 @@ curl -X POST http://localhost:8080/config \
 **Use with key:**
 
 ```bash
-curl -X POST http://localhost:8080/prompt \
+curl -X POST http://localhost:8080/api/v1/prompt \
   -H 'Content-Type: application/json' \
   -H 'X-Server-Key: your-secret-key' \
   -d '{"prompt": "Plan my week."}'
