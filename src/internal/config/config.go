@@ -73,6 +73,8 @@ type AgentConfig struct{}
 type ServerConfig struct {
 	Addr          string `mapstructure:"addr" json:"addr"`
 	Key           string `mapstructure:"key" json:"key"`
+	AdminUser     string `mapstructure:"admin_user" json:"admin_user"`
+	AdminPass     string `mapstructure:"admin_pass" json:"admin_pass"`
 	EffectiveHost string `mapstructure:"-" json:"effectiveHost"`
 	Port          int    `mapstructure:"-" json:"port"`
 }
@@ -230,6 +232,8 @@ func Save(cfg *Config) error {
 	}
 	viper.Set("server.addr", cfg.Server.Addr)
 	viper.Set("server.key", cfg.Server.Key)
+	viper.Set("server.admin_user", cfg.Server.AdminUser)
+	viper.Set("server.admin_pass", cfg.Server.AdminPass)
 	viper.Set("channels.whatsapp.enabled", cfg.Channels.Whatsapp.Enabled)
 	viper.Set("channels.whatsapp.allowlist", cfg.Channels.Whatsapp.Allowlist)
 	viper.Set("channels.whatsapp.blocklist", cfg.Channels.Whatsapp.Blocklist)

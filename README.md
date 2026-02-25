@@ -15,10 +15,10 @@ The agent has its own \"soul\" defined in `~/.miri/soul.txt` (bootstrapped from 
 - **Long-term Memory**: Durable storage in `memory.md`, `user.md`, and `facts.json` (NDJSON) with automated early-flush compaction.
 - **System Awareness**: Automatically provides the LLM with system context (OS, Architecture, Go version) for more efficient command execution.
 - **REST API** & **WebSocket**:
-  - `POST /prompt`: Blocking prompt execution.
-  - `GET /prompt/stream`: SSE streaming for real-time thoughts and tool execution.
+  - `POST /api/v1/prompt`: Blocking prompt execution.
+  - `GET /api/v1/prompt/stream`: SSE streaming for real-time thoughts and tool execution.
   - `GET /ws`: WebSocket support for full-duplex interactive streaming.
-  - Session and history management via `/sessions` endpoints.
+  - **OpenAPI Specification**: Detailed API documentation is available in `api/openapi.yaml`.
 - **Streamable Tools**: Real-time output streaming for installation tools like `curl_install` and `go_install`.
 - **Skills System**: Anthropic-style skill loading from `SKILL.md` files with dynamic context injection and automatic script-to-tool inference.
 - **Logging**: Structured logs via `slog` with Eino callback integration for deep visibility.
@@ -36,21 +36,6 @@ go build -o miri src/cmd/main.go
 ./miri
 ./miri -config /path/to/my-config.yaml  # loads specified YAML first, then ~/.miri/config.yaml or ./config.yaml
 ```
-
-Miri starts by default with a CLI TUI for easy configuration and management.
-
-```bash
-go build -o miri-tui src/cmd/tui/main.go
-./miri-tui
-```
-
-### TUI Features:
-- **Navigation**: Intuitive left-hand navigation bar with Tab/Shift+Tab focus switching.
-- **Mouse & Keyboard**: Full support for both mouse clicks and keyboard (Arrows, Tab, Enter).
-- **Channels**: Manage multiple integrations (WhatsApp, IRC). Enroll WhatsApp via QR, configure allowlists/blocklists, and IRC server details.
-- **Models**: Manage multiple LLM Providers (xAI, NVIDIA, etc.) and their specific model metadata (context windows, costs, capabilities).
-- **Config**: Configure global Gateway settings (address, security key) and LLM defaults. Start/Stop/Restart the Miri service directly.
-- **Install**: One-click setup for Miri as a system service (`launchd` on macOS, `systemd` on Linux).
 
 ## Build & Run (CLI Server)
 
@@ -216,10 +201,27 @@ models:
       apiKey: "$XAI_API_KEY"
       api: openai
       models:
-        - id: xai/grok-4
-          name: xai/grok-4
+        - id: xai/grok-4-1-fast-reasoning
+          name: grok-4-1-fast-reasoning
+          contextWindow: 2000000
+          maxTokens: 8192
+        - id: xai/grok-4-1-fast-non-reasoning
+          name: grok-4-1-fast-non-reasoning
+          contextWindow: 2000000
+          maxTokens: 8192
+        - id: xai/grok-3-mini
+          name: grok-3-mini
           contextWindow: 131072
           maxTokens: 8192
+    huggingface:
+      baseUrl: https://api-inference.huggingface.co/v1/
+      apiKey: "$HF_TOKEN"
+      api: openai
+      models:
+        - id: meta-llama/Llama-3.3-70B-Instruct
+          name: Llama 3.3 70B Instruct
+          contextWindow: 128000
+          maxTokens: 4096
     nvidia:
       baseUrl: https://integrate.api.nvidia.com/v1
       apiKey: "$NVIDIA_API_KEY"
@@ -233,7 +235,7 @@ models:
 agents:
   defaults:
     model:
-      primary: xai/grok-4
+      primary: xai/grok-4-1-fast-reasoning
   debug: true
 
 channels:
