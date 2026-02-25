@@ -19,7 +19,7 @@ The agent has its own \"soul\" defined in `~/.miri/soul.txt` (bootstrapped from 
   - `GET /api/v1/prompt/stream`: SSE streaming for real-time thoughts and tool execution.
   - `GET /ws`: WebSocket support for full-duplex interactive streaming.
   - **OpenAPI Specification**: Detailed API documentation is available in `api/openapi.yaml`.
-  - **SDKs**: Clients for [TypeScript](api/sdk/typescript) and [WebAssembly](api/sdk/wasm).
+  - **SDKs**: Clients for [TypeScript](api/sdk/typescript) and [WebAssembly](api/sdk/wasm). Includes automated generation and publishing for TypeScript.
 - **Streamable Tools**: Real-time output streaming for installation tools like `curl_install` and `go_install`.
 - **Skills System**: Anthropic-style skill loading from `SKILL.md` files with dynamic context injection and automatic script-to-tool inference.
 - **Logging**: Structured logs via `slog` with Eino callback integration for deep visibility.
@@ -37,6 +37,16 @@ go build -o miri src/cmd/main.go
 ./miri
 ./miri -config /path/to/my-config.yaml  # loads specified YAML first, then ~/.miri/config.yaml or ./config.yaml
 ```
+
+### Makefile Targets
+
+The project includes a `Makefile` for common tasks:
+
+- `make build`: Builds the `miri-server` binary.
+- `make test`: Runs all Go tests.
+- `make wasm`: Builds the WebAssembly SDK.
+- `make ts-sdk`: Generates, installs, and builds the TypeScript SDK.
+- `make ts-sdk-publish`: Publishes the TypeScript SDK to npm (requires `NPM_TOKEN`).
 
 ## Build & Run (CLI Server)
 
@@ -181,6 +191,37 @@ Any script placed in the root `/scripts/` directory is automatically registered 
 - The tool name is derived from the filename (e.g., `hello.sh` becomes tool `hello`).
 - Scripts receive arguments as positional parameters.
 - Output (stdout/stderr) is returned to the agent.
+
+## TypeScript SDK
+
+The TypeScript SDK is located in `api/sdk/typescript`. It consists of hand-written core logic and generated API clients.
+
+### Automated Generation
+
+The SDK can be automatically updated whenever `api/openapi.yaml` changes:
+
+```bash
+make ts-sdk
+```
+
+This will:
+1.  Generate a TypeScript Axios client into `api/sdk/typescript/generated`.
+2.  Install dependencies in the SDK folder.
+3.  Compile the TypeScript code.
+
+### Publishing to npm
+
+To publish the SDK to npm, provide your `NPM_TOKEN`:
+
+```bash
+make ts-sdk-publish NPM_TOKEN=your_npm_token
+```
+
+You can also specify an optional tag:
+
+```bash
+make ts-sdk-publish NPM_TOKEN=your_npm_token NPM_TAG=next
+```
 
 ## Configuration
 
