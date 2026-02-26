@@ -55,9 +55,14 @@ NPM_TAG ?=
 
 ts-sdk-publish: ts-sdk-build
 	@if [ -n "$$NPM_TOKEN" ]; then \
-		cd $(TS_SDK_DIR) && npm config set //registry.npmjs.org/:_authToken "$$NPM_TOKEN"; \
+		echo "Publishing using provided NPM_TOKEN..."; \
+		printf "//registry.npmjs.org/:_authToken=%s\n" "$$NPM_TOKEN" > $(TS_SDK_DIR)/.npmrc; \
+		trap 'rm -f $(TS_SDK_DIR)/.npmrc' EXIT; \
+		cd $(TS_SDK_DIR) && npm publish --access public $(if $(NPM_TAG),--tag $(NPM_TAG),); \
+	else \
+		echo "No NPM_TOKEN provided. Ensure you are logged in via 'npm login'."; \
+		cd $(TS_SDK_DIR) && npm publish --access public $(if $(NPM_TAG),--tag $(NPM_TAG),); \
 	fi
-	cd $(TS_SDK_DIR) && npm publish --access public $(if $(NPM_TAG),--tag $(NPM_TAG),)
 
 # Convenience meta-targets
 # Generate + install + build
