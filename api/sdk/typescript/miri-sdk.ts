@@ -34,6 +34,13 @@ export interface MiriHumanInfo {
   notes?: string;
 }
 
+export interface MiriSkill {
+  name?: string;
+  description?: string;
+  version?: string;
+  tags?: string[];
+}
+
 export interface MiriConfig {
   storage_dir?: string;
   server?: {
@@ -457,6 +464,23 @@ export class Api<
         body: data,
         secure: true,
         type: ContentType.Json,
+        ...params,
+      }),
+
+    /**
+     * No description
+     *
+     * @name AdminV1SkillsList
+     * @summary List all installed skills
+     * @request GET:/api/admin/v1/skills
+     * @secure
+     */
+    adminV1SkillsList: (params: RequestParams = {}) =>
+      this.request<MiriSkill[], any>({
+        path: `/api/admin/v1/skills`,
+        method: "GET",
+        secure: true,
+        format: "json",
         ...params,
       }),
 

@@ -110,8 +110,30 @@ func (s *Server) authMiddleware() gin.HandlerFunc {
 			c.Next()
 			return
 		}
+		// Check for X-Server-Key header
 		provided := c.GetHeader("X-Server-Key")
+
+		// Check for Sec-WebSocket-Protocol header if X-Server-Key is missing
+		if provided == "" && (c.Request.Header.Get("Upgrade") == "websocket" || c.Request.Header.Get("Connection") == "Upgrade") {
+			protocol := c.GetHeader("Sec-WebSocket-Protocol")
+			// Support miri-key, <value> (two tokens)
+			const label = "miri-key"
+			if strings.Contains(protocol, label) {
+				parts := strings.Split(protocol, ",")
+				for i, p := range parts {
+					p = strings.TrimSpace(p)
+					if p == label && i+1 < len(parts) {
+						provided = strings.TrimSpace(parts[i+1])
+						// Save the exact protocol the client sent
+						c.Set("miri_ws_key", protocol)
+						break
+					}
+				}
+			}
+		}
+
 		if provided != key {
+			slog.Warn("unauthorized request", "path", c.Request.URL.Path, "remote", c.ClientIP(), "provided", provided != "")
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing server key"})
 			c.Abort()
 			return

@@ -60,6 +60,10 @@ func (s *Server) handleWebsocket(c *gin.Context) {
 			ReadBufferSize:  1024,
 			WriteBufferSize: 1024,
 		}
+		if protoKey, ok := c.Get("miri_ws_key"); ok {
+			c.Header("Sec-WebSocket-Protocol", protoKey.(string))
+			upgrader.Subprotocols = []string{protoKey.(string)}
+		}
 		ws, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 		if err != nil {
 			slog.Error("ws upgrade failed", "error", err)
@@ -119,6 +123,10 @@ func (s *Server) handleWebsocket(c *gin.Context) {
 		WriteBufferSize: 1024,
 	}
 
+	if protoKey, ok := c.Get("miri_ws_key"); ok {
+		c.Header("Sec-WebSocket-Protocol", protoKey.(string))
+		upgrader.Subprotocols = []string{protoKey.(string)}
+	}
 	ws, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
 		slog.Error("ws upgrade failed", "error", err)
