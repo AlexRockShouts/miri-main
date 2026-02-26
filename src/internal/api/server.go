@@ -114,19 +114,39 @@ func (s *Server) authMiddleware() gin.HandlerFunc {
 		provided := c.GetHeader("X-Server-Key")
 
 		// Check for Sec-WebSocket-Protocol header if X-Server-Key is missing
-		if provided == "" && (c.Request.Header.Get("Upgrade") == "websocket" || c.Request.Header.Get("Connection") == "Upgrade") {
-			protocol := c.GetHeader("Sec-WebSocket-Protocol")
-			// Support miri-key, <value> (two tokens)
-			const label = "miri-key"
-			if strings.Contains(protocol, label) {
-				parts := strings.Split(protocol, ",")
-				for i, p := range parts {
-					p = strings.TrimSpace(p)
-					if p == label && i+1 < len(parts) {
-						provided = strings.TrimSpace(parts[i+1])
-						// Save the exact protocol the client sent
-						c.Set("miri_ws_key", protocol)
-						break
+		isWebSocket := false
+		if strings.EqualFold(c.GetHeader("Upgrade"), "websocket") {
+			conn := strings.ToLower(c.GetHeader("Connection"))
+			if strings.Contains(conn, "upgrade") {
+				isWebSocket = true
+			}
+		}
+
+		// If it's a potential WebSocket request, we MUST NOT consume the request body
+		// or do anything that might disrupt the handshake if we are going to Next()
+		if isWebSocket {
+			// Save the protocol header if present, so handleWebsocket can use it for handshake
+			if protocol := c.GetHeader("Sec-WebSocket-Protocol"); protocol != "" {
+				c.Set("miri_ws_key", protocol)
+			}
+
+			if provided == "" {
+				// Try token query parameter first as it's the most reliable across proxies
+				provided = c.Query("token")
+
+				if provided == "" {
+					protocol := c.GetHeader("Sec-WebSocket-Protocol")
+					// Support miri-key, <value> (two tokens)
+					const label = "miri-key"
+					if strings.Contains(protocol, label) {
+						parts := strings.Split(protocol, ",")
+						for i, p := range parts {
+							p = strings.TrimSpace(p)
+							if p == label && i+1 < len(parts) {
+								provided = strings.TrimSpace(parts[i+1])
+								break
+							}
+						}
 					}
 				}
 			}

@@ -117,6 +117,20 @@ func (sm *SessionManager) AddMessage(id string, prompt, response string) {
 	})
 }
 
+func (sm *SessionManager) GetOrCreateByClientID(clientID string) string {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+	if id, ok := sm.clientSessions[clientID]; ok && id != "" {
+		return id
+	}
+	id := uuid.New().String()
+	sess := NewSession(id)
+	sess.ClientID = clientID
+	sm.sessions[id] = sess
+	sm.clientSessions[clientID] = id
+	return id
+}
+
 func (sm *SessionManager) CreateNewSession(clientID string) string {
 	sm.mu.Lock()
 	oldID, ok := sm.clientSessions[clientID]
