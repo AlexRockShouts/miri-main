@@ -72,7 +72,7 @@ func TestExecute(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), tt.ctxTimeout)
 			defer cancel()
 
-			stdout, stderr, code, err := Execute(ctx, tt.cmd)
+			stdout, stderr, code, err := Execute(ctx, tt.cmd, "")
 
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Execute() error = %v, wantErr %v", err, tt.wantErr)

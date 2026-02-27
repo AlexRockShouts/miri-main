@@ -15,7 +15,7 @@ func TestInstallStream(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	rc, err := InstallStream(context.Background(), ts.URL)
+	rc, err := InstallStream(context.Background(), ts.URL, "")
 	if err != nil {
 		t.Fatalf("InstallStream failed: %v", err)
 	}

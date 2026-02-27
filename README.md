@@ -2,9 +2,43 @@
 
 Miri is a local autonomous agent written in Go. It integrates the xAI API as backend, saves its state in files under the user's profile directory (`~/.miri` by default, override with `MIRI_STORAGE_DIR`), and exposes a REST API for configuration, storing human information, and delegating prompts to xAI.
 
-The agent has its own \"soul\" defined in `~/.miri/soul.txt` (bootstrapped from `templates/soul.txt` on first run if missing).
+The agent has its own "soul" defined in `~/.miri/soul.txt` (bootstrapped from `templates/soul.txt` on first run if missing).
+
+## Architecture Overview
+
+```mermaid
+flowchart TD
+  subgraph Client
+    UI[Webapp / CLI]
+    SDK[TypeScript SDK]
+  end
+
+  UI -->|HTTP / WS| REST[HTTP Server (Gin)]
+  SDK -->|HTTP| REST
+
+  REST -->|/api/v1, /ws| GW[Gateway]
+  REST -->|/api/admin/v1| GW
+
+  GW --> AG[Agent]
+  GW --> CH[Channels (WhatsApp, IRC)]
+  CH -->|incoming/outgoing| GW
+
+  AG --> EN[Engine (Eino Graph)]
+  EN --> TL[Tools]
+  EN --> SL[SkillLoader]
+  EN --> CR[CronManager]
+
+  SL --> SK[Skills (~/.miri/skills)]
+  TL --> FS[(Sandboxed FS: ~/.miri)]
+
+  GW --> ST[(Storage ~/.miri)]
+  EN --> ST
+  CR --> ST
+  CR -.runs tasks.-> AG
+```
 
 ## Features
+- **Unified Session**: Miri primarily uses a single default session (`default` or `miri:agent:main`) for all chat interactions, ensuring a continuous conversation history.
 - **Eino Engine**: A powerful ReAct agent powered by [Eino](https://github.com/cloudwego/eino), supporting tool-augmented generation and autonomous reasoning loops.
 - **Graph Orchestration**: Core logic is modeled as an Eino Graph with specialized nodes:
   - `retriever`: Proactively injects long-term memory into conversations.
@@ -13,25 +47,22 @@ The agent has its own \"soul\" defined in `~/.miri/soul.txt` (bootstrapped from 
   - `agent`: Executes the ReAct loop with real-time tool calls and reasoning.
 - **Grokipedia**: Built-in tool for looking up facts and summaries from [Grokipedia.com](https://grokipedia.com) directly.
 - **Checkpointing**: Eino-native graph persistence using `FileCheckPointStore` ensures long-running tasks can resume from the last successful tool execution.
-- **Long-term Memory**: Durable storage in `memory.md`, `user.md`, and `facts.json` (NDJSON) with automated early-flush compaction. Content from `memory.md` is automatically read and injected into new sessions and reasoning loops to provide long-term context. `memory.md` follows a structured template (Identity, Personality, Rules, Tech Stack, etc.) for better organization of project-wide information.
+- **Long-term Memory**: Durable storage in `memory.md`, `user.md`, and `facts.json` (NDJSON) with automated early-flush compaction. Content from `memory.md` is automatically read and injected into new sessions and reasoning loops to provide long-term context.
 - **System Awareness**: Automatically provides the LLM with system context (OS, Architecture, Go version) for more efficient command execution.
 - **REST API** & **WebSocket**:
   - `POST /api/v1/prompt`: Blocking prompt execution.
   - `GET /api/v1/prompt/stream`: SSE streaming for real-time thoughts and tool execution.
-  - `GET /ws`: WebSocket support for full-duplex interactive streaming.
+  - `GET /ws`: WebSocket support for full-duplex interactive streaming. Supports authentication via `token` query param or `Sec-WebSocket-Protocol: miri-key, <key>`.
   - **OpenAPI Specification**: Detailed API documentation is available in `api/openapi.yaml`.
-  - **SDKs**: Clients for [TypeScript](api/sdk/typescript) and [WebAssembly](api/sdk/wasm). Includes automated generation and publishing for TypeScript.
-  - **Skill Management**:
-    - `GET /api/admin/v1/skills`: List all locally installed skills.
-    - `GET /api/admin/v1/skills/remote`: Fetch available skills from agentskill.sh (supports `?query=...`).
-    - `POST /api/admin/v1/skills`: Install a new skill by name.
-    - `DELETE /api/admin/v1/skills/:name`: Uninstall a skill.
-- **Streamable Tools**: Real-time output streaming for installation tools like `skill_install`, `curl_install` and `go_install`.
-- **Skills System**: Anthropic-style skill loading from `SKILL.md` files with dynamic context injection and automatic script-to-tool inference. Includes integrated support for [agentskill.sh](https://agentskill.sh) for discovering and installing remote skills.
-- **Enhanced Search**: Wildcard support (`*`, `?`) for both local and remote skill searches.
-- **Administrative Control**: Unified API for managing skills (list, search, install, remove) via the administrative interface.
-- **Logging**: Structured logs via `slog` with Eino callback integration for deep visibility.
-
+  - **SDKs**: Clients for [TypeScript](api/sdk/typescript) and [WebAssembly](api/sdk/wasm).
+- **Recurring Tasks**:
+  - `TaskManagerTool`: Allows the agent to schedule recurring tasks (with cron expressions) that run prompts and report results to sessions or channels.
+  - `GET /api/admin/v1/tasks`: List all scheduled tasks via admin API.
+- **Skills System**: 
+  - Supports directory-based skills (with `SKILL.md`) and single-file markdown skills (`.md`) in `~/.miri/skills/`.
+  - **Learn Skill**: Integration with [agentskill.sh](https://agentskill.sh) for dynamic discovery and installation of skills.
+  - **Auto-Activation**: Core skills like `learn` and `skill_creator` are automatically activated in the default session.
+- **Sandboxed File-system**: All tool-initiated file operations (e.g., `execute_command`, `curl_install`) are automatically redirected to the `~/.miri` directory for safety and organization.
 
 ## Prerequisites
 
@@ -41,20 +72,47 @@ The agent has its own \"soul\" defined in `~/.miri/soul.txt` (bootstrapped from 
 ## Build & Run
 
 ```bash
-go build -o miri src/cmd/main.go
-./miri
-./miri -config /path/to/my-config.yaml  # loads specified YAML first, then ~/.miri/config.yaml or ./config.yaml
+make build
+./bin/miri-server
+./bin/miri-server -config /path/to/my-config.yaml
 ```
 
 ### Makefile Targets
 
 The project includes a `Makefile` for common tasks:
 
-- `make build`: Builds the `miri-server` binary.
+- `make server`: Builds the `miri-server` binary into `./bin/`.
+- `make build`: Alias for `make server`.
 - `make test`: Runs all Go tests.
-- `make wasm`: Builds the WebAssembly SDK.
+- `make run-server`: Builds and runs the server.
 - `make ts-sdk`: Generates, installs, and builds the TypeScript SDK.
 - `make ts-sdk-publish`: Publishes the TypeScript SDK to npm (requires `NPM_TOKEN`).
+
+## Configuration Cheatsheet
+
+Admin credentials and server settings are managed in `config.yaml`:
+
+```yaml
+server:
+  addr: ":8080"
+  key: "your-server-key"
+  admin_user: "admin"
+  admin_pass: "admin-password"
+storage_dir: "~/.miri"
+```
+
+### Authentication
+
+1. **Server Key**: For `/api/v1/*` and `/ws`. Pass via `X-Server-Key` header.
+2. **Admin Auth**: For `/api/admin/v1/*`. Use HTTP Basic Auth.
+
+## Session Maintenance
+
+Send `/new` as a prompt to:
+1. Flush all current facts to long-term memory (`memory.md`).
+2. Generate a structured conversation summary.
+3. Archive the current session history to `~/memory/`.
+4. Clear the current session for a fresh start.
 
 ## Build & Run (CLI Server)
 

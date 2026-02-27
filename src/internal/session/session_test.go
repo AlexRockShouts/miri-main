@@ -12,8 +12,8 @@ func TestSessionManager_GetOrCreate(t *testing.T) {
 	sm := NewSessionManager()
 	id := uuid.New().String()
 	s1 := sm.GetOrCreate(id)
-	if s1.ID != id {
-		t.Errorf("expected ID %s, got %s", id, s1.ID)
+	if s1.ID != "default" {
+		t.Errorf("expected ID default, got %s", s1.ID)
 	}
 	s2 := sm.GetOrCreate(id)
 	if s1 != s2 {
@@ -21,8 +21,8 @@ func TestSessionManager_GetOrCreate(t *testing.T) {
 	}
 	emptyID := ""
 	s3 := sm.GetOrCreate(emptyID)
-	if s3.ID == "" {
-		t.Error("expected generated ID")
+	if s3.ID != "default" {
+		t.Error("expected default ID")
 	}
 }
 
