@@ -13,28 +13,28 @@ flowchart TD
     SDK[TypeScript SDK]
   end
 
-  UI -->|HTTP / WS| REST[HTTP Server (Gin)]
+  UI -->|"HTTP / WS"| REST["HTTP Server (Gin)"]
   SDK -->|HTTP| REST
 
-  REST -->|/api/v1, /ws| GW[Gateway]
+  REST -->|"/api/v1, /ws"| GW[Gateway]
   REST -->|/api/admin/v1| GW
 
   GW --> AG[Agent]
-  GW --> CH[Channels (WhatsApp, IRC)]
+  GW --> CH["Channels (WhatsApp, IRC)"]
   CH -->|incoming/outgoing| GW
 
-  AG --> EN[Engine (Eino Graph)]
+  AG --> EN["Engine (Eino Graph)"]
   EN --> TL[Tools]
   EN --> SL[SkillLoader]
   EN --> CR[CronManager]
 
-  SL --> SK[Skills (~/.miri/skills)]
-  TL --> FS[(Sandboxed FS: ~/.miri)]
+  SL --> SK["Skills (~/.miri/skills)"]
+  TL --> FS[("Sandboxed FS: ~/.miri")]
 
-  GW --> ST[(Storage ~/.miri)]
+  GW --> ST[("Storage ~/.miri")]
   EN --> ST
   CR --> ST
-  CR -.runs tasks.-> AG
+  CR -.->|runs tasks| AG
 ```
 
 ## Features
