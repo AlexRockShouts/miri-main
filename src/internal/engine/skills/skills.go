@@ -27,6 +27,22 @@ type Skill struct {
 	FullContent string   // Content of SKILL.md
 }
 
+func (s *Skill) GetName() string {
+	return s.Name
+}
+
+func (s *Skill) GetDescription() string {
+	return s.Description
+}
+
+func (s *Skill) GetVersion() string {
+	return s.Version
+}
+
+func (s *Skill) GetTags() []string {
+	return s.Tags
+}
+
 type SkillLoader struct {
 	SkillsDir  string
 	ScriptsDir string
@@ -43,6 +59,9 @@ func NewSkillLoader(skillsDir, scriptsDir string) *SkillLoader {
 }
 
 func (l *SkillLoader) Load() error {
+	// Clear existing extra tools to allow refresh
+	l.extraTools = nil
+
 	if err := l.loadSkills(); err != nil {
 		return err
 	}
@@ -69,12 +88,49 @@ func (l *SkillLoader) loadSkills() error {
 			}
 			if skill != nil {
 				l.skills[skill.Name] = skill
-				slog.Info("Loaded skill", "name", skill.Name, "version", skill.Version)
+				slog.Info("Loaded skill from directory", "name", skill.Name, "version", skill.Version)
 			}
 			return filepath.SkipDir // Don't descend into skill subdirectories
 		}
+		if !d.IsDir() && filepath.Ext(path) == ".md" {
+			skill, err := l.parseSkillFile(path)
+			if err != nil {
+				slog.Warn("Failed to parse skill file", "path", path, "error", err)
+				return nil // Continue walking
+			}
+			if skill != nil {
+				l.skills[skill.Name] = skill
+				slog.Info("Loaded skill from file", "name", skill.Name, "version", skill.Version)
+			}
+		}
 		return nil
 	})
+}
+
+func (l *SkillLoader) parseSkillFile(filePath string) (*Skill, error) {
+	content, err := os.ReadFile(filePath)
+	if err != nil {
+		return nil, err
+	}
+
+	// Simple YAML frontmatter parser
+	parts := strings.SplitN(string(content), "---", 3)
+	if len(parts) < 3 {
+		return nil, fmt.Errorf("invalid skill format: missing frontmatter in %s", filePath)
+	}
+
+	var skill Skill
+	if err := yaml.Unmarshal([]byte(parts[1]), &skill); err != nil {
+		return nil, fmt.Errorf("failed to parse frontmatter: %w", err)
+	}
+
+	if skill.Name == "" {
+		skill.Name = strings.TrimSuffix(filepath.Base(filePath), filepath.Ext(filePath))
+	}
+	skill.Directory = filepath.Dir(filePath)
+	skill.FullContent = strings.TrimSpace(parts[2])
+
+	return &skill, nil
 }
 
 func (l *SkillLoader) parseSkillDir(dir string) (*Skill, error) {
@@ -101,7 +157,30 @@ func (l *SkillLoader) parseSkillDir(dir string) (*Skill, error) {
 	skill.Directory = dir
 	skill.FullContent = strings.TrimSpace(parts[2])
 
+	// Automatically reload scripts from the skill directory if they exist
+	scriptsDir := filepath.Join(dir, "scripts")
+	if _, err := os.Stat(scriptsDir); err == nil {
+		l.loadScriptsFromDir(scriptsDir)
+	}
+
 	return &skill, nil
+}
+
+func (l *SkillLoader) loadScriptsFromDir(dir string) error {
+	return filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if !d.IsDir() {
+			ext := filepath.Ext(path)
+			if ext == ".sh" || ext == ".py" || ext == ".js" {
+				t := l.inferTool(path)
+				l.extraTools = append(l.extraTools, t)
+				slog.Info("Inferred tool from script", "path", path)
+			}
+		}
+		return nil
+	})
 }
 
 func (l *SkillLoader) GetSkill(name string) (*Skill, bool) {
@@ -153,22 +232,11 @@ func (l *SkillLoader) loadScripts() error {
 	}
 
 	// Clear existing extra tools to allow refresh
-	l.extraTools = nil
+	// Note: this might clear tools added by parseSkillDir if Load is called later.
+	// But usually Load is called once at start or during reload.
+	// l.extraTools = nil
 
-	return filepath.WalkDir(l.ScriptsDir, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if !d.IsDir() {
-			ext := filepath.Ext(path)
-			if ext == ".sh" || ext == ".py" || ext == ".js" {
-				t := l.inferTool(path)
-				l.extraTools = append(l.extraTools, t)
-				slog.Info("Inferred tool from script", "path", path)
-			}
-		}
-		return nil
-	})
+	return l.loadScriptsFromDir(l.ScriptsDir)
 }
 
 func (l *SkillLoader) inferTool(path string) tool.BaseTool {
@@ -182,14 +250,16 @@ func (l *SkillLoader) inferTool(path string) tool.BaseTool {
 	}, name)
 
 	return &scriptTool{
-		name: name,
-		path: path,
+		name:       name,
+		path:       path,
+		storageDir: l.SkillsDir, // or l.StorageDir if we add it
 	}
 }
 
 type scriptTool struct {
-	name string
-	path string
+	name       string
+	path       string
+	storageDir string
 }
 
 func (s *scriptTool) Info(_ context.Context) (*schema.ToolInfo, error) {
@@ -225,7 +295,7 @@ func (s *scriptTool) InvokableRun(ctx context.Context, argumentsInJSON string, _
 		command = fmt.Sprintf("%s %s", s.path, args.Args)
 	}
 
-	stdout, stderr, exitCode, err := cmd.Execute(ctx, command)
+	stdout, stderr, exitCode, err := cmd.Execute(ctx, command, s.storageDir)
 	res := map[string]any{
 		"stdout":    stdout,
 		"stderr":    stderr,
@@ -354,13 +424,16 @@ func (t *UseTool) InvokableRun(ctx context.Context, argumentsInJSON string, _ ..
 		return "", err
 	}
 
+	// Try to find the skill; if not found, reload skills from disk once.
 	skill, ok := t.loader.GetSkill(args.SkillName)
 	if !ok {
-		return fmt.Sprintf("Skill %q not found locally. Check available skills with `/skill_search`.", args.SkillName), nil
+		_ = t.loader.Load()
+		skill, ok = t.loader.GetSkill(args.SkillName)
+	}
+	if !ok {
+		return fmt.Sprintf("Skill %q not found locally. Use /learn to install it, then try again.", args.SkillName), nil
 	}
 
-	// We'll use a callback or context-based injection to actually add the content to the prompt.
-	// For now, return a success message that will be seen by the agent.
-	// The actual injection happens in the EinoEngine loop.
+	// Return a confirmation; actual injection happens in the engine loop.
 	return fmt.Sprintf("Skill %q loaded successfully. You now have access to its instructions and tools.", skill.Name), nil
 }

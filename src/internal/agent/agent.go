@@ -13,11 +13,12 @@ import (
 )
 
 type Agent struct {
-	Config     *config.Config
-	SessionMgr *session.SessionManager `json:"-"`
-	Storage    *storage.Storage        `json:"-"`
-	Parent     *Agent                  `json:"-"`
-	Eng        engine.Engine           `json:"-"`
+	Config      *config.Config
+	SessionMgr  *session.SessionManager `json:"-"`
+	Storage     *storage.Storage        `json:"-"`
+	Parent      *Agent                  `json:"-"`
+	Eng         engine.Engine           `json:"-"`
+	taskGateway any
 }
 
 func NewAgent(cfg *config.Config, sm *session.SessionManager, st *storage.Storage) *Agent {
@@ -39,6 +40,16 @@ func (a *Agent) InitEngine() {
 		slog.Error("failed to initialize Eino engine", "error", err)
 	} else {
 		a.Eng = react
+		if a.taskGateway != nil {
+			a.Eng.SetTaskGateway(a.taskGateway)
+		}
+	}
+}
+
+func (a *Agent) SetTaskGateway(gw any) {
+	a.taskGateway = gw
+	if a.Eng != nil {
+		a.Eng.SetTaskGateway(gw)
 	}
 }
 
@@ -83,10 +94,24 @@ func (a *Agent) DelegatePromptWithOptions(ctx context.Context, sessionID string,
 	// Gather system context
 	sysContext := fmt.Sprintf("\nSystem information:\n- %s\n", system.GetInfo())
 
-	if sessionID == "" {
+	if sessionID == "" || sessionID == "agent:miri:main" {
 		sessionID = "default"
 	}
 	session := a.SessionMgr.GetOrCreate(sessionID)
+
+	// Intercept /new command
+	if strings.TrimSpace(prompt) == "/new" {
+		slog.Info("Session renewal triggered", "session_id", sessionID)
+		if err := a.Eng.FlushAndCompact(ctx, session, humanContext+sysContext); err != nil {
+			slog.Error("Flush and compact failed during renewal", "error", err)
+		}
+		if err := a.SessionMgr.ArchiveSession(session); err != nil {
+			slog.Error("Archive session failed during renewal", "error", err)
+		}
+		session.ClearMessages()
+		return "Session renewed. History compacted, facts saved to memory, and current session cleared.", nil
+	}
+
 	if err := session.SetSoulIfEmpty(a.Storage); err != nil {
 		return "", fmt.Errorf("load soul for session %s: %w", sessionID, err)
 	}
@@ -142,10 +167,28 @@ func (a *Agent) DelegatePromptStreamWithOptions(ctx context.Context, sessionID s
 	// Gather system context
 	sysContext := fmt.Sprintf("\nSystem information:\n- %s\n", system.GetInfo())
 
-	if sessionID == "" {
+	if sessionID == "" || sessionID == "agent:miri:main" {
 		sessionID = "default"
 	}
 	session := a.SessionMgr.GetOrCreate(sessionID)
+
+	// Intercept /new command
+	if strings.TrimSpace(prompt) == "/new" {
+		slog.Info("Session renewal triggered (stream)", "session_id", sessionID)
+		if err := a.Eng.FlushAndCompact(ctx, session, humanContext+sysContext); err != nil {
+			slog.Error("Flush and compact failed during renewal (stream)", "error", err)
+		}
+		if err := a.SessionMgr.ArchiveSession(session); err != nil {
+			slog.Error("Archive session failed during renewal (stream)", "error", err)
+		}
+		session.ClearMessages()
+
+		proxy := make(chan string, 1)
+		proxy <- "Session renewed. History compacted, facts saved to memory, and current session cleared."
+		close(proxy)
+		return proxy, nil
+	}
+
 	if err := session.SetSoulIfEmpty(a.Storage); err != nil {
 		return nil, fmt.Errorf("load soul for session %s: %w", sessionID, err)
 	}
@@ -194,7 +237,15 @@ func (a *Agent) DelegatePromptStreamWithOptions(ctx context.Context, sessionID s
 				continue
 			}
 
-			if !strings.HasPrefix(chunk, "[") {
+			// Only exclude specific meta-tags from the persisted history.
+			isMeta := strings.HasPrefix(chunk, "[Thought:") ||
+				strings.HasPrefix(chunk, "[Usage:") ||
+				strings.HasPrefix(chunk, "[Tools:") ||
+				strings.HasPrefix(chunk, "[Error:") ||
+				strings.HasPrefix(chunk, "[Panic:") ||
+				strings.HasPrefix(chunk, "[Stream Error:")
+
+			if !isMeta {
 				fullResp.WriteString(chunk)
 			}
 			proxy <- chunk
@@ -221,6 +272,10 @@ func (a *Agent) ListSkills() []any {
 	return a.Eng.ListSkills()
 }
 
+func (a *Agent) ListSkillCommands(ctx context.Context) ([]engine.SkillCommand, error) {
+	return a.Eng.ListSkillCommands(ctx)
+}
+
 func (a *Agent) ListRemoteSkills(ctx context.Context) (any, error) {
 	return a.Eng.ListRemoteSkills(ctx)
 }
@@ -231,4 +286,8 @@ func (a *Agent) InstallSkill(ctx context.Context, name string) (string, error) {
 
 func (a *Agent) RemoveSkill(name string) error {
 	return a.Eng.RemoveSkill(name)
+}
+
+func (a *Agent) GetSkill(name string) (any, error) {
+	return a.Eng.GetSkill(name)
 }

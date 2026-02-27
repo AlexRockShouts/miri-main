@@ -61,12 +61,17 @@ func (s *Server) setupRoutesAdmin() {
 		admin.GET("/sessions", s.handleListSessions)
 		admin.GET("/sessions/:id", s.handleGetSession)
 		admin.GET("/sessions/:id/history", s.handleGetSessionHistory)
+		admin.GET("/sessions/:id/skills", s.handleGetSessionSkills)
 
 		// Skill management
 		admin.GET("/skills", s.handleListSkills)
-		admin.GET("/skills/remote", s.handleListRemoteSkills)
-		admin.POST("/skills", s.handleInstallSkill)
+		admin.GET("/skills/commands", s.handleListSkillCommands)
+		admin.GET("/skills/:name", s.handleGetSkill)
 		admin.DELETE("/skills/:name", s.handleRemoveSkill)
+
+		// Task management
+		admin.GET("/tasks", s.handleListTasks)
+		admin.GET("/tasks/:id", s.handleGetTask)
 	}
 }
 

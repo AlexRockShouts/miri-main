@@ -49,7 +49,6 @@ func (s *Server) handleWebsocket(c *gin.Context) {
 	channel := c.Query("channel")
 	device := c.Query("device")
 	sessionID := c.Query("session_id")
-	clientID := c.Query("client_id")
 	streamReq := c.Query("stream") == "true"
 
 	if channel != "" && device != "" {
@@ -58,8 +57,8 @@ func (s *Server) handleWebsocket(c *gin.Context) {
 			CheckOrigin: func(r *http.Request) bool {
 				return true
 			},
-			ReadBufferSize:  1024,
-			WriteBufferSize: 1024,
+			ReadBufferSize:  4096,
+			WriteBufferSize: 4096,
 		}
 		if _, ok := c.Get("miri_ws_key"); ok {
 			requested := c.GetHeader("Sec-WebSocket-Protocol")
@@ -115,16 +114,14 @@ func (s *Server) handleWebsocket(c *gin.Context) {
 		return
 	}
 
-	if sessionID == "" {
-		sessionID = gw.CreateNewSession(clientID)
-	}
+	sessionID = "default"
 
 	upgrader := websocket.Upgrader{
 		CheckOrigin: func(r *http.Request) bool {
 			return true
 		},
-		ReadBufferSize:  1024,
-		WriteBufferSize: 1024,
+		ReadBufferSize:  4096,
+		WriteBufferSize: 4096,
 	}
 
 	if _, ok := c.Get("miri_ws_key"); ok {
@@ -145,14 +142,6 @@ func (s *Server) handleWebsocket(c *gin.Context) {
 		return
 	}
 	defer ws.Close()
-
-	// Immediately send session history
-	sess := gw.GetSession(sessionID)
-	if sess != nil {
-		if err := ws.WriteJSON(gin.H{"type": "history", "session": sess}); err != nil {
-			slog.Error("failed to send history", "error", err)
-		}
-	}
 
 	for {
 		var msg struct {

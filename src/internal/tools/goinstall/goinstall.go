@@ -11,11 +11,14 @@ import (
 )
 
 // Install executes the 'go install' command for the specified package.
-func Install(ctx context.Context, pkg string) (stdout, stderr string, exitCode int, err error) {
+func Install(ctx context.Context, pkg string, dir string) (stdout, stderr string, exitCode int, err error) {
 	ctx, cancel := context.WithTimeout(ctx, 60*time.Second) // Go install can take some time
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, "go", "install", pkg)
+	if dir != "" {
+		cmd.Dir = dir
+	}
 	var stdoutB, stderrB io.Writer
 	stdoutBuf := &bytes.Buffer{}
 	stderrBuf := &bytes.Buffer{}
@@ -36,10 +39,13 @@ func Install(ctx context.Context, pkg string) (stdout, stderr string, exitCode i
 }
 
 // InstallStream executes the 'go install' command and streams combined stdout/stderr.
-func InstallStream(ctx context.Context, pkg string) (io.ReadCloser, error) {
+func InstallStream(ctx context.Context, pkg string, dir string) (io.ReadCloser, error) {
 	// We don't use WithTimeout here because we want the caller to control it via the context,
 	// and cmd.Start() returns immediately.
 	cmd := exec.CommandContext(ctx, "go", "install", pkg)
+	if dir != "" {
+		cmd.Dir = dir
+	}
 
 	// Combine stdout and stderr
 	pr, pw := io.Pipe()

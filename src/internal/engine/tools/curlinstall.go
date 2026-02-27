@@ -12,7 +12,13 @@ import (
 	"github.com/cloudwego/eino/schema"
 )
 
-type CurlInstallToolWrapper struct{}
+type CurlInstallToolWrapper struct {
+	StorageDir string
+}
+
+func NewCurlInstallTool(storageDir string) *CurlInstallToolWrapper {
+	return &CurlInstallToolWrapper{StorageDir: storageDir}
+}
 
 func (c *CurlInstallToolWrapper) GetInfo() *schema.ToolInfo {
 	return &schema.ToolInfo{
@@ -40,7 +46,7 @@ func (c *CurlInstallToolWrapper) InvokableRun(ctx context.Context, argumentsInJS
 		return "", err
 	}
 	slog.Debug("running installation script from url", "args", argumentsInJSON)
-	stdout, stderr, exitCode, err := curlinstall.Install(ctx, args.URL)
+	stdout, stderr, exitCode, err := curlinstall.Install(ctx, args.URL, c.StorageDir)
 
 	const maxOutput = 4096
 	if len(stdout) > maxOutput {
@@ -74,7 +80,7 @@ func (c *CurlInstallToolWrapper) StreamableRun(ctx context.Context, argumentsInJ
 	}
 	slog.Debug("running installation script from url (streaming)", "args", argumentsInJSON)
 
-	rc, err := curlinstall.InstallStream(ctx, args.URL)
+	rc, err := curlinstall.InstallStream(ctx, args.URL, c.StorageDir)
 	if err != nil {
 		return nil, err
 	}

@@ -104,6 +104,7 @@ type EinoEngine struct {
 	storage         *storage.Storage
 	compiledGraph   compose.Runnable[*graphInput, *graphOutput]
 	skillLoader     *skills.SkillLoader
+	taskGateway     tools.TaskGateway
 }
 
 type graphInput struct {
@@ -155,9 +156,9 @@ func NewEinoEngine(cfg *config.Config, st *storage.Storage, providerName, modelN
 	searchTool := &tools.SearchToolWrapper{}
 	fetchTool := &tools.FetchToolWrapper{}
 	grokipediaTool := &tools.GrokipediaToolWrapper{}
-	cmdTool := &tools.CmdToolWrapper{}
-	goInstallTool := &tools.GoInstallToolWrapper{}
-	curlInstallTool := &tools.CurlInstallToolWrapper{}
+	cmdTool := tools.NewCmdTool(cfg.StorageDir)
+	goInstallTool := tools.NewGoInstallTool(cfg.StorageDir)
+	curlInstallTool := tools.NewCurlInstallTool(cfg.StorageDir)
 	saveFactTool := tools.NewSaveFactTool(st)
 
 	cpStore, err := NewFileCheckPointStore(cfg.StorageDir)
@@ -175,12 +176,6 @@ func NewEinoEngine(cfg *config.Config, st *storage.Storage, providerName, modelN
 		storage:         st,
 	}
 
-	skillInstallTool := tools.NewSkillInstallTool(cfg, func() {
-		if ee.skillLoader != nil {
-			ee.skillLoader.Load()
-		}
-	})
-	skillRemoteListTool := &tools.SkillRemoteListToolWrapper{}
 	skillRemoveTool := tools.NewSkillRemoveTool(cfg, func() {
 		if ee.skillLoader != nil {
 			ee.skillLoader.Load()
@@ -195,11 +190,15 @@ func NewEinoEngine(cfg *config.Config, st *storage.Storage, providerName, modelN
 		slog.Warn("Failed to load skills", "dir", skillsDir, "error", err)
 	}
 
-	skillSearchTool := skills.NewSearchTool(ee.skillLoader)
 	skillUseTool := skills.NewUseTool(ee.skillLoader)
 
+	// Task Manager Tool (placeholder, will be fully registered in Respond/StreamRespond with sessionID)
+	// Actually, we can register a tool that gets the sessionID from context or similar,
+	// but Eino tools Info/InvokableRun don't directly give us the SessionID unless we put it in the context.
+	// Our graphInput HAS the SessionID.
+
 	// Update tools node with all tools
-	allTools := []tool.BaseTool{searchTool, fetchTool, grokipediaTool, cmdTool, goInstallTool, curlInstallTool, skillInstallTool, skillRemoteListTool, skillRemoveTool, skillSearchTool, skillUseTool, saveFactTool}
+	allTools := []tool.BaseTool{searchTool, fetchTool, grokipediaTool, cmdTool, goInstallTool, curlInstallTool, skillRemoveTool, skillUseTool, saveFactTool}
 	allTools = append(allTools, ee.skillLoader.GetExtraTools()...)
 
 	toolsNode, err := compose.NewToolNode(context.Background(), &compose.ToolsNodeConfig{
@@ -217,19 +216,18 @@ func NewEinoEngine(cfg *config.Config, st *storage.Storage, providerName, modelN
 		cmdTool.GetInfo(),
 		goInstallTool.GetInfo(),
 		curlInstallTool.GetInfo(),
-		skillInstallTool.GetInfo(),
-		skillRemoteListTool.GetInfo(),
 		skillRemoveTool.GetInfo(),
 		grokipediaTool.GetInfo(),
 		saveFactTool.GetInfo(),
 	}
 
-	if info, err := skillSearchTool.Info(context.Background()); err == nil {
-		toolInfos = append(toolInfos, info)
-	}
 	if info, err := skillUseTool.Info(context.Background()); err == nil {
 		toolInfos = append(toolInfos, info)
 	}
+
+	// Task Manager Tool Info
+	taskMgrTool := tools.NewTaskManagerTool(nil, "")
+	toolInfos = append(toolInfos, taskMgrTool.GetInfo())
 
 	for _, t := range ee.skillLoader.GetExtraTools() {
 		info, _ := t.Info(context.Background())
@@ -310,6 +308,29 @@ func NewEinoEngine(cfg *config.Config, st *storage.Storage, providerName, modelN
 func (e *EinoEngine) agentInvoke(ctx context.Context, input *graphInput) (*graphOutput, error) {
 	slog.Info("Agent loop start", "session_id", input.SessionID, "max_steps", e.maxSteps)
 	msgs := input.Messages
+
+	// Activate skills learn and skill_creator for default session
+	if input.SessionID == "default" {
+		activatedSkills := []string{"learn", "skill_creator"}
+		for _, sn := range activatedSkills {
+			// Check if already in messages to avoid duplicates
+			alreadyLoaded := false
+			marker := fmt.Sprintf("SKILL LOADED: %s", sn)
+			for _, m := range msgs {
+				if strings.Contains(m.Content, marker) {
+					alreadyLoaded = true
+					break
+				}
+			}
+			if !alreadyLoaded {
+				if skill, ok := e.skillLoader.GetSkill(sn); ok {
+					slog.Info("Auto-activating skill for default session", "skill", sn)
+					msgs = append(msgs, schema.SystemMessage(fmt.Sprintf("SKILL LOADED: %s\n\n%s", skill.Name, skill.FullContent)))
+				}
+			}
+		}
+	}
+
 	// Add user prompt if not already there (it might be restored from checkpoint)
 	if len(msgs) == 0 || msgs[len(msgs)-1].Role != schema.User || msgs[len(msgs)-1].Content != input.Prompt {
 		msgs = append(msgs, schema.UserMessage(input.Prompt))
@@ -370,12 +391,60 @@ func (e *EinoEngine) agentInvoke(ctx context.Context, input *graphInput) (*graph
 			}
 		}
 
-		toolMsgs, err := e.tools.Invoke(ctx, assistant)
-		if err != nil {
-			slog.Error("Tool invoke failed", "step", i, "error", err)
-			return nil, err
+		// Inject Task Manager Tool with current session ID
+		if e.taskGateway != nil {
+			taskMgrTool := tools.NewTaskManagerTool(e.taskGateway, input.SessionID)
+			// We can't easily add it to e.tools (compose.ToolsNode) dynamically per request in Eino
+			// But we can check if any tool call is for "task_manager" and handle it here manually,
+			// or we could have pre-registered it and just set the sessionID in the wrapper.
+			// Since we recreate the wrapper per iteration here (if we wanted to),
+			// let's see how Eino handles tool invocation.
+			// Actually, the best way in Eino to have a session-aware tool is to use context.
+
+			// For now, let's just handle it by intercepting tool calls.
+			var toolMsgs []*schema.Message
+			var remainingToolCalls []schema.ToolCall
+
+			for _, tc := range assistant.ToolCalls {
+				if tc.Function.Name == "task_manager" {
+					slog.Info("Executing task_manager tool", "session_id", input.SessionID)
+					res, err := taskMgrTool.InvokableRun(ctx, tc.Function.Arguments)
+					if err != nil {
+						toolMsgs = append(toolMsgs, schema.ToolMessage(fmt.Sprintf("Error: %v", err), tc.ID))
+					} else {
+						toolMsgs = append(toolMsgs, schema.ToolMessage(res, tc.ID))
+					}
+				} else {
+					remainingToolCalls = append(remainingToolCalls, tc)
+				}
+			}
+
+			if len(toolMsgs) > 0 {
+				msgs = append(msgs, toolMsgs...)
+			}
+
+			if len(remainingToolCalls) > 0 {
+				// Create a temporary assistant message with only remaining tool calls
+				tempAssistant := &schema.Message{
+					Role:      schema.Assistant,
+					Content:   "",
+					ToolCalls: remainingToolCalls,
+				}
+				moreToolMsgs, err := e.tools.Invoke(ctx, tempAssistant)
+				if err != nil {
+					slog.Error("Tool invoke failed (remaining)", "step", i, "error", err)
+					return nil, err
+				}
+				msgs = append(msgs, moreToolMsgs...)
+			}
+		} else {
+			toolMsgs, err := e.tools.Invoke(ctx, assistant)
+			if err != nil {
+				slog.Error("Tool invoke failed", "step", i, "error", err)
+				return nil, err
+			}
+			msgs = append(msgs, toolMsgs...)
 		}
-		msgs = append(msgs, toolMsgs...)
 	}
 
 	// Final generation if loop exhausted
@@ -592,20 +661,55 @@ func (e *EinoEngine) ListSkills() []any {
 	return res
 }
 
+func (e *EinoEngine) ListSkillCommands(ctx context.Context) ([]SkillCommand, error) {
+	// 1. Basic tools
+	searchTool := &tools.SearchToolWrapper{}
+	fetchTool := &tools.FetchToolWrapper{}
+	grokipediaTool := &tools.GrokipediaToolWrapper{}
+	cmdTool := tools.NewCmdTool(e.storageBaseDir)
+	goInstallTool := tools.NewGoInstallTool(e.storageBaseDir)
+	curlInstallTool := tools.NewCurlInstallTool(e.storageBaseDir)
+	saveFactTool := tools.NewSaveFactTool(e.storage)
+	skillRemoveTool := tools.NewSkillRemoveTool(&config.Config{StorageDir: e.storageBaseDir}, nil)
+	taskMgrTool := tools.NewTaskManagerTool(nil, "")
+
+	allBase := []tool.BaseTool{
+		searchTool, fetchTool, grokipediaTool, cmdTool, goInstallTool,
+		curlInstallTool, saveFactTool, skillRemoveTool, taskMgrTool,
+	}
+
+	var res []SkillCommand
+	for _, t := range allBase {
+		info, err := t.Info(ctx)
+		if err == nil {
+			res = append(res, SkillCommand{Name: info.Name, Description: info.Desc})
+		}
+	}
+
+	// 2. Skill loader tools
+	if e.skillLoader != nil {
+		skillUseTool := skills.NewUseTool(e.skillLoader)
+
+		if info, err := skillUseTool.Info(ctx); err == nil {
+			res = append(res, SkillCommand{Name: info.Name, Description: info.Desc})
+		}
+
+		for _, t := range e.skillLoader.GetExtraTools() {
+			if info, err := t.Info(ctx); err == nil {
+				res = append(res, SkillCommand{Name: info.Name, Description: info.Desc})
+			}
+		}
+	}
+
+	return res, nil
+}
+
 func (e *EinoEngine) ListRemoteSkills(ctx context.Context) (any, error) {
-	return skillmanager.ListRemoteSkills(ctx)
+	return nil, fmt.Errorf("remote skill listing is removed; use /learn skill")
 }
 
 func (e *EinoEngine) InstallSkill(ctx context.Context, name string) (string, error) {
-	storageDir := filepath.Dir(e.storageBaseDir)
-	stdout, stderr, _, err := skillmanager.SearchAndInstall(ctx, name, storageDir)
-	if err != nil {
-		return stderr, err
-	}
-	if e.skillLoader != nil {
-		e.skillLoader.Load() // Reload after install
-	}
-	return stdout, nil
+	return "", fmt.Errorf("manual skill installation is removed; use /learn skill")
 }
 
 func (e *EinoEngine) RemoveSkill(name string) error {
@@ -617,5 +721,53 @@ func (e *EinoEngine) RemoveSkill(name string) error {
 	if e.skillLoader != nil {
 		e.skillLoader.Load() // Reload after removal
 	}
+	return nil
+}
+
+func (e *EinoEngine) GetSkill(name string) (any, error) {
+	if e.skillLoader == nil {
+		return nil, fmt.Errorf("skill loader not initialized")
+	}
+	e.skillLoader.Load() // Refresh
+	skill, ok := e.skillLoader.GetSkill(name)
+	if !ok {
+		return nil, fmt.Errorf("skill %q not found", name)
+	}
+	return skill, nil
+}
+
+func (e *EinoEngine) SetTaskGateway(gw any) {
+	if tgw, ok := gw.(tools.TaskGateway); ok {
+		e.taskGateway = tgw
+	}
+}
+
+func (e *EinoEngine) FlushAndCompact(ctx context.Context, sess *session.Session, humanContext string) error {
+	slog.Info("Explicit FlushAndCompact triggered", "session_id", sess.ID)
+
+	// Collect dynamic options from context
+	var callOpts []model.Option
+	if opts, ok := FromContext(ctx); ok {
+		if opts.Model != "" {
+			callOpts = append(callOpts, model.WithModel(opts.Model))
+		}
+	}
+
+	mem := &Memory{session: sess}
+	history, _ := mem.Get(ctx, nil)
+
+	// Trigger flush (save facts to memory)
+	_, err := e.flushIfNeeded(ctx, history, e.contextWindow, callOpts) // Force it by passing e.contextWindow as usage
+	if err != nil {
+		slog.Error("Manual flush failed", "error", err)
+	}
+
+	// Trigger summarize (compact session)
+	systemPrompt := sess.GetSoul() + humanContext
+	_, _, err = e.summarizeIfNeeded(ctx, systemPrompt, history, e.contextWindow, callOpts) // Force it
+	if err != nil {
+		slog.Error("Manual summarize failed", "error", err)
+	}
+
 	return nil
 }

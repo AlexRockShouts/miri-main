@@ -1,11 +1,13 @@
 package api
 
 import (
+	"encoding/json"
 	"miri-main/src/internal/config"
 	"miri-main/src/internal/engine"
 	"miri-main/src/internal/gateway"
 	"miri-main/src/internal/storage"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 )
@@ -103,36 +105,66 @@ func (s *Server) handleListHumanInfo(c *gin.Context) {
 func (s *Server) handleListSkills(c *gin.Context) {
 	gw := c.MustGet("gateway").(*gateway.Gateway)
 	skills := gw.ListSkills()
-	c.JSON(http.StatusOK, skills)
+
+	// Return name, description, version, tags
+	type skillShort struct {
+		Name        string   `json:"name"`
+		Description string   `json:"description"`
+		Version     string   `json:"version"`
+		Tags        []string `json:"tags"`
+	}
+
+	res := make([]skillShort, 0, len(skills))
+	for _, s := range skills {
+		// Use a simple map conversion if we don't want to import the skills package here
+		// or if ListSkills returns any. Since we know the structure of Skill:
+		if m, ok := s.(interface {
+			GetName() string
+			GetDescription() string
+			GetVersion() string
+			GetTags() []string
+		}); ok {
+			res = append(res, skillShort{
+				Name:        m.GetName(),
+				Description: m.GetDescription(),
+				Version:     m.GetVersion(),
+				Tags:        m.GetTags(),
+			})
+		} else {
+			// Fallback to manual extraction or JSON marshal/unmarshal
+			data, _ := json.Marshal(s)
+			var ss skillShort
+			json.Unmarshal(data, &ss)
+			res = append(res, ss)
+		}
+	}
+	c.JSON(http.StatusOK, res)
 }
 
-func (s *Server) handleListRemoteSkills(c *gin.Context) {
+func (s *Server) handleListSkillCommands(c *gin.Context) {
 	gw := c.MustGet("gateway").(*gateway.Gateway)
-	skills, err := gw.ListRemoteSkills(c.Request.Context())
+	commands, err := gw.ListSkillCommands(c.Request.Context())
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, skills)
+	c.JSON(http.StatusOK, commands)
 }
 
-func (s *Server) handleInstallSkill(c *gin.Context) {
-	var req struct {
-		Name string `json:"name" binding:"required"`
-	}
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+func (s *Server) handleGetSkill(c *gin.Context) {
+	name := c.Param("name")
+	if name == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "skill name is required"})
 		return
 	}
 
 	gw := c.MustGet("gateway").(*gateway.Gateway)
-	output, err := gw.InstallSkill(c.Request.Context(), req.Name)
+	skill, err := gw.GetSkill(name)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error(), "output": output})
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
 	}
-
-	c.JSON(http.StatusOK, gin.H{"status": "skill installed", "output": output})
+	c.JSON(http.StatusOK, skill)
 }
 
 func (s *Server) handleRemoveSkill(c *gin.Context) {
@@ -152,8 +184,7 @@ func (s *Server) handleRemoveSkill(c *gin.Context) {
 }
 
 type interactionRequest struct {
-	Action   string `json:"action" binding:"required,oneof=new status"`
-	ClientID string `json:"client_id,omitempty"`
+	Action string `json:"action" binding:"required,oneof=status"`
 }
 
 func (s *Server) handleInteraction(c *gin.Context) {
@@ -166,13 +197,6 @@ func (s *Server) handleInteraction(c *gin.Context) {
 	gw := c.MustGet("gateway").(*gateway.Gateway)
 
 	switch req.Action {
-	case "new":
-		if req.ClientID == "" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "client_id required for new"})
-			return
-		}
-		sessionID := gw.CreateNewSession(req.ClientID)
-		c.JSON(http.StatusOK, gin.H{"session_id": sessionID})
 	case "status":
 		chs := map[string]map[string]any{}
 		for k, ch := range gw.Channels {
@@ -185,7 +209,7 @@ func (s *Server) handleInteraction(c *gin.Context) {
 			"channels":      chs,
 		})
 	default:
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid action; must be 'new' or 'status'"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid action; must be 'status'"})
 	}
 }
 
@@ -193,6 +217,27 @@ func (s *Server) handleListSessions(c *gin.Context) {
 	gw := c.MustGet("gateway").(*gateway.Gateway)
 	ids := gw.ListSessions()
 	c.JSON(http.StatusOK, ids)
+}
+
+func (s *Server) handleListTasks(c *gin.Context) {
+	gw := c.MustGet("gateway").(*gateway.Gateway)
+	tasks, err := gw.ListTasks()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, tasks)
+}
+
+func (s *Server) handleGetTask(c *gin.Context) {
+	gw := c.MustGet("gateway").(*gateway.Gateway)
+	id := c.Param("id")
+	task, err := gw.GetTask(id)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "task not found"})
+		return
+	}
+	c.JSON(http.StatusOK, task)
 }
 
 func (s *Server) handleGetSession(c *gin.Context) {
@@ -218,6 +263,45 @@ func (s *Server) handleGetSessionHistory(c *gin.Context) {
 		"messages":     sess.Messages,
 		"total_tokens": sess.TotalTokens,
 	})
+}
+func (s *Server) handleGetSessionSkills(c *gin.Context) {
+	gw := c.MustGet("gateway").(*gateway.Gateway)
+	id := c.Param("id")
+	sess := gw.GetSession(id)
+	if sess == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "session not found"})
+		return
+	}
+	res := []string{}
+	if id == "default" || id == "miri:agent:main" {
+		res = append(res, "learn", "skill_creator")
+	}
+	// Also check responses for "Skill '...' loaded successfully"
+	for _, msg := range sess.Messages {
+		if strings.Contains(msg.Response, "loaded successfully") {
+			// Try to extract skill name
+			// "Skill 'file-organizer' loaded successfully."
+			start := strings.Index(msg.Response, "Skill '")
+			if start != -1 {
+				rest := msg.Response[start+7:]
+				end := strings.Index(rest, "'")
+				if end != -1 {
+					skillName := rest[:end]
+					res = append(res, skillName)
+				}
+			}
+		}
+	}
+	// Deduplicate
+	unique := make(map[string]bool)
+	final := []string{}
+	for _, r := range res {
+		if !unique[r] {
+			unique[r] = true
+			final = append(final, r)
+		}
+	}
+	c.JSON(http.StatusOK, final)
 }
 
 type ChannelActionReq struct {

@@ -11,13 +11,16 @@ import (
 )
 
 // Install executes a curl-based installation command, typically "curl -fsSL <url> | sh".
-func Install(ctx context.Context, url string) (stdout, stderr string, exitCode int, err error) {
+func Install(ctx context.Context, url string, dir string) (stdout, stderr string, exitCode int, err error) {
 	ctx, cancel := context.WithTimeout(ctx, 300*time.Second) // 5 minutes for complex installs
 	defer cancel()
 
 	// Using sh -c to allow piping, which is common for curl-based installers.
 	// We use -fsSL as it's the standard for many installers (like homebrew, rustup, etc).
 	cmd := exec.CommandContext(ctx, "sh", "-c", "curl -fsSL "+url+" | sh")
+	if dir != "" {
+		cmd.Dir = dir
+	}
 	stdoutB := &bytes.Buffer{}
 	stderrB := &bytes.Buffer{}
 	cmd.Stdout = stdoutB
@@ -35,8 +38,11 @@ func Install(ctx context.Context, url string) (stdout, stderr string, exitCode i
 }
 
 // InstallStream executes a curl-based installation command and streams combined stdout/stderr.
-func InstallStream(ctx context.Context, url string) (io.ReadCloser, error) {
+func InstallStream(ctx context.Context, url string, dir string) (io.ReadCloser, error) {
 	cmd := exec.CommandContext(ctx, "sh", "-c", "curl -fsSL "+url+" | sh")
+	if dir != "" {
+		cmd.Dir = dir
+	}
 
 	pr, pw := io.Pipe()
 	cmd.Stdout = pw

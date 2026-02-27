@@ -12,7 +12,13 @@ import (
 	"github.com/cloudwego/eino/schema"
 )
 
-type GoInstallToolWrapper struct{}
+type GoInstallToolWrapper struct {
+	StorageDir string
+}
+
+func NewGoInstallTool(storageDir string) *GoInstallToolWrapper {
+	return &GoInstallToolWrapper{StorageDir: storageDir}
+}
 
 func (g *GoInstallToolWrapper) GetInfo() *schema.ToolInfo {
 	return &schema.ToolInfo{
@@ -40,7 +46,7 @@ func (g *GoInstallToolWrapper) InvokableRun(ctx context.Context, argumentsInJSON
 		return "", err
 	}
 	slog.Debug("installing tool over go cli", "args", argumentsInJSON)
-	stdout, stderr, exitCode, err := goinstall.Install(ctx, args.Package)
+	stdout, stderr, exitCode, err := goinstall.Install(ctx, args.Package, g.StorageDir)
 
 	const maxOutput = 4096
 	if len(stdout) > maxOutput {
@@ -74,7 +80,7 @@ func (g *GoInstallToolWrapper) StreamableRun(ctx context.Context, argumentsInJSO
 	}
 	slog.Debug("installing tool over go cli (streaming)", "args", argumentsInJSON)
 
-	rc, err := goinstall.InstallStream(ctx, args.Package)
+	rc, err := goinstall.InstallStream(ctx, args.Package, g.StorageDir)
 	if err != nil {
 		return nil, err
 	}

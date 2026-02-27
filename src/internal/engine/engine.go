@@ -34,7 +34,16 @@ type Engine interface {
 	Respond(ctx context.Context, sess *session.Session, prompt string, humanContext string) (string, *llm.Usage, error)
 	StreamRespond(ctx context.Context, sess *session.Session, prompt string, humanContext string) (<-chan string, error)
 	ListSkills() []any
+	ListSkillCommands(ctx context.Context) ([]SkillCommand, error)
 	ListRemoteSkills(ctx context.Context) (any, error)
 	InstallSkill(ctx context.Context, name string) (string, error)
 	RemoveSkill(name string) error
+	GetSkill(name string) (any, error)
+	SetTaskGateway(gw any)
+	FlushAndCompact(ctx context.Context, sess *session.Session, humanContext string) error
+}
+
+type SkillCommand struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
 }

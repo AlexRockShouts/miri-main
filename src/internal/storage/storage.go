@@ -3,6 +3,7 @@ package storage
 import (
 	"encoding/json"
 	"io"
+	"miri-main/src/internal/tasks"
 	"os"
 	"path/filepath"
 	"strings"
@@ -264,4 +265,75 @@ func (s *Storage) AppendToMemory(content string) error {
 
 	_, err = f.WriteString(content + "\n")
 	return err
+}
+
+func (s *Storage) SaveTask(t *tasks.Task) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	taskDir := filepath.Join(s.baseDir, "tasks")
+	if err := os.MkdirAll(taskDir, 0755); err != nil {
+		return err
+	}
+
+	path := filepath.Join(taskDir, t.ID+".json")
+	data, err := json.MarshalIndent(t, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, data, 0644)
+}
+
+func (s *Storage) LoadTask(id string) (*tasks.Task, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	path := filepath.Join(s.baseDir, "tasks", id+".json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	var t tasks.Task
+	if err := json.Unmarshal(data, &t); err != nil {
+		return nil, err
+	}
+	return &t, nil
+}
+
+func (s *Storage) ListTasks() ([]*tasks.Task, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	taskDir := filepath.Join(s.baseDir, "tasks")
+	entries, err := os.ReadDir(taskDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	var res []*tasks.Task
+	for _, entry := range entries {
+		if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".json") {
+			path := filepath.Join(taskDir, entry.Name())
+			data, err := os.ReadFile(path)
+			if err != nil {
+				continue
+			}
+			var t tasks.Task
+			if err := json.Unmarshal(data, &t); err == nil {
+				res = append(res, &t)
+			}
+		}
+	}
+	return res, nil
+}
+
+func (s *Storage) DeleteTask(id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	path := filepath.Join(s.baseDir, "tasks", id+".json")
+	return os.Remove(path)
 }

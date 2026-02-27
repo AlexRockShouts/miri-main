@@ -23,8 +23,6 @@ components:
       properties:
         id:
           type: string
-        client_id:
-          type: string
         total_tokens:
           type: integer
         messages:
@@ -189,6 +187,65 @@ components:
             cacheWrite:
               type: number
 
+    Task:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        cron_expression:
+          type: string
+        prompt:
+          type: string
+        active:
+          type: boolean
+        needed_skills:
+          type: array
+          items:
+            type: string
+        last_run:
+          type: string
+          format: date-time
+        created:
+          type: string
+          format: date-time
+        updated:
+          type: string
+          format: date-time
+        report_session:
+          type: string
+        report_channels:
+          type: array
+          items:
+            type: string
+
+    Skill:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        version:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        directory:
+          type: string
+        full_content:
+          type: string
+
+    SkillCommand:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+
 paths:
   # --- Standard API (X-Server-Key) ---
   /api/v1/prompt:
@@ -265,9 +322,7 @@ paths:
               properties:
                 action:
                   type: string
-                  enum: [new, status]
-                client_id:
-                  type: string
+                  enum: [status]
       responses:
         '200':
           description: Successful response
@@ -279,10 +334,6 @@ paths:
         - ServerKey: []
       parameters:
         - name: session_id
-          in: query
-          schema:
-            type: string
-        - name: client_id
           in: query
           schema:
             type: string
@@ -457,3 +508,121 @@ paths:
                       $ref: '#/components/schemas/Message'
                   total_tokens:
                     type: integer
+
+  /api/admin/v1/sessions/{id}/skills:
+    get:
+      summary: Get loaded skills for a session
+      security:
+        - BasicAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of loaded skill names
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+
+  /api/admin/v1/skills:
+    get:
+      summary: List all installed skills
+      security:
+        - BasicAuth: []
+      responses:
+        '200':
+          description: List of skills
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Skill'
+
+  /api/admin/v1/skills/commands:
+    get:
+      summary: List all available agent commands (tools)
+      security:
+        - BasicAuth: []
+      responses:
+        '200':
+          description: List of available commands
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SkillCommand'
+
+  /api/admin/v1/skills/{name}:
+    get:
+      summary: Get skill details
+      security:
+        - BasicAuth: []
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Skill details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Skill'
+    delete:
+      summary: Remove a skill
+      security:
+        - BasicAuth: []
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Skill removed
+
+
+  /api/admin/v1/tasks:
+    get:
+      summary: List all recurring tasks
+      security:
+        - BasicAuth: []
+      responses:
+        '200':
+          description: List of tasks
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Task'
+
+  /api/admin/v1/tasks/{id}:
+    get:
+      summary: Get task details
+      security:
+        - BasicAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Task details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'

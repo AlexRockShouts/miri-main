@@ -9,7 +9,13 @@ import (
 	"github.com/cloudwego/eino/schema"
 )
 
-type CmdToolWrapper struct{}
+type CmdToolWrapper struct {
+	StorageDir string
+}
+
+func NewCmdTool(storageDir string) *CmdToolWrapper {
+	return &CmdToolWrapper{StorageDir: storageDir}
+}
 
 func (c *CmdToolWrapper) GetInfo() *schema.ToolInfo {
 	return &schema.ToolInfo{
@@ -36,7 +42,7 @@ func (c *CmdToolWrapper) InvokableRun(ctx context.Context, argumentsInJSON strin
 	if err := json.Unmarshal([]byte(argumentsInJSON), &args); err != nil {
 		return "", err
 	}
-	stdout, stderr, exitCode, err := cmd.Execute(ctx, args.Command)
+	stdout, stderr, exitCode, err := cmd.Execute(ctx, args.Command, c.StorageDir)
 
 	const maxOutput = 4096
 	if len(stdout) > maxOutput {

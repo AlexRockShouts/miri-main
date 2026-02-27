@@ -8,11 +8,14 @@ import (
 	"time"
 )
 
-func Execute(ctx context.Context, command string) (stdout, stderr string, exitCode int, err error) {
+func Execute(ctx context.Context, command string, dir string) (stdout, stderr string, exitCode int, err error) {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, "sh", "-c", command)
+	if dir != "" {
+		cmd.Dir = dir
+	}
 	stdoutB := &bytes.Buffer{}
 	stderrB := &bytes.Buffer{}
 	cmd.Stdout = stdoutB

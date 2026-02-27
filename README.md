@@ -410,3 +410,156 @@ PID file: `%USERPROFILE%\\.miri\\miri.pid`
 - Structured logs: `slog.Info`, etc.
 
 Built with modern Go idioms.
+
+
+---
+
+## Architecture Overview
+
+```mermaid
+flowchart TD
+  subgraph Client
+    UI[Webapp / CLI]
+    SDK[TypeScript SDK]
+  end
+
+  UI -->|HTTP / WS| REST[HTTP Server (Gin)]
+  SDK -->|HTTP| REST
+
+  REST -->|/api/v1, /ws| GW[Gateway]
+  REST -->|/api/admin/v1| GW
+
+  GW --> AG[Agent]
+  GW --> CH[Channels (WhatsApp, IRC)]
+  CH -->|incoming/outgoing| GW
+
+  AG --> EN[Engine (Eino Graph)]
+  EN --> TL[Tools]
+  EN --> SL[SkillLoader]
+  EN --> CR[CronManager]
+
+  SL --> SK[Skills (~/.miri/skills)]
+  TL --> FS[(Sandboxed FS: ~/.miri)]
+
+  GW --> ST[(Storage ~/.miri)]
+  EN --> ST
+  CR --> ST
+  CR -.runs tasks-> AG
+```
+
+### Key Components
+- HTTP Server (Gin): REST and WebSocket endpoints.
+- Gateway: Orchestrates the primary Agent, channels, cron tasks, and storage.
+- Agent: Wraps the Engine and session manager.
+- Engine (Eino): ReAct loop with tools; graph nodes for retrieval, flush, compact, and agent.
+- Tools: `web_search`, `grokipedia`, `execute_command`, `go_install`, `curl_install`, `save_fact`, `skill_use`, `skill_remove`, `task_manager`.
+- SkillLoader: Loads skills from `~/.miri/skills/**/SKILL.md` and infers tools from `scripts/`.
+- CronManager: Runs recurring tasks created via the `task_manager` tool; tasks stored in `~/.miri/tasks`.
+- Storage: Persists `soul.txt`, `memory.md`, `facts.json`, `human_info/`, skills, tasks, PID, etc.
+
+
+## Quick Start (Updated)
+
+Build and run the server binary:
+
+```bash
+make server           # builds bin/miri-server
+make run-server       # builds (if needed) and runs
+# or
+bin/miri-server -config config.yaml
+```
+
+The entrypoint is `src/cmd/server/main.go`. The binary is `bin/miri-server` (created by the Makefile).
+
+
+## Configuration Cheatsheet
+
+Place a `config.yaml` in `~/.miri` (or pass `-config` to the server). Minimal example:
+
+```yaml
+storage_dir: ~/.miri
+server:
+  addr: :8080
+  key: local-dev-key        # X-Server-Key used for /api/v1/* and /ws
+  admin_user: admin         # Basic auth for /api/admin/v1/*
+  admin_pass: admin-password
+models:
+  providers:
+    xai:
+      baseUrl: https://api.x.ai/v1
+      apiKey: "$XAI_API_KEY"
+      api: openai
+agents:
+  defaults:
+    model:
+      primary: xai/grok-4-1-fast-reasoning
+```
+
+- URL: the server listens on `server.addr` (e.g., `:8080`).
+- Admin username/password: `server.admin_user` / `server.admin_pass`.
+- X-Server-Key: `server.key` is required to call standard APIs and WebSocket.
+
+
+## WebSocket Authentication
+
+For standard HTTP clients you can set the header `X-Server-Key: <key>`.
+For browsers where custom headers are restricted during the WS handshake, send the key as sub-protocols:
+
+- `Sec-WebSocket-Protocol: miri-key, <key>` (two tokens, negotiated back by the server)
+
+Example JavaScript browser client:
+
+```js
+const ws = new WebSocket(
+  "ws://localhost:8080/ws",
+  ["miri-key", "local-dev-key"]
+);
+ws.onmessage = (ev) => console.log(ev.data);
+ws.onopen = () => ws.send(JSON.stringify({ prompt: "hello", stream: true }));
+```
+
+
+## Skills (Updated)
+
+- Runtime skills live in `~/.miri/skills/<name>/SKILL.md`.
+- On startup, template skills from `templates/skills/` are copied to `~/.miri/skills` if missing (e.g., `learn`, `skill_creator`).
+- The default chat session auto-activates the `learn` and `skill_creator` skills in context.
+- Discovery/installation flows are handled by the `learn` skill. Legacy endpoints and engine tools for remote search/install were removed.
+  - Keep: `skill_use`, `skill_remove`.
+
+Admin inspection endpoints:
+- `GET /api/admin/v1/skills` — list installed skills (name, description, version, tags)
+- `GET /api/admin/v1/skills/{name}` — get full details of a skill
+- `GET /api/admin/v1/skills/commands` — list all available agent commands (tools)
+- `GET /api/admin/v1/sessions/{id}/skills` — list skills loaded in a session (the main session id is `default`)
+
+
+## Recurring Tasks
+
+- Use the `task_manager` tool to add/list/update/delete cron tasks. Each task executes a prompt on schedule.
+- Tasks are persisted under `~/.miri/tasks/<id>.json` and scheduled by the built-in `CronManager`.
+- Results can be reported to the active session (default: `miri:agent:main` alias `default`) and/or to configured channels.
+
+Admin read-only API:
+- `GET /api/admin/v1/tasks` — list tasks
+- `GET /api/admin/v1/tasks/{id}` — task details
+
+
+## File-system Redirection for Tools (Sandboxing)
+
+All tool-initiated file operations (e.g., `execute_command`, `curl_install`, `go_install`, and skill scripts) run with their working directory set to the configured storage directory (`~/.miri` by default). This keeps artifacts contained and improves portability and safety.
+
+
+## TypeScript SDK (Notes)
+
+- OpenAPI spec: `api/openapi.yaml`.
+- Generate & build: `make ts-sdk` (or `make ts-sdk-generate && make ts-sdk-build`).
+- Publish: `make ts-sdk-publish NPM_TOKEN=... [NPM_TAG=next]`.
+
+
+## Known Deviations From Older Docs
+
+Some bullets above supersede earlier sections in this README:
+- The binary is `bin/miri-server`, not `miri`.
+- Legacy skill endpoints (`/api/admin/v1/skills/remote`, install via POST) and engine tools (`skill_install`, `skill_list_remote`, `skill_search`) were removed. Use the `learn` skill instead.
+- Single-chat model: the primary chat session is `miri:agent:main` (aliased to `default`).

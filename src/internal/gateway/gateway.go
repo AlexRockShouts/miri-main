@@ -11,6 +11,8 @@ import (
 	"miri-main/src/internal/engine"
 	"miri-main/src/internal/session"
 	"miri-main/src/internal/storage"
+	"miri-main/src/internal/tasks"
+	"strings"
 )
 
 type Gateway struct {
@@ -42,10 +44,38 @@ func New(cfg *config.Config, st *storage.Storage) *Gateway {
 		gw.SubAgents[i].Parent = gw.PrimaryAgent
 	}
 
-	gw.cronMgr = cron.NewCronManager(gw.Storage, func(sessionID, prompt string) (string, error) {
-		return gw.PrimaryAgent.DelegatePrompt(sessionID, prompt)
+	gw.cronMgr = cron.NewCronManager(gw.Storage, func(ctx context.Context, sessionID, prompt string, opts engine.Options) (string, error) {
+		return gw.PrimaryAgent.DelegatePromptWithOptions(ctx, sessionID, prompt, opts)
+	}, func(t *tasks.Task, response string) {
+		// Report to session (WS chat clients)
+		if t.ReportSession != "" {
+			// In our current architecture, the WS is handled by the server.
+			// The server would need to be informed of this.
+			// However, since we added the message to the session via DelegatePrompt,
+			// the next time the WS client polls or if they are connected,
+			// they might see it if we had a notification system.
+			// For now, let's just log it and rely on channel reporting.
+			slog.Info("reporting task result to session", "task_id", t.ID, "session_id", t.ReportSession)
+		}
+
+		// Report to active channels
+		for _, target := range t.ReportChannels {
+			parts := strings.SplitN(target, ":", 2)
+			if len(parts) != 2 {
+				continue
+			}
+			channel, device := parts[0], parts[1]
+			if err := gw.ChannelSend(channel, device, response); err != nil {
+				slog.Error("failed to report task result to channel", "task_id", t.ID, "channel", channel, "device", device, "error", err)
+			}
+		}
 	})
 	gw.cronMgr.Start()
+
+	gw.PrimaryAgent.SetTaskGateway(gw)
+	for _, sub := range gw.SubAgents {
+		sub.SetTaskGateway(gw)
+	}
 
 	if gw.Config.Channels.Whatsapp.Enabled {
 		ch := channels.NewWhatsapp(gw.Config.StorageDir, gw.Config.Channels.Whatsapp.Allowlist, gw.Config.Channels.Whatsapp.Blocklist)
@@ -71,7 +101,7 @@ func New(cfg *config.Config, st *storage.Storage) *Gateway {
 
 	if w, ok := gw.Channels["whatsapp"].(*channels.Whatsapp); ok {
 		w.SetMessageHandler(func(device, msg string) {
-			sessionID := gw.CreateNewSession(device)
+			sessionID := "default"
 			resp, err := gw.PrimaryAgent.DelegatePrompt(sessionID, msg)
 			if err != nil {
 				slog.Error("failed to handle incoming whatsapp msg", "device", device, "error", err)
@@ -87,7 +117,7 @@ func New(cfg *config.Config, st *storage.Storage) *Gateway {
 	if i, ok := gw.Channels["irc"].(*channels.IRC); ok {
 		i.SetMessageHandler(func(target, msg string) {
 			// For IRC, we use the target (channel or nick) as the session ID prefix or client ID
-			sessionID := gw.CreateNewSession("irc:" + target)
+			sessionID := "default"
 			resp, err := gw.PrimaryAgent.DelegatePrompt(sessionID, msg)
 			if err != nil {
 				slog.Error("failed to handle incoming irc msg", "target", target, "error", err)
@@ -146,8 +176,8 @@ func (gw *Gateway) ChannelChat(channel, device, prompt string) (string, error) {
 	return resp, nil
 }
 
-func (gw *Gateway) CreateNewSession(clientID string) string {
-	return gw.SessionMgr.CreateNewSession(clientID)
+func (gw *Gateway) CreateNewSession() string {
+	return gw.SessionMgr.CreateNewSession()
 }
 
 func (gw *Gateway) ListSessions() []string {
@@ -162,9 +192,11 @@ func (gw *Gateway) UpdateConfig(newCfg *config.Config) {
 	gw.Config = newCfg
 	gw.PrimaryAgent.Config = newCfg
 	gw.PrimaryAgent.InitEngine()
+	gw.PrimaryAgent.SetTaskGateway(gw)
 	for _, sub := range gw.SubAgents {
 		sub.Config = newCfg
 		sub.InitEngine()
+		sub.SetTaskGateway(gw)
 	}
 }
 
@@ -190,6 +222,10 @@ func (gw *Gateway) ListSkills() []any {
 	return gw.PrimaryAgent.ListSkills()
 }
 
+func (gw *Gateway) ListSkillCommands(ctx context.Context) ([]engine.SkillCommand, error) {
+	return gw.PrimaryAgent.ListSkillCommands(ctx)
+}
+
 func (gw *Gateway) ListRemoteSkills(ctx context.Context) (any, error) {
 	return gw.PrimaryAgent.ListRemoteSkills(ctx)
 }
@@ -200,4 +236,31 @@ func (gw *Gateway) InstallSkill(ctx context.Context, name string) (string, error
 
 func (gw *Gateway) RemoveSkill(name string) error {
 	return gw.PrimaryAgent.RemoveSkill(name)
+}
+
+func (gw *Gateway) GetSkill(name string) (any, error) {
+	return gw.PrimaryAgent.GetSkill(name)
+}
+
+func (gw *Gateway) AddTask(t *tasks.Task) error {
+	if err := gw.Storage.SaveTask(t); err != nil {
+		return err
+	}
+	return gw.cronMgr.AddTask(t)
+}
+
+func (gw *Gateway) DeleteTask(id string) error {
+	if err := gw.Storage.DeleteTask(id); err != nil {
+		return err
+	}
+	gw.cronMgr.RemoveTask(id)
+	return nil
+}
+
+func (gw *Gateway) ListTasks() ([]*tasks.Task, error) {
+	return gw.Storage.ListTasks()
+}
+
+func (gw *Gateway) GetTask(id string) (*tasks.Task, error) {
+	return gw.Storage.LoadTask(id)
 }
