@@ -63,9 +63,10 @@ flowchart TD
   - `TaskManagerTool`: Allows the agent to schedule recurring tasks (with cron expressions) that run prompts and report results to sessions or channels.
   - `GET /api/admin/v1/tasks`: List all scheduled tasks via admin API.
 - **Skills System**: 
-  - Supports directory-based skills (with `SKILL.md`) and single-file markdown skills (`.md`) in `~/.miri/skills/`.
-  - **Learn Skill**: Integration with [agentskill.sh](https://agentskill.sh) for dynamic discovery and installation of skills.
-  - **Auto-Activation**: Core skills like `learn` and `skill_creator` are automatically activated in the default session.
+  - Supports directory-based skills (with `SKILL.md`) and single-file Markdown skills (`.md`) in `~/.miri/skills/`.
+  - **Learn Skill**: Integration with [agentskill.sh](https://agentskill.sh) for dynamic discovery and installation.
+  - **Auto-Activation**: Core skills (`learn`, `skill_creator`) are automatically activated in the default session.
+  - **Script Inference**: Automatically converts `.sh`, `.py`, and `.js` scripts into agent tools.
 - **Sandboxed File-system**: All tool-initiated file operations (e.g., `execute_command`) are automatically redirected to the `~/.miri/generated` directory for safety and organization. The `FileManagerTool` and file download API are strictly restricted to this folder.
 
 ## Prerequisites
@@ -237,9 +238,17 @@ Response includes xAI completion (soul + human context prepended).
 Miri supports dynamic extension through **Skills** and **Script Inference**.
 
 ### 1. Skills System
-Skills are stored in `~/.miri/skills/` (or your configured storage dir). Each skill is a folder containing a `SKILL.md` file.
 
-**SKILL.md Format:**
+Skills are the primary way to extend Miri's intelligence and toolset. They are stored in `~/.miri/skills/` (or your configured storage dir).
+
+#### Skill Formats
+Miri supports two skill layouts:
+- **Directory-based**: A folder containing a `SKILL.md` file (e.g., `~/.miri/skills/my-skill/SKILL.md`). This layout can also include a `scripts/` subdirectory for executable tools.
+- **Single-file**: A plain Markdown file (e.g., `~/.miri/skills/my-skill.md`).
+
+#### `SKILL.md` / `.md` Format
+Both formats use YAML frontmatter for metadata:
+
 ```markdown
 ---
 name: Web Analysis
@@ -251,22 +260,41 @@ tags: [web, scraper, analysis]
 When performing web analysis, always follow these steps...
 ```
 
-**Skill Tools:**
-- `skill_search`: Find local skills. Supports wildcards like `*test*`.
-- `skill_list_remote`: Discover skills on [agentskill.sh](https://agentskill.sh). Supports search queries and wildcards.
-- `skill_install`: Download and install a skill locally. Features automatic fallback to GitHub if the primary repository is unavailable.
-- `skill_use`: Activates a skill by injecting its full content into the agent's context.
-- `skill_remove`: Uninstall a local skill.
+- **Name Matching**: If `name` is omitted from frontmatter, Miri uses the directory name or filename (without extension).
+- **Dual Indexing**: Skills are indexed by both their frontmatter name and their filesystem name.
+- **Normalization**: Miri automatically handles variations between hyphens and underscores (e.g., `frontend_design` matches `frontend-design`) and is case-insensitive.
+
+#### Core Skills & Auto-Activation
+On startup, Miri bootstraps core skills from its `templates/skills/` directory:
+- **`learn`**: The primary skill for discovering and installing new capabilities from [agentskill.sh](https://agentskill.sh).
+- **`skill_creator`**: Helps the agent design and write new skills for itself.
+
+These core skills are **automatically activated** in the `default` chat session, meaning the agent is aware of them from the very first prompt.
+
+#### Skill Tools
+- `skill_use`: Manually activates a skill by injecting its full content into the current session's context.
+- `skill_remove`: Uninstalls and deletes a local skill.
 - `grokipedia`: Direct fact lookup and summary from Grokipedia.com.
 
-**Name Matching:** Skill tools automatically handle variations between hyphens and underscores (e.g., `frontend_design` matches `frontend-design`).
-
 ### 2. Script Inference
-Any script placed in the root `/scripts/` directory is automatically registered as a tool.
-- Supported extensions: `.sh`, `.py`, `.js`.
-- The tool name is derived from the filename (e.g., `hello.sh` becomes tool `hello`).
-- Scripts receive arguments as positional parameters.
-- Output (stdout/stderr) is returned to the agent.
+
+Miri can automatically turn scripts into agent tools.
+- **Global Scripts**: Any script in the root `scripts/` directory of the storage folder.
+- **Skill Scripts**: Scripts located in a skill's `scripts/` subdirectory (e.g., `~/.miri/skills/my-skill/scripts/`).
+
+**Details:**
+- **Supported Extensions**: `.sh`, `.py`, `.js`.
+- **Naming**: The tool name is derived from the filename (e.g., `process_data.py` becomes tool `process_data`).
+- **Sandboxing**: Scripts are executed with their working directory set to `~/.miri/generated/`.
+- **Arguments**: Scripts receive arguments as positional parameters. Output (stdout/stderr) is returned to the agent.
+
+### 3. Admin API for Skills
+
+Manage and inspect skills via the Admin API (Basic Auth):
+- `GET /api/admin/v1/skills`: List all installed skills with their metadata.
+- `GET /api/admin/v1/skills/{name}`: Retrieve the full details and content of a specific skill.
+- `GET /api/admin/v1/skills/commands`: List all available agent commands (tools), including inferred scripts.
+- `GET /api/admin/v1/sessions/{id}/skills`: See which skills are currently "loaded" in a specific session's context.
 
 ## TypeScript SDK
 
@@ -583,17 +611,17 @@ ws.onopen = () => ws.send(JSON.stringify({ prompt: "hello", stream: true }));
 
 ## Skills (Updated)
 
-- Runtime skills live in `~/.miri/skills/<name>/SKILL.md`.
+- Runtime skills live in `~/.miri/skills/`. Miri supports both directory-based skills (with `SKILL.md`) and single-file Markdown skills (`.md`).
 - On startup, template skills from `templates/skills/` are copied to `~/.miri/skills` if missing (e.g., `learn`, `skill_creator`).
-- The default chat session auto-activates the `learn` and `skill_creator` skills in context.
-- Discovery/installation flows are handled by the `learn` skill. Legacy endpoints and engine tools for remote search/install were removed.
-  - Keep: `skill_use`, `skill_remove`.
+- The `default` chat session auto-activates core skills (`learn`, `skill_creator`) in context.
+- Discovery and installation are handled exclusively by the `learn` skill. Legacy endpoints and manual installation tools have been removed.
+- **Dynamic Activation**: Newly installed skills can be used immediately in the current session via `skill_use`.
 
-Admin inspection endpoints:
-- `GET /api/admin/v1/skills` — list installed skills (name, description, version, tags)
-- `GET /api/admin/v1/skills/{name}` — get full details of a skill
-- `GET /api/admin/v1/skills/commands` — list all available agent commands (tools)
-- `GET /api/admin/v1/sessions/{id}/skills` — list skills loaded in a session (the main session id is `default`)
+Admin inspection endpoints (Basic Auth):
+- `GET /api/admin/v1/skills` — List installed skills (name, description, version, tags).
+- `GET /api/admin/v1/skills/{name}` — Get full details and content of a skill.
+- `GET /api/admin/v1/skills/commands` — List all available agent commands (including inferred scripts).
+- `GET /api/admin/v1/sessions/{id}/skills` — List skills currently loaded in a session (default session ID: `default`).
 
 
 ## Recurring Tasks
