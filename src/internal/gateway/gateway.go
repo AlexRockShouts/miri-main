@@ -165,6 +165,13 @@ func (gw *Gateway) ChannelSend(channel, device, msg string) error {
 	return fmt.Errorf("channel %q not found", channel)
 }
 
+func (gw *Gateway) ChannelSendFile(channel, device, filePath, caption string) error {
+	if ch, ok := gw.Channels[channel]; ok {
+		return ch.SendFile(context.Background(), device, filePath, caption)
+	}
+	return fmt.Errorf("channel %q not found", channel)
+}
+
 func (gw *Gateway) ChannelChat(channel, device, prompt string) (string, error) {
 	resp, err := gw.PrimaryAgent.DelegatePrompt(device, prompt)
 	if err != nil {

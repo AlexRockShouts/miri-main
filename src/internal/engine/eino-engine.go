@@ -156,10 +156,10 @@ func NewEinoEngine(cfg *config.Config, st *storage.Storage, providerName, modelN
 	searchTool := &tools.SearchToolWrapper{}
 	fetchTool := &tools.FetchToolWrapper{}
 	grokipediaTool := &tools.GrokipediaToolWrapper{}
-	cmdTool := tools.NewCmdTool(cfg.StorageDir)
-	goInstallTool := tools.NewGoInstallTool(cfg.StorageDir)
-	curlInstallTool := tools.NewCurlInstallTool(cfg.StorageDir)
+	genDir := filepath.Join(cfg.StorageDir, "generated")
+	cmdTool := tools.NewCmdTool(genDir)
 	saveFactTool := tools.NewSaveFactTool(st)
+	fileManagerTool := tools.NewFileManagerTool(cfg.StorageDir, nil) // Will be properly set if gateway is available
 
 	cpStore, err := NewFileCheckPointStore(cfg.StorageDir)
 	if err != nil {
@@ -198,7 +198,7 @@ func NewEinoEngine(cfg *config.Config, st *storage.Storage, providerName, modelN
 	// Our graphInput HAS the SessionID.
 
 	// Update tools node with all tools
-	allTools := []tool.BaseTool{searchTool, fetchTool, grokipediaTool, cmdTool, goInstallTool, curlInstallTool, skillRemoveTool, skillUseTool, saveFactTool}
+	allTools := []tool.BaseTool{searchTool, fetchTool, grokipediaTool, cmdTool, skillRemoveTool, skillUseTool, saveFactTool, fileManagerTool}
 	allTools = append(allTools, ee.skillLoader.GetExtraTools()...)
 
 	toolsNode, err := compose.NewToolNode(context.Background(), &compose.ToolsNodeConfig{
@@ -214,11 +214,10 @@ func NewEinoEngine(cfg *config.Config, st *storage.Storage, providerName, modelN
 		searchTool.GetInfo(),
 		fetchTool.GetInfo(),
 		cmdTool.GetInfo(),
-		goInstallTool.GetInfo(),
-		curlInstallTool.GetInfo(),
 		skillRemoveTool.GetInfo(),
 		grokipediaTool.GetInfo(),
 		saveFactTool.GetInfo(),
+		fileManagerTool.GetInfo(),
 	}
 
 	if info, err := skillUseTool.Info(context.Background()); err == nil {
@@ -409,6 +408,15 @@ func (e *EinoEngine) agentInvoke(ctx context.Context, input *graphInput) (*graph
 				if tc.Function.Name == "task_manager" {
 					slog.Info("Executing task_manager tool", "session_id", input.SessionID)
 					res, err := taskMgrTool.InvokableRun(ctx, tc.Function.Arguments)
+					if err != nil {
+						toolMsgs = append(toolMsgs, schema.ToolMessage(fmt.Sprintf("Error: %v", err), tc.ID))
+					} else {
+						toolMsgs = append(toolMsgs, schema.ToolMessage(res, tc.ID))
+					}
+				} else if tc.Function.Name == "file_manager" {
+					slog.Info("Executing file_manager tool")
+					fileMgrTool := tools.NewFileManagerTool(e.storageBaseDir, e.taskGateway)
+					res, err := fileMgrTool.InvokableRun(ctx, tc.Function.Arguments)
 					if err != nil {
 						toolMsgs = append(toolMsgs, schema.ToolMessage(fmt.Sprintf("Error: %v", err), tc.ID))
 					} else {
@@ -667,15 +675,14 @@ func (e *EinoEngine) ListSkillCommands(ctx context.Context) ([]SkillCommand, err
 	fetchTool := &tools.FetchToolWrapper{}
 	grokipediaTool := &tools.GrokipediaToolWrapper{}
 	cmdTool := tools.NewCmdTool(e.storageBaseDir)
-	goInstallTool := tools.NewGoInstallTool(e.storageBaseDir)
-	curlInstallTool := tools.NewCurlInstallTool(e.storageBaseDir)
 	saveFactTool := tools.NewSaveFactTool(e.storage)
 	skillRemoveTool := tools.NewSkillRemoveTool(&config.Config{StorageDir: e.storageBaseDir}, nil)
 	taskMgrTool := tools.NewTaskManagerTool(nil, "")
+	fileManagerTool := tools.NewFileManagerTool(e.storageBaseDir, nil)
 
 	allBase := []tool.BaseTool{
-		searchTool, fetchTool, grokipediaTool, cmdTool, goInstallTool,
-		curlInstallTool, saveFactTool, skillRemoveTool, taskMgrTool,
+		searchTool, fetchTool, grokipediaTool, cmdTool,
+		saveFactTool, skillRemoveTool, taskMgrTool, fileManagerTool,
 	}
 
 	var res []SkillCommand

@@ -18,6 +18,7 @@ import (
 	"go.mau.fi/whatsmeow/types"
 	"go.mau.fi/whatsmeow/types/events"
 	"google.golang.org/protobuf/proto"
+	"net/http"
 	"slices"
 )
 
@@ -217,6 +218,50 @@ func (w *Whatsapp) Send(ctx context.Context, deviceID string, msg string) error 
 	_, err = w.client.SendMessage(ctx, jid, &waProto.Message{
 		Conversation: proto.String(msg),
 	})
+	return err
+}
+
+func (w *Whatsapp) SendFile(ctx context.Context, deviceJID string, filePath string, caption string) error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.client == nil {
+		return fmt.Errorf("client not initialized")
+	}
+
+	jid, err := types.ParseJID(deviceJID)
+	if err != nil {
+		return fmt.Errorf("invalid JID %s: %w", deviceJID, err)
+	}
+
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return fmt.Errorf("failed to read file %s: %w", filePath, err)
+	}
+
+	// Upload the media to WhatsApp servers
+	resp, err := w.client.Upload(ctx, data, whatsmeow.MediaDocument)
+	if err != nil {
+		return fmt.Errorf("failed to upload media: %w", err)
+	}
+
+	fileName := filepath.Base(filePath)
+
+	msg := &waProto.Message{
+		DocumentMessage: &waProto.DocumentMessage{
+			URL:           proto.String(resp.URL),
+			DirectPath:    proto.String(resp.DirectPath),
+			MediaKey:      resp.MediaKey,
+			Mimetype:      proto.String(http.DetectContentType(data)),
+			FileLength:    proto.Uint64(uint64(len(data))),
+			FileSHA256:    resp.FileSHA256,
+			FileEncSHA256: resp.FileEncSHA256,
+			Title:         proto.String(fileName),
+			FileName:      proto.String(fileName),
+			Caption:       proto.String(caption),
+		},
+	}
+
+	_, err = w.client.SendMessage(ctx, jid, msg)
 	return err
 }
 

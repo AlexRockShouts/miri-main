@@ -44,6 +44,12 @@ func New(baseDir string) (*Storage, error) {
 			return nil, err
 		}
 	}
+	genDir := filepath.Join(baseDir, "generated")
+	if _, err := os.Stat(genDir); os.IsNotExist(err) {
+		if err := os.MkdirAll(genDir, 0755); err != nil {
+			return nil, err
+		}
+	}
 	return &Storage{baseDir: baseDir}, nil
 }
 

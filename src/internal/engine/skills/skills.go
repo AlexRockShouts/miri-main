@@ -88,6 +88,11 @@ func (l *SkillLoader) loadSkills() error {
 			}
 			if skill != nil {
 				l.skills[skill.Name] = skill
+				// Also index by directory name
+				dirName := filepath.Base(path)
+				if dirName != skill.Name {
+					l.skills[dirName] = skill
+				}
 				slog.Info("Loaded skill from directory", "name", skill.Name, "version", skill.Version)
 			}
 			return filepath.SkipDir // Don't descend into skill subdirectories
@@ -100,11 +105,51 @@ func (l *SkillLoader) loadSkills() error {
 			}
 			if skill != nil {
 				l.skills[skill.Name] = skill
+				// Also index by filename
+				fileName := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
+				if fileName != skill.Name {
+					l.skills[fileName] = skill
+				}
 				slog.Info("Loaded skill from file", "name", skill.Name, "version", skill.Version)
 			}
 		}
 		return nil
 	})
+}
+
+func parseFrontmatter(content string) (string, string, error) {
+	lines := strings.Split(content, "\n")
+	var first, second int
+	first = -1
+	second = -1
+
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "---" {
+			// Ensure it's not part of a comment block
+			if strings.HasPrefix(line, "#") {
+				continue
+			}
+			if first == -1 {
+				first = i
+			} else {
+				second = i
+				break
+			}
+		}
+	}
+
+	if first == -1 {
+		return "", "", fmt.Errorf("missing frontmatter (no '---')")
+	}
+	if second == -1 {
+		return "", "", fmt.Errorf("incomplete frontmatter (missing closing '---')")
+	}
+
+	yamlPart := strings.Join(lines[first+1:second], "\n")
+	bodyPart := strings.Join(lines[second+1:], "\n")
+
+	return yamlPart, bodyPart, nil
 }
 
 func (l *SkillLoader) parseSkillFile(filePath string) (*Skill, error) {
@@ -113,14 +158,13 @@ func (l *SkillLoader) parseSkillFile(filePath string) (*Skill, error) {
 		return nil, err
 	}
 
-	// Simple YAML frontmatter parser
-	parts := strings.SplitN(string(content), "---", 3)
-	if len(parts) < 3 {
-		return nil, fmt.Errorf("invalid skill format: missing frontmatter in %s", filePath)
+	yamlPart, bodyPart, err := parseFrontmatter(string(content))
+	if err != nil {
+		return nil, fmt.Errorf("invalid skill format in %s: %w", filePath, err)
 	}
 
 	var skill Skill
-	if err := yaml.Unmarshal([]byte(parts[1]), &skill); err != nil {
+	if err := yaml.Unmarshal([]byte(yamlPart), &skill); err != nil {
 		return nil, fmt.Errorf("failed to parse frontmatter: %w", err)
 	}
 
@@ -128,7 +172,7 @@ func (l *SkillLoader) parseSkillFile(filePath string) (*Skill, error) {
 		skill.Name = strings.TrimSuffix(filepath.Base(filePath), filepath.Ext(filePath))
 	}
 	skill.Directory = filepath.Dir(filePath)
-	skill.FullContent = strings.TrimSpace(parts[2])
+	skill.FullContent = strings.TrimSpace(bodyPart)
 
 	return &skill, nil
 }
@@ -140,14 +184,13 @@ func (l *SkillLoader) parseSkillDir(dir string) (*Skill, error) {
 		return nil, nil // Not a skill directory
 	}
 
-	// Simple YAML frontmatter parser
-	parts := strings.SplitN(string(content), "---", 3)
-	if len(parts) < 3 {
-		return nil, fmt.Errorf("invalid skill format: missing frontmatter in %s", skillFile)
+	yamlPart, bodyPart, err := parseFrontmatter(string(content))
+	if err != nil {
+		return nil, fmt.Errorf("invalid skill format in %s: %w", skillFile, err)
 	}
 
 	var skill Skill
-	if err := yaml.Unmarshal([]byte(parts[1]), &skill); err != nil {
+	if err := yaml.Unmarshal([]byte(yamlPart), &skill); err != nil {
 		return nil, fmt.Errorf("failed to parse frontmatter: %w", err)
 	}
 
@@ -155,7 +198,7 @@ func (l *SkillLoader) parseSkillDir(dir string) (*Skill, error) {
 		skill.Name = filepath.Base(dir)
 	}
 	skill.Directory = dir
-	skill.FullContent = strings.TrimSpace(parts[2])
+	skill.FullContent = strings.TrimSpace(bodyPart)
 
 	// Automatically reload scripts from the skill directory if they exist
 	scriptsDir := filepath.Join(dir, "scripts")
@@ -252,7 +295,7 @@ func (l *SkillLoader) inferTool(path string) tool.BaseTool {
 	return &scriptTool{
 		name:       name,
 		path:       path,
-		storageDir: l.SkillsDir, // or l.StorageDir if we add it
+		storageDir: filepath.Join(l.SkillsDir, "..", "generated"),
 	}
 }
 

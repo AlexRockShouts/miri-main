@@ -85,6 +85,7 @@ func (s *Server) setupRoutesRest() {
 		v1.POST("/prompt", s.handlePrompt)
 		v1.GET("/prompt/stream", s.handlePromptStream)
 		v1.POST("/interaction", s.handleInteraction)
+		v1.GET("/files/*filepath", s.handleGetFile)
 	}
 }
 

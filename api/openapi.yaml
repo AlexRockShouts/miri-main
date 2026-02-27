@@ -349,6 +349,30 @@ paths:
         '101':
           description: WebSocket upgrade
 
+  /api/v1/files/{filepath}:
+    get:
+      summary: Download a file from the local storage
+      security:
+        - ServerKey: []
+      parameters:
+        - name: filepath
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The file content
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '404':
+          description: File not found
+        '403':
+          description: Access denied
+
   # --- Admin API (Basic Auth) ---
   /api/admin/v1/health:
     get:

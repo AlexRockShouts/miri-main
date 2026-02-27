@@ -29,7 +29,7 @@ flowchart TD
   EN --> CR[CronManager]
 
   SL --> SK["Skills (~/.miri/skills)"]
-  TL --> FS[("Sandboxed FS: ~/.miri")]
+  TL --> FS[("Sandboxed FS: ~/.miri/generated")]
 
   GW --> ST[("Storage ~/.miri")]
   EN --> ST
@@ -46,6 +46,10 @@ flowchart TD
   - `compact`: Summarizes older history into structured JSON when context is nearly full (~88%).
   - `agent`: Executes the ReAct loop with real-time tool calls and reasoning.
 - **Grokipedia**: Built-in tool for looking up facts and summaries from [Grokipedia.com](https://grokipedia.com) directly.
+- **File Management**:
+  - `FileManagerTool`: Allows the agent to list and share files from the local storage.
+  - `GET /api/v1/files/*filepath`: Direct download access to files generated or managed by the agent (e.g., movies, documents).
+  - **Channel Media Support**: WhatsApp and IRC channels now support sending files directly or via download links.
 - **Checkpointing**: Eino-native graph persistence using `FileCheckPointStore` ensures long-running tasks can resume from the last successful tool execution.
 - **Long-term Memory**: Durable storage in `memory.md`, `user.md`, and `facts.json` (NDJSON) with automated early-flush compaction. Content from `memory.md` is automatically read and injected into new sessions and reasoning loops to provide long-term context.
 - **System Awareness**: Automatically provides the LLM with system context (OS, Architecture, Go version) for more efficient command execution.
@@ -62,7 +66,7 @@ flowchart TD
   - Supports directory-based skills (with `SKILL.md`) and single-file markdown skills (`.md`) in `~/.miri/skills/`.
   - **Learn Skill**: Integration with [agentskill.sh](https://agentskill.sh) for dynamic discovery and installation of skills.
   - **Auto-Activation**: Core skills like `learn` and `skill_creator` are automatically activated in the default session.
-- **Sandboxed File-system**: All tool-initiated file operations (e.g., `execute_command`, `curl_install`) are automatically redirected to the `~/.miri` directory for safety and organization.
+- **Sandboxed File-system**: All tool-initiated file operations (e.g., `execute_command`) are automatically redirected to the `~/.miri/generated` directory for safety and organization. The `FileManagerTool` and file download API are strictly restricted to this folder.
 
 ## Prerequisites
 
@@ -481,28 +485,28 @@ flowchart TD
     SDK[TypeScript SDK]
   end
 
-  UI -->|HTTP / WS| REST[HTTP Server (Gin)]
+  UI -->|"HTTP / WS"| REST["HTTP Server (Gin)"]
   SDK -->|HTTP| REST
 
-  REST -->|/api/v1, /ws| GW[Gateway]
+  REST -->|"/api/v1, /ws"| GW[Gateway]
   REST -->|/api/admin/v1| GW
 
   GW --> AG[Agent]
-  GW --> CH[Channels (WhatsApp, IRC)]
+  GW --> CH["Channels (WhatsApp, IRC)"]
   CH -->|incoming/outgoing| GW
 
-  AG --> EN[Engine (Eino Graph)]
+  AG --> EN["Engine (Eino Graph)"]
   EN --> TL[Tools]
   EN --> SL[SkillLoader]
   EN --> CR[CronManager]
 
-  SL --> SK[Skills (~/.miri/skills)]
-  TL --> FS[(Sandboxed FS: ~/.miri)]
+  SL --> SK["Skills (~/.miri/skills)"]
+  TL --> FS[("Sandboxed FS: ~/.miri/generated")]
 
-  GW --> ST[(Storage ~/.miri)]
+  GW --> ST[("Storage ~/.miri")]
   EN --> ST
   CR --> ST
-  CR -.runs tasks-> AG
+  CR -.->|runs tasks| AG
 ```
 
 ### Key Components
@@ -510,7 +514,7 @@ flowchart TD
 - Gateway: Orchestrates the primary Agent, channels, cron tasks, and storage.
 - Agent: Wraps the Engine and session manager.
 - Engine (Eino): ReAct loop with tools; graph nodes for retrieval, flush, compact, and agent.
-- Tools: `web_search`, `grokipedia`, `execute_command`, `go_install`, `curl_install`, `save_fact`, `skill_use`, `skill_remove`, `task_manager`.
+- Tools: `web_search`, `grokipedia`, `execute_command`, `save_fact`, `skill_use`, `skill_remove`, `task_manager`.
 - SkillLoader: Loads skills from `~/.miri/skills/**/SKILL.md` and infers tools from `scripts/`.
 - CronManager: Runs recurring tasks created via the `task_manager` tool; tasks stored in `~/.miri/tasks`.
 - Storage: Persists `soul.txt`, `memory.md`, `facts.json`, `human_info/`, skills, tasks, PID, etc.
@@ -605,7 +609,7 @@ Admin read-only API:
 
 ## File-system Redirection for Tools (Sandboxing)
 
-All tool-initiated file operations (e.g., `execute_command`, `curl_install`, `go_install`, and skill scripts) run with their working directory set to the configured storage directory (`~/.miri` by default). This keeps artifacts contained and improves portability and safety.
+All tool-initiated file operations (e.g., `execute_command` and skill scripts) run with their working directory set to the designated generated directory (`~/.miri/generated` by default). This keeps artifacts contained and improves portability and safety. The `FileManagerTool` and file download API are strictly restricted to this folder.
 
 
 ## TypeScript SDK (Notes)

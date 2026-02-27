@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"miri-main/src/internal/config"
+	"path/filepath"
 	"strings"
 	"sync"
 
@@ -114,6 +115,14 @@ func (i *IRC) ListDevices(ctx context.Context) ([]string, error) {
 func (i *IRC) Send(ctx context.Context, target string, msg string) error {
 	i.client.Cmd.Message(target, msg)
 	return nil
+}
+
+func (i *IRC) SendFile(ctx context.Context, target string, filePath string, caption string) error {
+	// IRC doesn't support direct file uploads like WhatsApp.
+	// We can only send the caption and perhaps a note that the file is available at a URL.
+	// Since we don't have a public URL for the file yet, we'll just send the caption and filename.
+	msg := fmt.Sprintf("%s (File: %s)", caption, filepath.Base(filePath))
+	return i.Send(ctx, target, msg)
 }
 
 func (i *IRC) SetMessageHandler(handler func(target string, message string)) {

@@ -7,6 +7,8 @@ import (
 	"miri-main/src/internal/gateway"
 	"miri-main/src/internal/storage"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -363,4 +365,46 @@ func (s *Server) handleChannels(c *gin.Context) {
 	default:
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid action"})
 	}
+}
+
+func (s *Server) handleGetFile(c *gin.Context) {
+	gw := c.MustGet("gateway").(*gateway.Gateway)
+	storageDir := gw.Config.StorageDir
+
+	// Ensure the storage path is absolute and clean
+	if strings.HasPrefix(storageDir, "~") {
+		home, _ := os.UserHomeDir()
+		storageDir = filepath.Join(home, storageDir[1:])
+	}
+
+	// Strictly limit access to the 'generated' folder
+	genDir := filepath.Join(storageDir, "generated")
+	subPath := c.Param("filepath")
+	// Prepend / and clean to prevent traversal
+	fullPath := filepath.Join(genDir, filepath.Clean("/"+subPath))
+
+	// Security check: ensure the file is within the generated directory
+	absGen, _ := filepath.Abs(genDir)
+	absFile, err := filepath.Abs(fullPath)
+	if err != nil || !strings.HasPrefix(absFile, absGen) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "access denied"})
+		return
+	}
+
+	// Check if file exists and is not a directory
+	info, err := os.Stat(absFile)
+	if err != nil {
+		if os.IsNotExist(err) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "file not found in generated folder"})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
+		return
+	}
+	if info.IsDir() {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "cannot download directory"})
+		return
+	}
+
+	c.File(absFile)
 }
