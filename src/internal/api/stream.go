@@ -5,8 +5,11 @@ import (
 	"log/slog"
 	"miri-main/src/internal/engine"
 	"miri-main/src/internal/gateway"
+	"miri-main/src/internal/session"
 	"net/http"
 	"strings"
+
+	"slices"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
@@ -14,7 +17,6 @@ import (
 
 func (s *Server) handlePromptStream(c *gin.Context) {
 	prompt := c.Query("prompt")
-	sessionID := c.Query("session_id")
 	modelReq := c.Query("model")
 
 	if prompt == "" {
@@ -27,7 +29,7 @@ func (s *Server) handlePromptStream(c *gin.Context) {
 	}
 
 	gw := c.MustGet("gateway").(*gateway.Gateway)
-	stream, err := gw.PrimaryAgent.DelegatePromptStreamWithOptions(c.Request.Context(), sessionID, prompt, opts)
+	stream, err := gw.PrimaryAgent.DelegatePromptStreamWithOptions(c.Request.Context(), session.DefaultSessionID, prompt, opts)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -48,7 +50,6 @@ func (s *Server) handleWebsocket(c *gin.Context) {
 
 	channel := c.Query("channel")
 	device := c.Query("device")
-	sessionID := c.Query("session_id")
 	streamReq := c.Query("stream") == "true"
 
 	if channel != "" && device != "" {
@@ -114,7 +115,7 @@ func (s *Server) handleWebsocket(c *gin.Context) {
 		return
 	}
 
-	sessionID = "default"
+	sessionID := session.DefaultSessionID
 
 	upgrader := websocket.Upgrader{
 		CheckOrigin: func(r *http.Request) bool {
@@ -142,6 +143,22 @@ func (s *Server) handleWebsocket(c *gin.Context) {
 		return
 	}
 	defer ws.Close()
+
+	s.wsMu.Lock()
+	s.wsSessions[sessionID] = append(s.wsSessions[sessionID], ws)
+	s.wsMu.Unlock()
+
+	defer func() {
+		s.wsMu.Lock()
+		defer s.wsMu.Unlock()
+		conns := s.wsSessions[sessionID]
+		s.wsSessions[sessionID] = slices.DeleteFunc(conns, func(c *websocket.Conn) bool {
+			return c == ws
+		})
+		if len(s.wsSessions[sessionID]) == 0 {
+			delete(s.wsSessions, sessionID)
+		}
+	}()
 
 	for {
 		var msg struct {

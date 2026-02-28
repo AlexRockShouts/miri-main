@@ -40,7 +40,9 @@ type Engine interface {
 	RemoveSkill(name string) error
 	GetSkill(name string) (any, error)
 	SetTaskGateway(gw any)
-	FlushAndCompact(ctx context.Context, sess *session.Session, humanContext string) error
+	ClearHistory(sessionID string)
+	CompactMemory(ctx context.Context)
+	Shutdown(ctx context.Context)
 }
 
 type SkillCommand struct {

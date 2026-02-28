@@ -7,6 +7,7 @@ Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
 **storage_dir** | **string** |  | [optional] [default to undefined]
 **server** | [**ConfigServer**](ConfigServer.md) |  | [optional] [default to undefined]
+**miri** | [**MiriSubConfig**](MiriSubConfig.md) |  | [optional] [default to undefined]
 **models** | [**ConfigModels**](ConfigModels.md) |  | [optional] [default to undefined]
 **agents** | [**ConfigAgents**](ConfigAgents.md) |  | [optional] [default to undefined]
 **channels** | [**ConfigChannels**](ConfigChannels.md) |  | [optional] [default to undefined]
@@ -19,6 +20,7 @@ import { Config } from './api';
 const instance: Config = {
     storage_dir,
     server,
+    miri,
     models,
     agents,
     channels,

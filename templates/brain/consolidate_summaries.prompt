@@ -1,0 +1,14 @@
+You are an expert at merging information from multiple summaries.
+Your task is to consolidate a group of related conversation summaries into one comprehensive, well-structured, and concise summary.
+
+Related Summaries:
+{summaries_list}
+
+Rules:
+1. Merge redundant information.
+2. Maintain all key facts, decisions, and outcomes from all summaries.
+3. Organize the final summary logically (chronologically or by topic).
+4. Use clear headings and bullet points.
+5. Maximize the value of the information while minimizing word count.
+
+Consolidated Summary:

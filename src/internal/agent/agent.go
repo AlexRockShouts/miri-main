@@ -94,22 +94,20 @@ func (a *Agent) DelegatePromptWithOptions(ctx context.Context, sessionID string,
 	// Gather system context
 	sysContext := fmt.Sprintf("\nSystem information:\n- %s\n", system.GetInfo())
 
-	if sessionID == "" || sessionID == "agent:miri:main" {
-		sessionID = "default"
+	if sessionID == "" || sessionID == session.DefaultSessionID {
+		sessionID = session.DefaultSessionID
 	}
 	session := a.SessionMgr.GetOrCreate(sessionID)
 
 	// Intercept /new command
 	if strings.TrimSpace(prompt) == "/new" {
 		slog.Info("Session renewal triggered", "session_id", sessionID)
-		if err := a.Eng.FlushAndCompact(ctx, session, humanContext+sysContext); err != nil {
-			slog.Error("Flush and compact failed during renewal", "error", err)
+		if a.Eng != nil {
+			a.Eng.ClearHistory(sessionID)
+			a.Eng.CompactMemory(ctx)
 		}
-		if err := a.SessionMgr.ArchiveSession(session); err != nil {
-			slog.Error("Archive session failed during renewal", "error", err)
-		}
-		session.ClearMessages()
-		return "Session renewed. History compacted, facts saved to memory, and current session cleared.", nil
+		session.Clear()
+		return "Session renewed. Current history cleared.", nil
 	}
 
 	if err := session.SetSoulIfEmpty(a.Storage); err != nil {
@@ -137,9 +135,9 @@ func (a *Agent) DelegatePromptWithOptions(ctx context.Context, sessionID string,
 		return "", err
 	}
 	if usage != nil {
-		session.AddTokens(uint64(usage.PromptTokens + usage.CompletionTokens))
+		session.AddTokens(uint64(usage.PromptTokens), uint64(usage.CompletionTokens), usage.TotalCost)
 	}
-	a.SessionMgr.AddMessage(sessionID, prompt, resp)
+
 	lowerPrompt := strings.ToLower(prompt)
 	if strings.Contains(lowerPrompt, "write to memory") || strings.Contains(lowerPrompt, "save a fact to memory") {
 		if err := a.Storage.AppendToMemory(fmt.Sprintf("Session %s: %s", sessionID, resp)); err != nil {
@@ -167,24 +165,21 @@ func (a *Agent) DelegatePromptStreamWithOptions(ctx context.Context, sessionID s
 	// Gather system context
 	sysContext := fmt.Sprintf("\nSystem information:\n- %s\n", system.GetInfo())
 
-	if sessionID == "" || sessionID == "agent:miri:main" {
-		sessionID = "default"
+	if sessionID == "" || sessionID == session.DefaultSessionID {
+		sessionID = session.DefaultSessionID
 	}
 	session := a.SessionMgr.GetOrCreate(sessionID)
 
 	// Intercept /new command
 	if strings.TrimSpace(prompt) == "/new" {
 		slog.Info("Session renewal triggered (stream)", "session_id", sessionID)
-		if err := a.Eng.FlushAndCompact(ctx, session, humanContext+sysContext); err != nil {
-			slog.Error("Flush and compact failed during renewal (stream)", "error", err)
+		if a.Eng != nil {
+			a.Eng.ClearHistory(sessionID)
 		}
-		if err := a.SessionMgr.ArchiveSession(session); err != nil {
-			slog.Error("Archive session failed during renewal (stream)", "error", err)
-		}
-		session.ClearMessages()
+		session.Clear()
 
 		proxy := make(chan string, 1)
-		proxy <- "Session renewed. History compacted, facts saved to memory, and current session cleared."
+		proxy <- "Session renewed. Current history cleared."
 		close(proxy)
 		return proxy, nil
 	}
@@ -218,7 +213,6 @@ func (a *Agent) DelegatePromptStreamWithOptions(ctx context.Context, sessionID s
 	go func() {
 		defer close(proxy)
 		var fullResp strings.Builder
-		var totalTokens uint64
 		for chunk := range stream {
 			// In our current implementation, we send thoughts in brackets [Thought: ...]
 			// Only chunks NOT in brackets are part of the final response to be persisted.
@@ -226,14 +220,12 @@ func (a *Agent) DelegatePromptStreamWithOptions(ctx context.Context, sessionID s
 			// Our StreamRespond sends thoughts and then the final answer.
 			if strings.HasPrefix(chunk, "[Usage: ") {
 				var p, c, t int
-				_, err := fmt.Sscanf(chunk, "[Usage: %d prompt, %d completion, %d total tokens]", &p, &c, &t)
+				var cost float64
+				_, err := fmt.Sscanf(chunk, "[Usage: %d prompt, %d completion, %d total tokens, %f cost]", &p, &c, &t, &cost)
 				if err == nil {
-					totalTokens = uint64(t)
+					session.AddTokens(uint64(p), uint64(c), cost)
 				}
-				// Don't pass usage chunk to client if you want it to be hidden,
-				// but here we might want to pass it or not. The original code
-				// didn't have it. Let's NOT pass it to keep the interface clean
-				// for the end user if they don't expect it.
+				// Don't pass usage chunk to client if you want it to be hidden
 				continue
 			}
 
@@ -252,10 +244,6 @@ func (a *Agent) DelegatePromptStreamWithOptions(ctx context.Context, sessionID s
 		}
 		resp := fullResp.String()
 		if resp != "" {
-			a.SessionMgr.AddMessage(sessionID, prompt, resp)
-			if totalTokens > 0 {
-				session.AddTokens(totalTokens)
-			}
 			lowerPrompt := strings.ToLower(prompt)
 			if strings.Contains(lowerPrompt, "write to memory") || strings.Contains(lowerPrompt, "save a fact to memory") {
 				if err := a.Storage.AppendToMemory(fmt.Sprintf("Session %s: %s", sessionID, resp)); err != nil {
@@ -290,4 +278,16 @@ func (a *Agent) RemoveSkill(name string) error {
 
 func (a *Agent) GetSkill(name string) (any, error) {
 	return a.Eng.GetSkill(name)
+}
+
+func (a *Agent) Shutdown(ctx context.Context) {
+	if a.Eng != nil {
+		a.Eng.Shutdown(ctx)
+	}
+}
+
+func (a *Agent) CompactMemory(ctx context.Context) {
+	if a.Eng != nil {
+		a.Eng.CompactMemory(ctx)
+	}
 }

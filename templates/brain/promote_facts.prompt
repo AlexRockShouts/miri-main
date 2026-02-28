@@ -1,0 +1,20 @@
+You are an information extraction specialist.
+Analyze the following conversation summary and identify standalone facts, preferences, or technical details that should be elevated to individual, atomic fact entries.
+
+Summary:
+{summary_text}
+
+Rules:
+1. Identify high-value, durable facts (e.g., "The user prefers Go over Rust", "The project root is at /home/user/proj").
+2. Each fact must be concise, specific, and atomic.
+3. Categorize each fact (e.g., user_preference, tech_stack, environment, project_detail).
+4. Assign a confidence score between 0.0 and 1.0.
+5. Output ONLY a JSON array of objects.
+
+Example Output:
+[
+  {"fact": "User prefers Dark Mode", "category": "user_preference", "confidence": 0.95},
+  {"fact": "The project uses Go 1.25", "category": "tech_stack", "confidence": 0.99}
+]
+
+JSON Output:

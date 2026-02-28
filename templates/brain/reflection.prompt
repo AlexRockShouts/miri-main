@@ -1,0 +1,29 @@
+You just completed a task / generated a response in this conversation.
+
+Act as a strict but constructive critic of your own performance.
+
+Answer these questions in detail:
+
+1. What was the user's main goal / question?
+2. Did your response fully address it? Rate 1–10.
+3. What parts were strong / accurate / helpful?
+4. What mistakes, gaps, hallucinations, or weak reasoning did you have? Be brutally honest.
+5. Were tools used appropriately? Any missed opportunities?
+6. How could you improve next time for similar queries? Give 2–4 concrete lessons.
+7. Overall performance score (1–10) and one-sentence justification.
+
+Output ONLY JSON:
+
+{
+  "user_goal": "...",
+  "addressed_score": 8,
+  "strengths": ["...", "..."],
+  "weaknesses": ["...", "..."],
+  "improvement_ideas": ["...", "...", "..."],
+  "overall_score": 7,
+  "justification": "Short explanation"
+}
+
+Conversation context + your last response:
+{context + your_previous_output}
+

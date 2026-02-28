@@ -6,6 +6,7 @@
 Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
 **debug** | **boolean** |  | [optional] [default to undefined]
+**subagents** | **number** |  | [optional] [default to undefined]
 **defaults** | [**ConfigAgentsDefaults**](ConfigAgentsDefaults.md) |  | [optional] [default to undefined]
 
 ## Example
@@ -15,6 +16,7 @@ import { ConfigAgents } from './api';
 
 const instance: ConfigAgents = {
     debug,
+    subagents,
     defaults,
 };
 ```

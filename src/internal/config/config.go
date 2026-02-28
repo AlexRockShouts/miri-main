@@ -15,8 +15,17 @@ type Config struct {
 	Models     ModelsConfig   `mapstructure:"models" json:"models"`
 	Agents     AgentsConfig   `mapstructure:"agents" json:"agents"`
 	Server     ServerConfig   `mapstructure:"server" json:"server"`
+	Miri       MiriConfig     `mapstructure:"miri" json:"miri"`
 	StorageDir string         `mapstructure:"storage_dir" json:"storage_dir"`
 	Channels   ChannelsConfig `mapstructure:"channels" json:"channels"`
+}
+
+type MiriConfig struct {
+	Brain BrainConfig `mapstructure:"brain" json:"brain"`
+}
+
+type BrainConfig struct {
+	Embeddings EmbeddingConfig `mapstructure:"embeddings" json:"embeddings"`
 }
 
 type ModelsConfig struct {
@@ -77,6 +86,18 @@ type ServerConfig struct {
 	AdminPass     string `mapstructure:"admin_pass" json:"admin_pass"`
 	EffectiveHost string `mapstructure:"-" json:"effectiveHost"`
 	Port          int    `mapstructure:"-" json:"port"`
+}
+
+type EmbeddingConfig struct {
+	UseNativeEmbeddings bool                 `mapstructure:"use_native_embeddings" json:"use_native_embeddings"`
+	Model               EmbeddingModelConfig `mapstructure:"model" json:"model"`
+}
+
+type EmbeddingModelConfig struct {
+	Type   string `mapstructure:"type" json:"type"`
+	APIKey string `mapstructure:"api_key" json:"api_key"`
+	Model  string `mapstructure:"model" json:"model"`
+	URL    string `mapstructure:"url" json:"url"`
 }
 
 type WhatsappConfig struct {
@@ -196,6 +217,18 @@ func Load(override string) (*Config, error) {
 		cfg.Models.Providers[p] = prov
 	}
 
+	// Expansion for embedding API key
+	embKey := cfg.Miri.Brain.Embeddings.Model.APIKey
+	if strings.HasPrefix(embKey, "$") {
+		varName := strings.TrimPrefix(embKey, "$")
+		if envVal := os.Getenv(varName); envVal != "" {
+			embKey = envVal
+		} else {
+			embKey = ""
+		}
+	}
+	cfg.Miri.Brain.Embeddings.Model.APIKey = embKey
+
 	return &cfg, nil
 }
 
@@ -234,6 +267,9 @@ func Save(cfg *Config) error {
 	viper.Set("server.key", cfg.Server.Key)
 	viper.Set("server.admin_user", cfg.Server.AdminUser)
 	viper.Set("server.admin_pass", cfg.Server.AdminPass)
+	viper.Set("miri.brain.embeddings.model.type", cfg.Miri.Brain.Embeddings.Model.Type)
+	viper.Set("miri.brain.embeddings.model.api_key", cfg.Miri.Brain.Embeddings.Model.APIKey)
+	viper.Set("miri.brain.embeddings.use_native_embeddings", cfg.Miri.Brain.Embeddings.UseNativeEmbeddings)
 	viper.Set("channels.whatsapp.enabled", cfg.Channels.Whatsapp.Enabled)
 	viper.Set("channels.whatsapp.allowlist", cfg.Channels.Whatsapp.Allowlist)
 	viper.Set("channels.whatsapp.blocklist", cfg.Channels.Whatsapp.Blocklist)

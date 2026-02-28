@@ -18,10 +18,10 @@ from quick_validate import validate_skill
 
 def package_skill(skill_path, output_dir=None):
     """
-    Package a skill folder into a zip file.
+    Package a skill (.md file and optional resource folder) into a zip file.
 
     Args:
-        skill_path: Path to the skill folder
+        skill_path: Path to the skill .md file or directory
         output_dir: Optional output directory for the zip file (defaults to current directory)
 
     Returns:
@@ -29,19 +29,9 @@ def package_skill(skill_path, output_dir=None):
     """
     skill_path = Path(skill_path).resolve()
 
-    # Validate skill folder exists
+    # Validate skill path exists
     if not skill_path.exists():
-        print(f"❌ Error: Skill folder not found: {skill_path}")
-        return None
-
-    if not skill_path.is_dir():
-        print(f"❌ Error: Path is not a directory: {skill_path}")
-        return None
-
-    # Validate SKILL.md exists
-    skill_md = skill_path / "SKILL.md"
-    if not skill_md.exists():
-        print(f"❌ Error: SKILL.md not found in {skill_path}")
+        print(f"❌ Error: Skill path not found: {skill_path}")
         return None
 
     # Run validation before packaging
@@ -53,8 +43,24 @@ def package_skill(skill_path, output_dir=None):
         return None
     print(f"✅ {message}\n")
 
+    # Determine files to include
+    to_include = []
+    if skill_path.is_file() and skill_path.suffix == '.md':
+        to_include.append(skill_path)
+        # Check for optional resource directory with the same name
+        skill_name = skill_path.stem
+        resource_dir = skill_path.parent / skill_name
+        if resource_dir.is_dir():
+            to_include.append(resource_dir)
+    elif skill_path.is_dir():
+        # Directory contains everything to include
+        skill_name = skill_path.name
+        to_include.append(skill_path)
+    else:
+        print(f"❌ Error: Invalid skill path: {skill_path}")
+        return None
+
     # Determine output location
-    skill_name = skill_path.name
     if output_dir:
         output_path = Path(output_dir).resolve()
         output_path.mkdir(parents=True, exist_ok=True)
@@ -66,13 +72,18 @@ def package_skill(skill_path, output_dir=None):
     # Create the zip file
     try:
         with zipfile.ZipFile(zip_filename, 'w', zipfile.ZIP_DEFLATED) as zipf:
-            # Walk through the skill directory
-            for file_path in skill_path.rglob('*'):
-                if file_path.is_file():
-                    # Calculate the relative path within the zip
-                    arcname = file_path.relative_to(skill_path.parent)
-                    zipf.write(file_path, arcname)
-                    print(f"  Added: {arcname}")
+            for item in to_include:
+                if item.is_file():
+                    # For flat file, use its name in the zip
+                    zipf.write(item, item.name)
+                else:
+                    # For directory, add all files recursively
+                    for file_path in item.rglob('*'):
+                        if file_path.is_file():
+                            # Path relative to the PARENT of the skill directory/file
+                            arcname = file_path.relative_to(item.parent)
+                            zipf.write(file_path, arcname)
+                            print(f"  Added: {arcname}")
 
         print(f"\n✅ Successfully packaged skill to: {zip_filename}")
         return zip_filename

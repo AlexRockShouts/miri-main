@@ -49,6 +49,13 @@ export interface ApiAdminV1SessionsIdHistoryGet200Response {
     'messages'?: Array<Message>;
     'total_tokens'?: number;
 }
+export interface ApiAdminV1SessionsIdStatsGet200Response {
+    'session_id'?: string;
+    'total_tokens'?: number;
+    'prompt_tokens'?: number;
+    'output_tokens'?: number;
+    'total_cost'?: number;
+}
 export interface ApiV1InteractionPostRequest {
     'action'?: ApiV1InteractionPostRequestActionEnum;
 }
@@ -64,20 +71,24 @@ export interface ApiV1PromptPost200Response {
 }
 export interface ApiV1PromptPostRequest {
     'prompt'?: string;
-    'session_id'?: string;
     'model'?: string;
     'temperature'?: number;
     'max_tokens'?: number;
 }
+export interface BrainConfig {
+    'embeddings'?: EmbeddingConfig;
+}
 export interface Config {
     'storage_dir'?: string;
     'server'?: ConfigServer;
+    'miri'?: MiriSubConfig;
     'models'?: ConfigModels;
     'agents'?: ConfigAgents;
     'channels'?: ConfigChannels;
 }
 export interface ConfigAgents {
     'debug'?: boolean;
+    'subagents'?: number;
     'defaults'?: ConfigAgentsDefaults;
 }
 export interface ConfigAgentsDefaults {
@@ -100,7 +111,10 @@ export interface ConfigChannelsIrc {
     'user'?: string;
     'realname'?: string;
     'channels'?: Array<string>;
+    'password'?: string;
     'nickserv'?: ConfigChannelsIrcNickserv;
+    'allowlist'?: Array<string>;
+    'blocklist'?: Array<string>;
 }
 export interface ConfigChannelsIrcNickserv {
     'enabled'?: boolean;
@@ -121,14 +135,27 @@ export interface ConfigServer {
     'admin_user'?: string;
     'admin_pass'?: string;
 }
+export interface EmbeddingConfig {
+    'use_native_embeddings'?: boolean;
+    'model'?: EmbeddingModelConfig;
+}
+export interface EmbeddingModelConfig {
+    'type'?: string;
+    'api_key'?: string;
+    'model'?: string;
+    'url'?: string;
+}
 export interface HumanInfo {
     'id'?: string;
     'data'?: { [key: string]: string; };
     'notes'?: string;
 }
 export interface Message {
-    'role'?: string;
-    'content'?: string;
+    'prompt'?: string;
+    'response'?: string;
+}
+export interface MiriSubConfig {
+    'brain'?: BrainConfig;
 }
 export interface ModelConfig {
     'id'?: string;
@@ -153,8 +180,11 @@ export interface ProviderConfig {
 }
 export interface Session {
     'id'?: string;
+    'soul'?: string;
     'total_tokens'?: number;
-    'messages'?: Array<Message>;
+    'prompt_tokens'?: number;
+    'output_tokens'?: number;
+    'total_cost'?: number;
 }
 export interface Skill {
     'name'?: string;
@@ -185,6 +215,7 @@ export interface Usage {
     'prompt_tokens'?: number;
     'completion_tokens'?: number;
     'total_tokens'?: number;
+    'total_cost'?: number;
 }
 
 /**
@@ -558,6 +589,44 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
         },
         /**
          * 
+         * @summary Get session token and cost statistics
+         * @param {string} id 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        apiAdminV1SessionsIdStatsGet: async (id: string, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'id' is not null or undefined
+            assertParamExists('apiAdminV1SessionsIdStatsGet', 'id', id)
+            const localVarPath = `/api/admin/v1/sessions/{id}/stats`
+                .replace(`{${"id"}}`, encodeURIComponent(String(id)));
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'GET', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication BasicAuth required
+            // http basic authentication required
+            setBasicAuthToObject(localVarRequestOptions, configuration)
+
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * 
          * @summary List all available agent commands (tools)
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
@@ -887,12 +956,11 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
          * 
          * @summary Stream a prompt response via SSE
          * @param {string} prompt 
-         * @param {string} [sessionId] 
          * @param {string} [model] 
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        apiV1PromptStreamGet: async (prompt: string, sessionId?: string, model?: string, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+        apiV1PromptStreamGet: async (prompt: string, model?: string, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
             // verify required parameter 'prompt' is not null or undefined
             assertParamExists('apiV1PromptStreamGet', 'prompt', prompt)
             const localVarPath = `/api/v1/prompt/stream`;
@@ -914,10 +982,6 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
                 localVarQueryParameter['prompt'] = prompt;
             }
 
-            if (sessionId !== undefined) {
-                localVarQueryParameter['session_id'] = sessionId;
-            }
-
             if (model !== undefined) {
                 localVarQueryParameter['model'] = model;
             }
@@ -934,15 +998,14 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
             };
         },
         /**
-         * 
+         * WebSocket endpoint for real-time interaction and background task notifications. When a background task completes, a message is sent in the following format: ```json {   \"type\": \"task_complete\",   \"task_id\": \"uuid\",   \"task_name\": \"task name\",   \"response\": \"result string\" } ``` 
          * @summary WebSocket for interactive streaming
-         * @param {string} [sessionId] 
          * @param {string} [channel] 
          * @param {string} [device] 
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        wsGet: async (sessionId?: string, channel?: string, device?: string, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+        wsGet: async (channel?: string, device?: string, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
             const localVarPath = `/ws`;
             // use dummy base URL string because the URL constructor only accepts absolute URLs.
             const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
@@ -957,10 +1020,6 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
 
             // authentication ServerKey required
             await setApiKeyToObject(localVarHeaderParameter, "X-Server-Key", configuration)
-
-            if (sessionId !== undefined) {
-                localVarQueryParameter['session_id'] = sessionId;
-            }
 
             if (channel !== undefined) {
                 localVarQueryParameter['channel'] = channel;
@@ -1117,6 +1176,19 @@ export const DefaultApiFp = function(configuration?: Configuration) {
         },
         /**
          * 
+         * @summary Get session token and cost statistics
+         * @param {string} id 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async apiAdminV1SessionsIdStatsGet(id: string, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<ApiAdminV1SessionsIdStatsGet200Response>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.apiAdminV1SessionsIdStatsGet(id, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.apiAdminV1SessionsIdStatsGet']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * 
          * @summary List all available agent commands (tools)
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
@@ -1233,28 +1305,26 @@ export const DefaultApiFp = function(configuration?: Configuration) {
          * 
          * @summary Stream a prompt response via SSE
          * @param {string} prompt 
-         * @param {string} [sessionId] 
          * @param {string} [model] 
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        async apiV1PromptStreamGet(prompt: string, sessionId?: string, model?: string, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<string>> {
-            const localVarAxiosArgs = await localVarAxiosParamCreator.apiV1PromptStreamGet(prompt, sessionId, model, options);
+        async apiV1PromptStreamGet(prompt: string, model?: string, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<string>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.apiV1PromptStreamGet(prompt, model, options);
             const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
             const localVarOperationServerBasePath = operationServerMap['DefaultApi.apiV1PromptStreamGet']?.[localVarOperationServerIndex]?.url;
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
         },
         /**
-         * 
+         * WebSocket endpoint for real-time interaction and background task notifications. When a background task completes, a message is sent in the following format: ```json {   \"type\": \"task_complete\",   \"task_id\": \"uuid\",   \"task_name\": \"task name\",   \"response\": \"result string\" } ``` 
          * @summary WebSocket for interactive streaming
-         * @param {string} [sessionId] 
          * @param {string} [channel] 
          * @param {string} [device] 
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        async wsGet(sessionId?: string, channel?: string, device?: string, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<void>> {
-            const localVarAxiosArgs = await localVarAxiosParamCreator.wsGet(sessionId, channel, device, options);
+        async wsGet(channel?: string, device?: string, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<void>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.wsGet(channel, device, options);
             const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
             const localVarOperationServerBasePath = operationServerMap['DefaultApi.wsGet']?.[localVarOperationServerIndex]?.url;
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
@@ -1366,6 +1436,16 @@ export const DefaultApiFactory = function (configuration?: Configuration, basePa
         },
         /**
          * 
+         * @summary Get session token and cost statistics
+         * @param {string} id 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        apiAdminV1SessionsIdStatsGet(id: string, options?: RawAxiosRequestConfig): AxiosPromise<ApiAdminV1SessionsIdStatsGet200Response> {
+            return localVarFp.apiAdminV1SessionsIdStatsGet(id, options).then((request) => request(axios, basePath));
+        },
+        /**
+         * 
          * @summary List all available agent commands (tools)
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
@@ -1455,25 +1535,23 @@ export const DefaultApiFactory = function (configuration?: Configuration, basePa
          * 
          * @summary Stream a prompt response via SSE
          * @param {string} prompt 
-         * @param {string} [sessionId] 
          * @param {string} [model] 
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        apiV1PromptStreamGet(prompt: string, sessionId?: string, model?: string, options?: RawAxiosRequestConfig): AxiosPromise<string> {
-            return localVarFp.apiV1PromptStreamGet(prompt, sessionId, model, options).then((request) => request(axios, basePath));
+        apiV1PromptStreamGet(prompt: string, model?: string, options?: RawAxiosRequestConfig): AxiosPromise<string> {
+            return localVarFp.apiV1PromptStreamGet(prompt, model, options).then((request) => request(axios, basePath));
         },
         /**
-         * 
+         * WebSocket endpoint for real-time interaction and background task notifications. When a background task completes, a message is sent in the following format: ```json {   \"type\": \"task_complete\",   \"task_id\": \"uuid\",   \"task_name\": \"task name\",   \"response\": \"result string\" } ``` 
          * @summary WebSocket for interactive streaming
-         * @param {string} [sessionId] 
          * @param {string} [channel] 
          * @param {string} [device] 
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        wsGet(sessionId?: string, channel?: string, device?: string, options?: RawAxiosRequestConfig): AxiosPromise<void> {
-            return localVarFp.wsGet(sessionId, channel, device, options).then((request) => request(axios, basePath));
+        wsGet(channel?: string, device?: string, options?: RawAxiosRequestConfig): AxiosPromise<void> {
+            return localVarFp.wsGet(channel, device, options).then((request) => request(axios, basePath));
         },
     };
 };
@@ -1590,6 +1668,17 @@ export class DefaultApi extends BaseAPI {
 
     /**
      * 
+     * @summary Get session token and cost statistics
+     * @param {string} id 
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public apiAdminV1SessionsIdStatsGet(id: string, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).apiAdminV1SessionsIdStatsGet(id, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * 
      * @summary List all available agent commands (tools)
      * @param {*} [options] Override http request option.
      * @throws {RequiredError}
@@ -1688,26 +1777,24 @@ export class DefaultApi extends BaseAPI {
      * 
      * @summary Stream a prompt response via SSE
      * @param {string} prompt 
-     * @param {string} [sessionId] 
      * @param {string} [model] 
      * @param {*} [options] Override http request option.
      * @throws {RequiredError}
      */
-    public apiV1PromptStreamGet(prompt: string, sessionId?: string, model?: string, options?: RawAxiosRequestConfig) {
-        return DefaultApiFp(this.configuration).apiV1PromptStreamGet(prompt, sessionId, model, options).then((request) => request(this.axios, this.basePath));
+    public apiV1PromptStreamGet(prompt: string, model?: string, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).apiV1PromptStreamGet(prompt, model, options).then((request) => request(this.axios, this.basePath));
     }
 
     /**
-     * 
+     * WebSocket endpoint for real-time interaction and background task notifications. When a background task completes, a message is sent in the following format: ```json {   \"type\": \"task_complete\",   \"task_id\": \"uuid\",   \"task_name\": \"task name\",   \"response\": \"result string\" } ``` 
      * @summary WebSocket for interactive streaming
-     * @param {string} [sessionId] 
      * @param {string} [channel] 
      * @param {string} [device] 
      * @param {*} [options] Override http request option.
      * @throws {RequiredError}
      */
-    public wsGet(sessionId?: string, channel?: string, device?: string, options?: RawAxiosRequestConfig) {
-        return DefaultApiFp(this.configuration).wsGet(sessionId, channel, device, options).then((request) => request(this.axios, this.basePath));
+    public wsGet(channel?: string, device?: string, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).wsGet(channel, device, options).then((request) => request(this.axios, this.basePath));
     }
 }
 

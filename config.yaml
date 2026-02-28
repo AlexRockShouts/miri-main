@@ -7,6 +7,16 @@ server:
   admin_user: admin
   admin_pass: admin-password
 
+miri:
+  brain:
+    embeddings:
+      use_native_embeddings: true
+      # use_native_embeddings: false use one of the external embeddings below
+      model:
+        # Included types: "openai", "mistral", "cohere", "ollama", "jina", "mixedbread", "localai", "azure-openai"
+        type: mistral
+        api_key: "$MISTRAL_API_KEY"
+
 models:
   mode: merge
   providers:

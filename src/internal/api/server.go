@@ -4,23 +4,31 @@ import (
 	"context"
 	"log/slog"
 	"miri-main/src/internal/gateway"
+	"miri-main/src/internal/session"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/gorilla/websocket"
 )
 
 type Server struct {
 	Gateway *gateway.Gateway
 	Engine  *gin.Engine
+
+	// WebSocket session tracking
+	wsMu       sync.RWMutex
+	wsSessions map[string][]*websocket.Conn
 }
 
 func NewServer(gw *gateway.Gateway) *Server {
 	e := gin.Default()
 	s := &Server{
-		Gateway: gw,
-		Engine:  e,
+		Gateway:    gw,
+		Engine:     e,
+		wsSessions: make(map[string][]*websocket.Conn),
 	}
 	s.Engine.Use(s.corsMiddleware())
 	s.Engine.Use(s.injectMiddleware())
@@ -28,7 +36,37 @@ func NewServer(gw *gateway.Gateway) *Server {
 	s.setupRoutesRest()
 	s.setupRoutesWebSocket()
 	s.setupRoutesAdmin()
+	s.Gateway.SetTaskReportHandler(s.handleTaskReport)
 	return s
+}
+
+func (s *Server) handleTaskReport(sessionID, taskName, taskID, message string) {
+	if sessionID == "" {
+		sessionID = session.DefaultSessionID
+	}
+
+	s.wsMu.RLock()
+	conns, ok := s.wsSessions[sessionID]
+	s.wsMu.RUnlock()
+
+	if !ok || len(conns) == 0 {
+		return
+	}
+
+	slog.Info("Broadcasting task report to session", "session_id", sessionID, "task_id", taskID, "conns", len(conns))
+
+	for _, conn := range conns {
+		err := conn.WriteJSON(gin.H{
+			"response":   message,
+			"source":     "task",
+			"task_id":    taskID,
+			"task_name":  taskName,
+			"session_id": sessionID,
+		})
+		if err != nil {
+			slog.Warn("Failed to send task report to websocket", "session_id", sessionID, "error", err)
+		}
+	}
 }
 
 func (s *Server) corsMiddleware() gin.HandlerFunc {
@@ -60,6 +98,7 @@ func (s *Server) setupRoutesAdmin() {
 		admin.POST("/channels", s.handleChannels)
 		admin.GET("/sessions", s.handleListSessions)
 		admin.GET("/sessions/:id", s.handleGetSession)
+		admin.GET("/sessions/:id/stats", s.handleGetSessionStats)
 		admin.GET("/sessions/:id/history", s.handleGetSessionHistory)
 		admin.GET("/sessions/:id/skills", s.handleGetSessionSkills)
 
@@ -222,6 +261,13 @@ func (s *Server) ListenAndServe(ctx context.Context, addr string) error {
 	if err := srv.Shutdown(ctxShut); err != nil {
 		slog.Error("server graceful shutdown error", "error", err)
 	}
+
+	// Trigger brain compaction on shutdown
+	if s.Gateway != nil && s.Gateway.PrimaryAgent != nil {
+		slog.Info("triggering engine shutdown...")
+		s.Gateway.PrimaryAgent.Shutdown(ctxShut)
+	}
+
 	slog.Info("server stopped")
 
 	return nil

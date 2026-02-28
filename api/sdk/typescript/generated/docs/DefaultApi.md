@@ -14,6 +14,7 @@ All URIs are relative to *http://localhost:8080*
 |[**apiAdminV1SessionsIdGet**](#apiadminv1sessionsidget) | **GET** /api/admin/v1/sessions/{id} | Get session details|
 |[**apiAdminV1SessionsIdHistoryGet**](#apiadminv1sessionsidhistoryget) | **GET** /api/admin/v1/sessions/{id}/history | Get session message history|
 |[**apiAdminV1SessionsIdSkillsGet**](#apiadminv1sessionsidskillsget) | **GET** /api/admin/v1/sessions/{id}/skills | Get loaded skills for a session|
+|[**apiAdminV1SessionsIdStatsGet**](#apiadminv1sessionsidstatsget) | **GET** /api/admin/v1/sessions/{id}/stats | Get session token and cost statistics|
 |[**apiAdminV1SkillsCommandsGet**](#apiadminv1skillscommandsget) | **GET** /api/admin/v1/skills/commands | List all available agent commands (tools)|
 |[**apiAdminV1SkillsGet**](#apiadminv1skillsget) | **GET** /api/admin/v1/skills | List all installed skills|
 |[**apiAdminV1SkillsNameDelete**](#apiadminv1skillsnamedelete) | **DELETE** /api/admin/v1/skills/{name} | Remove a skill|
@@ -501,6 +502,56 @@ const { status, data } = await apiInstance.apiAdminV1SessionsIdSkillsGet(
 
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
 
+# **apiAdminV1SessionsIdStatsGet**
+> ApiAdminV1SessionsIdStatsGet200Response apiAdminV1SessionsIdStatsGet()
+
+
+### Example
+
+```typescript
+import {
+    DefaultApi,
+    Configuration
+} from './api';
+
+const configuration = new Configuration();
+const apiInstance = new DefaultApi(configuration);
+
+let id: string; // (default to undefined)
+
+const { status, data } = await apiInstance.apiAdminV1SessionsIdStatsGet(
+    id
+);
+```
+
+### Parameters
+
+|Name | Type | Description  | Notes|
+|------------- | ------------- | ------------- | -------------|
+| **id** | [**string**] |  | defaults to undefined|
+
+
+### Return type
+
+**ApiAdminV1SessionsIdStatsGet200Response**
+
+### Authorization
+
+[BasicAuth](../README.md#BasicAuth)
+
+### HTTP request headers
+
+ - **Content-Type**: Not defined
+ - **Accept**: application/json
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+|**200** | Session statistics |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
 # **apiAdminV1SkillsCommandsGet**
 > Array<SkillCommand> apiAdminV1SkillsCommandsGet()
 
@@ -950,12 +1001,10 @@ const configuration = new Configuration();
 const apiInstance = new DefaultApi(configuration);
 
 let prompt: string; // (default to undefined)
-let sessionId: string; // (optional) (default to undefined)
 let model: string; // (optional) (default to undefined)
 
 const { status, data } = await apiInstance.apiV1PromptStreamGet(
     prompt,
-    sessionId,
     model
 );
 ```
@@ -965,7 +1014,6 @@ const { status, data } = await apiInstance.apiV1PromptStreamGet(
 |Name | Type | Description  | Notes|
 |------------- | ------------- | ------------- | -------------|
 | **prompt** | [**string**] |  | defaults to undefined|
-| **sessionId** | [**string**] |  | (optional) defaults to undefined|
 | **model** | [**string**] |  | (optional) defaults to undefined|
 
 
@@ -993,6 +1041,7 @@ const { status, data } = await apiInstance.apiV1PromptStreamGet(
 # **wsGet**
 > wsGet()
 
+WebSocket endpoint for real-time interaction and background task notifications. When a background task completes, a message is sent in the following format: ```json {   \"type\": \"task_complete\",   \"task_id\": \"uuid\",   \"task_name\": \"task name\",   \"response\": \"result string\" } ``` 
 
 ### Example
 
@@ -1005,12 +1054,10 @@ import {
 const configuration = new Configuration();
 const apiInstance = new DefaultApi(configuration);
 
-let sessionId: string; // (optional) (default to undefined)
 let channel: string; // (optional) (default to undefined)
 let device: string; // (optional) (default to undefined)
 
 const { status, data } = await apiInstance.wsGet(
-    sessionId,
     channel,
     device
 );
@@ -1020,7 +1067,6 @@ const { status, data } = await apiInstance.wsGet(
 
 |Name | Type | Description  | Notes|
 |------------- | ------------- | ------------- | -------------|
-| **sessionId** | [**string**] |  | (optional) defaults to undefined|
 | **channel** | [**string**] |  | (optional) defaults to undefined|
 | **device** | [**string**] |  | (optional) defaults to undefined|
 

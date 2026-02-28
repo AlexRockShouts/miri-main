@@ -7,9 +7,11 @@ configuration.ts
 docs/ApiAdminV1ChannelsPostRequest.md
 docs/ApiAdminV1HealthGet200Response.md
 docs/ApiAdminV1SessionsIdHistoryGet200Response.md
+docs/ApiAdminV1SessionsIdStatsGet200Response.md
 docs/ApiV1InteractionPostRequest.md
 docs/ApiV1PromptPost200Response.md
 docs/ApiV1PromptPostRequest.md
+docs/BrainConfig.md
 docs/Config.md
 docs/ConfigAgents.md
 docs/ConfigAgentsDefaults.md
@@ -21,8 +23,11 @@ docs/ConfigChannelsWhatsapp.md
 docs/ConfigModels.md
 docs/ConfigServer.md
 docs/DefaultApi.md
+docs/EmbeddingConfig.md
+docs/EmbeddingModelConfig.md
 docs/HumanInfo.md
 docs/Message.md
+docs/MiriSubConfig.md
 docs/ModelConfig.md
 docs/ModelConfigCost.md
 docs/ProviderConfig.md

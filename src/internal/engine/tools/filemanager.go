@@ -83,9 +83,18 @@ func (f *FileManagerToolWrapper) InvokableRun(ctx context.Context, argumentsInJS
 
 	switch args.Action {
 	case "list":
-		// Force listing from the generated directory
-		genDir := filepath.Join(storageDir, "generated")
-		fullPath := filepath.Join(genDir, filepath.Clean("/"+args.Path))
+		// List from storageDir (this includes 'generated' if it exists there)
+		cleanPath := filepath.Clean("/" + args.Path)
+		// Default to .generated if path is empty
+		if args.Path == "" || args.Path == "/" {
+			cleanPath = "/.generated"
+		}
+		fullPath := filepath.Join(storageDir, cleanPath)
+
+		// Ensure the directory exists
+		if err := os.MkdirAll(fullPath, 0755); err != nil {
+			return "", err
+		}
 
 		entries, err := os.ReadDir(fullPath)
 		if err != nil {
@@ -105,13 +114,12 @@ func (f *FileManagerToolWrapper) InvokableRun(ctx context.Context, argumentsInJS
 		if args.Path == "" {
 			return "", fmt.Errorf("path is required for share")
 		}
-		// Ensure the path is within the generated directory
-		genDir := filepath.Join(storageDir, "generated")
+		// Try to find the file in storageDir
 		cleanPath := filepath.Clean("/" + args.Path)
-		fullPath := filepath.Join(genDir, cleanPath)
+		fullPath := filepath.Join(storageDir, cleanPath)
 
 		if _, err := os.Stat(fullPath); err != nil {
-			return "", fmt.Errorf("file not found in generated folder: %s", args.Path)
+			return "", fmt.Errorf("file not found in storage: %s", args.Path)
 		}
 
 		res := fmt.Sprintf("File available for download at: /api/v1/files%s\n", cleanPath)

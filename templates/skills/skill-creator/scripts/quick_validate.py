@@ -9,13 +9,26 @@ import re
 from pathlib import Path
 
 def validate_skill(skill_path):
-    """Basic validation of a skill"""
+    """Basic validation of a skill (folder or flat .md file)"""
     skill_path = Path(skill_path)
     
-    # Check SKILL.md exists
-    skill_md = skill_path / 'SKILL.md'
-    if not skill_md.exists():
-        return False, "SKILL.md not found"
+    # Check if path exists
+    if not skill_path.exists():
+        return False, f"Skill path not found: {skill_path}"
+
+    # Determine SKILL.md or flat .md file
+    if skill_path.is_file() and skill_path.suffix == '.md':
+        skill_md = skill_path
+    elif skill_path.is_dir():
+        # Check for SKILL.md first (legacy) then name.md
+        skill_md = skill_path / 'SKILL.md'
+        if not skill_md.exists():
+            # Try to find a .md file with the same name as the directory
+            skill_md = skill_path.parent / f"{skill_path.name}.md"
+            if not skill_md.exists():
+                return False, f"Neither SKILL.md (in {skill_path}) nor {skill_path.name}.md found"
+    else:
+        return False, f"Invalid skill path: {skill_path}"
     
     # Read and validate frontmatter
     content = skill_md.read_text()

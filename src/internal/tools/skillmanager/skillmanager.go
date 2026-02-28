@@ -148,25 +148,24 @@ func SearchAndInstall(ctx context.Context, skillName, storageDir string) (stdout
 			if err == nil && resp.StatusCode == http.StatusOK {
 				defer resp.Body.Close()
 
-				// Clean name for directory
+				// Clean name for file
 				safeName := strings.ReplaceAll(ghFallback["name"], "/", "-")
-				skillDir := filepath.Join(skillsDir, safeName)
-				if err := os.MkdirAll(skillDir, 0755); err != nil {
-					return "", "", 0, fmt.Errorf("failed to create skill directory: %w", err)
-				}
+				safeName = strings.TrimSuffix(safeName, ".md")
 
-				f, err := os.Create(filepath.Join(skillDir, "SKILL.md"))
+				// Create flat skill file
+				skillFile := filepath.Join(skillsDir, safeName+".md")
+				f, err := os.Create(skillFile)
 				if err != nil {
-					return "", "", 0, fmt.Errorf("failed to create SKILL.md: %w", err)
+					return "", "", 0, fmt.Errorf("failed to create skill file: %w", err)
 				}
 				defer f.Close()
 
 				_, err = io.Copy(f, resp.Body)
 				if err != nil {
-					return "", "", 0, fmt.Errorf("failed to save SKILL.md: %w", err)
+					return "", "", 0, fmt.Errorf("failed to save skill file: %w", err)
 				}
 
-				return fmt.Sprintf("Skill %q installed via direct GitHub download (fallback).", ghFallback["name"]), "", 0, nil
+				return fmt.Sprintf("Skill %q installed as flat file via direct GitHub download (fallback).", ghFallback["name"]), "", 0, nil
 			}
 		}
 
@@ -267,23 +266,17 @@ func RemoveSkill(skillName, storageDir string) error {
 		return fmt.Errorf("invalid skill name: %s", skillName)
 	}
 
-	skillPath := filepath.Join(skillsDir, skillName)
-	if _, err := os.Stat(skillPath); err == nil {
-		return os.RemoveAll(skillPath)
+	// Helper to remove variations
+	removeVariations := func(name string) {
+		// Flat file
+		os.Remove(filepath.Join(skillsDir, name+".md"))
+		// Resource directory
+		os.RemoveAll(filepath.Join(skillsDir, name))
 	}
 
-	// Try with name variations (hyphen/underscore)
-	normalized := strings.ReplaceAll(skillName, "_", "-")
-	skillPath = filepath.Join(skillsDir, normalized)
-	if _, err := os.Stat(skillPath); err == nil {
-		return os.RemoveAll(skillPath)
-	}
+	removeVariations(skillName)
+	removeVariations(strings.ReplaceAll(skillName, "_", "-"))
+	removeVariations(strings.ReplaceAll(skillName, "-", "_"))
 
-	normalized = strings.ReplaceAll(skillName, "-", "_")
-	skillPath = filepath.Join(skillsDir, normalized)
-	if _, err := os.Stat(skillPath); err == nil {
-		return os.RemoveAll(skillPath)
-	}
-
-	return fmt.Errorf("skill not found: %s", skillName)
+	return nil
 }

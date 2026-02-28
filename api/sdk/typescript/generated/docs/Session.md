@@ -6,8 +6,11 @@
 Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
 **id** | **string** |  | [optional] [default to undefined]
+**soul** | **string** |  | [optional] [default to undefined]
 **total_tokens** | **number** |  | [optional] [default to undefined]
-**messages** | [**Array&lt;Message&gt;**](Message.md) |  | [optional] [default to undefined]
+**prompt_tokens** | **number** |  | [optional] [default to undefined]
+**output_tokens** | **number** |  | [optional] [default to undefined]
+**total_cost** | **number** |  | [optional] [default to undefined]
 
 ## Example
 
@@ -16,8 +19,11 @@ import { Session } from './api';
 
 const instance: Session = {
     id,
+    soul,
     total_tokens,
-    messages,
+    prompt_tokens,
+    output_tokens,
+    total_cost,
 };
 ```
 

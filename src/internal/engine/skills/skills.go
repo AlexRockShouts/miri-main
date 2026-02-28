@@ -24,7 +24,7 @@ type Skill struct {
 	Version     string   `yaml:"version"`
 	Tags        []string `yaml:"tags"`
 	Directory   string   // Path to the skill folder
-	FullContent string   // Content of SKILL.md
+	FullContent string   // Content of the skill file (.md or SKILL.md)
 }
 
 func (s *Skill) GetName() string {
@@ -173,6 +173,13 @@ func (l *SkillLoader) parseSkillFile(filePath string) (*Skill, error) {
 	}
 	skill.Directory = filepath.Dir(filePath)
 	skill.FullContent = strings.TrimSpace(bodyPart)
+
+	// Automatically reload scripts from a directory with the same name as the skill file
+	skillName := strings.TrimSuffix(filepath.Base(filePath), filepath.Ext(filePath))
+	scriptsDir := filepath.Join(filepath.Dir(filePath), skillName, "scripts")
+	if _, err := os.Stat(scriptsDir); err == nil {
+		l.loadScriptsFromDir(scriptsDir)
+	}
 
 	return &skill, nil
 }

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"miri-main/src/internal/engine"
+	"miri-main/src/internal/session"
 	"miri-main/src/internal/storage"
 	"miri-main/src/internal/tasks"
 	"sync"
@@ -63,7 +64,7 @@ func (m *CronManager) Start() {
 }
 
 func (m *CronManager) AddLegacyJob(id, spec, prompt string) {
-	sessionID := "cron-" + id
+	sessionID := session.DefaultSessionID
 	entryID, err := m.c.AddFunc(spec, func() {
 		resp, err := m.promptFn(context.Background(), sessionID, prompt, engine.Options{})
 		if err != nil {
@@ -115,7 +116,7 @@ func (m *CronManager) RemoveTask(id string) {
 func (m *CronManager) runTask(t *tasks.Task) {
 	slog.Info("running cron task", "task_id", t.ID, "name", t.Name)
 
-	sessionID := "task-" + t.ID
+	sessionID := session.DefaultSessionID
 	if t.ReportSession != "" {
 		sessionID = t.ReportSession
 	}

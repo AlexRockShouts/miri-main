@@ -26,7 +26,7 @@ func TestSearchAndInstall(t *testing.T) {
 		skillName := strings.TrimPrefix(r.URL.Path, "/install/")
 		w.Header().Set("Content-Type", "text/plain")
 		// The script will create a dummy skill file in $MIRI_SKILLS_DIR
-		fmt.Fprintf(w, "mkdir -p $MIRI_SKILLS_DIR/%s && echo 'Installed %s' > $MIRI_SKILLS_DIR/%s/SKILL.md\n", skillName, skillName, skillName)
+		fmt.Fprintf(w, "echo 'Installed %s' > $MIRI_SKILLS_DIR/%s.md\n", skillName, skillName)
 	}))
 	defer ts.Close()
 

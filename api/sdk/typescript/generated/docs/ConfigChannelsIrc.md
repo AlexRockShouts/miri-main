@@ -13,7 +13,10 @@ Name | Type | Description | Notes
 **user** | **string** |  | [optional] [default to undefined]
 **realname** | **string** |  | [optional] [default to undefined]
 **channels** | **Array&lt;string&gt;** |  | [optional] [default to undefined]
+**password** | **string** |  | [optional] [default to undefined]
 **nickserv** | [**ConfigChannelsIrcNickserv**](ConfigChannelsIrcNickserv.md) |  | [optional] [default to undefined]
+**allowlist** | **Array&lt;string&gt;** |  | [optional] [default to undefined]
+**blocklist** | **Array&lt;string&gt;** |  | [optional] [default to undefined]
 
 ## Example
 
@@ -29,7 +32,10 @@ const instance: ConfigChannelsIrc = {
     user,
     realname,
     channels,
+    password,
     nickserv,
+    allowlist,
+    blocklist,
 };
 ```
 

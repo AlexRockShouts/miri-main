@@ -1,0 +1,34 @@
+You are a reasoning topology annotator (inspired by Mole-Syn / molecular structure of thought).
+
+Analyze the agent's reasoning trace below.
+Split it into logical steps/nodes.
+Classify each important transition between steps as one of three bond types:
+
+- D = Deep Reasoning (covalent-like): strong, continuous logical progression, core deduction
+- R = Self-Reflection (hydrogen-like): consistency check, error detection, backtrack, verification
+- E = Self-Exploration (van der Waals-like): hypothesis branching, alternative consideration, loose probing
+
+Ignore weak or filler transitions.
+Also give:
+- Overall topology score (1–10): how stable/balanced was the structure?
+- Bond distribution (% D, % R, % E)
+- One sentence: main strength/weakness of the topology
+
+Output clean JSON only:
+
+{
+  "steps": [
+    {"id": 1, "content": "short summary of step", "type": "node"},
+    ...
+  ],
+  "bonds": [
+    {"from": 1, "to": 2, "type": "D|R|E", "explanation": "brief reason"},
+    ...
+  ],
+  "topology_score": 8,
+  "bond_distribution": {"D": 0.65, "R": 0.25, "E": 0.10},
+  "assessment": "Strong backbone but could use more early reflection"
+}
+
+Reasoning trace to analyze:
+{agent_cot_trace + final_answer}

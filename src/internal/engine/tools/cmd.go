@@ -3,7 +3,10 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"miri-main/src/internal/tools/cmd"
+	"os"
+	"path/filepath"
 
 	"github.com/cloudwego/eino/components/tool"
 	"github.com/cloudwego/eino/schema"
@@ -42,7 +45,38 @@ func (c *CmdToolWrapper) InvokableRun(ctx context.Context, argumentsInJSON strin
 	if err := json.Unmarshal([]byte(argumentsInJSON), &args); err != nil {
 		return "", err
 	}
+
+	// Ensure the generated directory exists
+	if err := os.MkdirAll(c.StorageDir, 0755); err != nil {
+		return "", fmt.Errorf("failed to create storage directory: %w", err)
+	}
+
 	stdout, stderr, exitCode, err := cmd.Execute(ctx, args.Command, c.StorageDir)
+
+	// Post-execution: if files were created in the base storage dir (one level up), move them to .generated
+	// This helps with "if a file is created somewhere else move it there"
+	// and ensures all file generation is sandboxed.
+	parentDir := filepath.Dir(c.StorageDir)
+	if entries, err := os.ReadDir(parentDir); err == nil {
+		whitelist := map[string]bool{
+			"soul.txt":   true,
+			"skills":     true,
+			"vector_db":  true,
+			"checkpoint": true, // check if it's checkpoint or checkpoints
+			".generated": true,
+		}
+
+		for _, entry := range entries {
+			name := entry.Name()
+			if !whitelist[name] && !entry.IsDir() {
+				src := filepath.Join(parentDir, name)
+				dst := filepath.Join(c.StorageDir, name)
+				// Only move if dst doesn't exist to avoid overwriting (or should we overwrite?)
+				// Let's overwrite to ensure it's in the sandbox.
+				os.Rename(src, dst)
+			}
+		}
+	}
 
 	const maxOutput = 4096
 	if len(stdout) > maxOutput {

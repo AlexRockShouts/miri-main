@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"miri-main/src/internal/config"
+	"miri-main/src/internal/engine/memory"
 	"miri-main/src/internal/engine/skills"
 	"miri-main/src/internal/engine/tools"
 	"miri-main/src/internal/llm"
@@ -68,30 +69,6 @@ func newSlogHandler(out chan<- string) callbacks.Handler {
 		Build()
 }
 
-// Memory implements an Eino-compatible memory store using our session.Session.
-type Memory struct {
-	session *session.Session
-}
-
-func (m *Memory) Get(ctx context.Context, _ any) ([]*schema.Message, error) {
-	var msgs []*schema.Message
-	for _, msg := range m.session.Messages {
-		if strings.TrimSpace(msg.Prompt) != "" {
-			msgs = append(msgs, schema.UserMessage(msg.Prompt))
-		}
-		if strings.TrimSpace(msg.Response) != "" {
-			msgs = append(msgs, schema.AssistantMessage(msg.Response, nil))
-		}
-	}
-	return msgs, nil
-}
-
-func (m *Memory) Save(ctx context.Context, msgs []*schema.Message) error {
-	// Not used since our session management handles final persistence.
-	// But it's good to have it here for future graph use.
-	return nil
-}
-
 // EinoEngine implements a ReAct agent using Eino components (ChatModel + ToolsNode) with a manual control loop.
 type EinoEngine struct {
 	chat            model.BaseChatModel
@@ -105,6 +82,9 @@ type EinoEngine struct {
 	compiledGraph   compose.Runnable[*graphInput, *graphOutput]
 	skillLoader     *skills.SkillLoader
 	taskGateway     tools.TaskGateway
+	memorySystem    memory.MemorySystem
+	brain           *memory.Brain
+	modelCost       config.ModelCost
 }
 
 type graphInput struct {
@@ -117,9 +97,10 @@ type graphInput struct {
 }
 
 type graphOutput struct {
-	Answer   string
-	Messages []*schema.Message
-	Usage    llm.Usage
+	SessionID string
+	Answer    string
+	Messages  []*schema.Message
+	Usage     llm.Usage
 }
 
 func NewEinoEngine(cfg *config.Config, st *storage.Storage, providerName, modelName string) (*EinoEngine, error) {
@@ -140,25 +121,32 @@ func NewEinoEngine(cfg *config.Config, st *storage.Storage, providerName, modelN
 
 	var chatModel model.BaseChatModel = cm
 
-	// determine context window for selected model
+	// determine context window and cost for selected model
 	ctxWindow := 0
+	var modelCost config.ModelCost
 	fullName := providerName + "/" + modelName
 	for _, m := range prov.Models {
 		if m.ID == fullName || m.Name == fullName || m.Name == modelName {
 			if m.ContextWindow > 0 {
 				ctxWindow = m.ContextWindow
 			}
+			modelCost = m.Cost
 			break
 		}
+	}
+
+	// Initialize Vector Memory
+	vm, err := memory.NewVectorMemory(cfg, "miri_memory")
+	if err != nil {
+		slog.Warn("failed to initialize vector memory", "error", err)
 	}
 
 	// Define tools
 	searchTool := &tools.SearchToolWrapper{}
 	fetchTool := &tools.FetchToolWrapper{}
 	grokipediaTool := &tools.GrokipediaToolWrapper{}
-	genDir := filepath.Join(cfg.StorageDir, "generated")
-	cmdTool := tools.NewCmdTool(genDir)
-	saveFactTool := tools.NewSaveFactTool(st)
+	generatedDir := filepath.Join(cfg.StorageDir, ".generated")
+	cmdTool := tools.NewCmdTool(generatedDir)
 	fileManagerTool := tools.NewFileManagerTool(cfg.StorageDir, nil) // Will be properly set if gateway is available
 
 	cpStore, err := NewFileCheckPointStore(cfg.StorageDir)
@@ -174,6 +162,9 @@ func NewEinoEngine(cfg *config.Config, st *storage.Storage, providerName, modelN
 		contextWindow:   ctxWindow,
 		storageBaseDir:  cfg.StorageDir,
 		storage:         st,
+		memorySystem:    vm,
+		brain:           memory.NewBrain(chatModel, vm, ctxWindow, cfg.StorageDir),
+		modelCost:       modelCost,
 	}
 
 	skillRemoveTool := tools.NewSkillRemoveTool(cfg, func() {
@@ -198,7 +189,7 @@ func NewEinoEngine(cfg *config.Config, st *storage.Storage, providerName, modelN
 	// Our graphInput HAS the SessionID.
 
 	// Update tools node with all tools
-	allTools := []tool.BaseTool{searchTool, fetchTool, grokipediaTool, cmdTool, skillRemoveTool, skillUseTool, saveFactTool, fileManagerTool}
+	allTools := []tool.BaseTool{searchTool, fetchTool, grokipediaTool, cmdTool, skillRemoveTool, skillUseTool, fileManagerTool}
 	allTools = append(allTools, ee.skillLoader.GetExtraTools()...)
 
 	toolsNode, err := compose.NewToolNode(context.Background(), &compose.ToolsNodeConfig{
@@ -216,7 +207,6 @@ func NewEinoEngine(cfg *config.Config, st *storage.Storage, providerName, modelN
 		cmdTool.GetInfo(),
 		skillRemoveTool.GetInfo(),
 		grokipediaTool.GetInfo(),
-		saveFactTool.GetInfo(),
 		fileManagerTool.GetInfo(),
 	}
 
@@ -247,37 +237,28 @@ func NewEinoEngine(cfg *config.Config, st *storage.Storage, providerName, modelN
 	chain.AppendLambda(compose.InvokableLambda(func(ctx context.Context, input *graphInput) (*graphInput, error) {
 		// Initialize messages if needed (this part was in Respond/StreamRespond)
 		if len(input.Messages) == 0 {
-			input.Messages = []*schema.Message{schema.SystemMessage(input.Soul + input.HumanContext)}
+			soul := strings.TrimSpace(input.Soul + input.HumanContext)
+			if soul == "" {
+				soul = "You are a helpful AI assistant."
+			}
+			input.Messages = []*schema.Message{schema.SystemMessage(soul)}
 		}
 
 		// Inject retrieved memory
-		newMsgs, ok := ee.injectRetrievedMemoryWithStatus(ctx, input.Messages)
-		input.Messages = newMsgs
-		if ok && ee.debug {
-			slog.Info("EinoEngine Debug: Long-term memory injected")
+		if ee.brain != nil && input.Prompt != "" {
+			memories, err := ee.brain.Retrieve(ctx, input.Prompt)
+			if err == nil && memories != "" {
+				input.Messages = append(input.Messages, schema.SystemMessage(memories))
+				if ee.debug {
+					slog.Info("EinoEngine Debug: Brain memory injected")
+				}
+			}
 		}
+
 		return input, nil
 	}), compose.WithNodeName("retriever"))
 
-	// 2. Flush node
-	chain.AppendLambda(compose.InvokableLambda(func(ctx context.Context, input *graphInput) (*graphInput, error) {
-		// Use a heuristic for usage if not available yet (first call)
-		// Or just skip flush if no usage info is present in input.
-		// For now, the current implementation in Respond calls flush *after* generate.
-		// If we want it as a node *before* agent, it will use usage from previous turns if available.
-		// But graphInput doesn't have usage yet.
-		// Let's keep the flush/compact logic inside the agent node for now if we want it to be per-step,
-		// OR move it after the agent node.
-		// The user said: flush, compact, agent.
-		return input, nil
-	}), compose.WithNodeName("flush"))
-
-	// 3. Compact node
-	chain.AppendLambda(compose.InvokableLambda(func(ctx context.Context, input *graphInput) (*graphInput, error) {
-		return input, nil
-	}), compose.WithNodeName("compact"))
-
-	// 4. Agent node
+	// 2. Agent node
 	agentLambda, err := compose.AnyLambda[*graphInput, *graphOutput, any](
 		func(ctx context.Context, input *graphInput, opts ...any) (*graphOutput, error) {
 			return ee.agentInvoke(ctx, input)
@@ -291,6 +272,18 @@ func NewEinoEngine(cfg *config.Config, st *storage.Storage, providerName, modelN
 		return nil, err
 	}
 	chain.AppendLambda(agentLambda, compose.WithNodeName("agent"))
+
+	// 5. Brain node (Post-processing)
+	chain.AppendLambda(compose.InvokableLambda(func(ctx context.Context, output *graphOutput) (*graphOutput, error) {
+		if ee.brain == nil {
+			return output, nil
+		}
+
+		// Add assistant response to brain buffer
+		ee.brain.AddToBuffer(output.SessionID, schema.AssistantMessage(output.Answer, nil))
+
+		return output, nil
+	}), compose.WithNodeName("brain"))
 
 	compiled, err := chain.Compile(context.Background(),
 		compose.WithCheckPointStore(ee.checkPointStore),
@@ -309,7 +302,7 @@ func (e *EinoEngine) agentInvoke(ctx context.Context, input *graphInput) (*graph
 	msgs := input.Messages
 
 	// Activate skills learn and skill_creator for default session
-	if input.SessionID == "default" {
+	if input.SessionID == session.DefaultSessionID {
 		activatedSkills := []string{"learn", "skill_creator"}
 		for _, sn := range activatedSkills {
 			// Check if already in messages to avoid duplicates
@@ -336,7 +329,6 @@ func (e *EinoEngine) agentInvoke(ctx context.Context, input *graphInput) (*graph
 	}
 
 	var totalUsage llm.Usage
-	systemPrompt := input.Soul + input.HumanContext
 
 	for i := 0; i < e.maxSteps; i++ {
 		slog.Debug("Agent loop iteration", "step", i, "messages_count", len(msgs))
@@ -346,28 +338,28 @@ func (e *EinoEngine) agentInvoke(ctx context.Context, input *graphInput) (*graph
 			return nil, err
 		}
 
+		// Ensure assistant message has non-empty content if it has no tool calls
+		if strings.TrimSpace(assistant.Content) == "" && len(assistant.ToolCalls) == 0 {
+			assistant.Content = "..."
+		}
+
 		if assistant.ResponseMeta != nil && assistant.ResponseMeta.Usage != nil {
 			totalUsage.PromptTokens += assistant.ResponseMeta.Usage.PromptTokens
 			totalUsage.CompletionTokens += assistant.ResponseMeta.Usage.CompletionTokens
 			totalUsage.TotalTokens += assistant.ResponseMeta.Usage.TotalTokens
+			totalUsage.TotalCost += e.CalculateCost(assistant.ResponseMeta.Usage.PromptTokens, assistant.ResponseMeta.Usage.CompletionTokens)
 
-			slog.Debug("Usage update", "step", i, "total_tokens", totalUsage.TotalTokens)
-
-			if _, err := e.flushIfNeeded(ctx, msgs, totalUsage.PromptTokens, input.CallOpts); err != nil {
-				slog.Warn("flush failed", "error", err)
-			}
-			if newMsgs, summarized, err := e.summarizeIfNeeded(ctx, systemPrompt, msgs, totalUsage.PromptTokens, input.CallOpts); err == nil && summarized {
-				slog.Info("Memory summarized", "step", i, "old_count", len(msgs), "new_count", len(newMsgs))
-				msgs = newMsgs
-			}
+			slog.Debug("Usage update", "step", i, "total_tokens", totalUsage.TotalTokens, "cost", totalUsage.TotalCost)
 		}
 
 		if len(assistant.ToolCalls) == 0 {
 			slog.Info("Agent loop finished (no tool calls)", "steps", i+1, "total_tokens", totalUsage.TotalTokens)
+
 			return &graphOutput{
-				Answer:   assistant.Content,
-				Messages: msgs,
-				Usage:    totalUsage,
+				SessionID: input.SessionID,
+				Answer:    assistant.Content,
+				Messages:  msgs,
+				Usage:     totalUsage,
 			}, nil
 		}
 
@@ -411,6 +403,9 @@ func (e *EinoEngine) agentInvoke(ctx context.Context, input *graphInput) (*graph
 					if err != nil {
 						toolMsgs = append(toolMsgs, schema.ToolMessage(fmt.Sprintf("Error: %v", err), tc.ID))
 					} else {
+						if strings.TrimSpace(res) == "" {
+							res = "Task operation completed (no output)"
+						}
 						toolMsgs = append(toolMsgs, schema.ToolMessage(res, tc.ID))
 					}
 				} else if tc.Function.Name == "file_manager" {
@@ -420,6 +415,9 @@ func (e *EinoEngine) agentInvoke(ctx context.Context, input *graphInput) (*graph
 					if err != nil {
 						toolMsgs = append(toolMsgs, schema.ToolMessage(fmt.Sprintf("Error: %v", err), tc.ID))
 					} else {
+						if strings.TrimSpace(res) == "" {
+							res = "File operation completed (no output)"
+						}
 						toolMsgs = append(toolMsgs, schema.ToolMessage(res, tc.ID))
 					}
 				} else {
@@ -443,6 +441,11 @@ func (e *EinoEngine) agentInvoke(ctx context.Context, input *graphInput) (*graph
 					slog.Error("Tool invoke failed (remaining)", "step", i, "error", err)
 					return nil, err
 				}
+				for _, m := range moreToolMsgs {
+					if strings.TrimSpace(m.Content) == "" {
+						m.Content = "Tool execution completed (no output)"
+					}
+				}
 				msgs = append(msgs, moreToolMsgs...)
 			}
 		} else {
@@ -450,6 +453,11 @@ func (e *EinoEngine) agentInvoke(ctx context.Context, input *graphInput) (*graph
 			if err != nil {
 				slog.Error("Tool invoke failed", "step", i, "error", err)
 				return nil, err
+			}
+			for _, m := range toolMsgs {
+				if strings.TrimSpace(m.Content) == "" {
+					m.Content = "Tool execution completed (no output)"
+				}
 			}
 			msgs = append(msgs, toolMsgs...)
 		}
@@ -461,16 +469,21 @@ func (e *EinoEngine) agentInvoke(ctx context.Context, input *graphInput) (*graph
 	if err != nil {
 		return nil, err
 	}
+	if strings.TrimSpace(final.Content) == "" && len(final.ToolCalls) == 0 {
+		final.Content = "..."
+	}
 	if final.ResponseMeta != nil && final.ResponseMeta.Usage != nil {
 		totalUsage.PromptTokens += final.ResponseMeta.Usage.PromptTokens
 		totalUsage.CompletionTokens += final.ResponseMeta.Usage.CompletionTokens
 		totalUsage.TotalTokens += final.ResponseMeta.Usage.TotalTokens
+		totalUsage.TotalCost += e.CalculateCost(final.ResponseMeta.Usage.PromptTokens, final.ResponseMeta.Usage.CompletionTokens)
 	}
 
 	return &graphOutput{
-		Answer:   final.Content,
-		Messages: msgs,
-		Usage:    totalUsage,
+		SessionID: input.SessionID,
+		Answer:    final.Content,
+		Messages:  msgs,
+		Usage:     totalUsage,
 	}, nil
 }
 
@@ -503,6 +516,12 @@ func (e *EinoEngine) agentStream(ctx context.Context, input *graphInput) (*schem
 // Respond builds a conversation including system prompt, history and current user prompt.
 func (e *EinoEngine) Respond(ctx context.Context, sess *session.Session, promptStr string, humanContext string) (string, *llm.Usage, error) {
 	slog.Info("EinoEngine Respond", "session_id", sess.ID, "prompt_len", len(promptStr))
+
+	// Add user prompt to brain buffer as it arrives
+	if e.brain != nil {
+		e.brain.AddToBuffer(sess.ID, schema.UserMessage(promptStr))
+	}
+
 	// Initialize callbacks with slog handler
 	ctx = callbacks.InitCallbacks(ctx, &callbacks.RunInfo{
 		Name: "EinoEngine",
@@ -520,9 +539,19 @@ func (e *EinoEngine) Respond(ctx context.Context, sess *session.Session, promptS
 		}
 	}()
 
-	// Load history
-	mem := &Memory{session: sess}
-	history, _ := mem.Get(ctx, nil)
+	// Load history from brain
+	var history []*schema.Message
+	if e.brain != nil {
+		history = e.brain.GetBuffer(sess.ID)
+	}
+
+	// Filter out empty messages just in case, though brain buffer should be clean
+	var cleanHistory []*schema.Message
+	for _, m := range history {
+		if strings.TrimSpace(m.Content) != "" {
+			cleanHistory = append(cleanHistory, m)
+		}
+	}
 
 	// Collect dynamic options from context
 	var callOpts []model.Option
@@ -540,7 +569,7 @@ func (e *EinoEngine) Respond(ctx context.Context, sess *session.Session, promptS
 
 	input := &graphInput{
 		SessionID:    sess.ID,
-		Messages:     history,
+		Messages:     cleanHistory,
 		Prompt:       promptStr,
 		HumanContext: humanContext,
 		Soul:         sess.GetSoul(),
@@ -561,9 +590,17 @@ func (e *EinoEngine) Respond(ctx context.Context, sess *session.Session, promptS
 
 	slog.Info("EinoEngine Respond complete", "session_id", sess.ID, "total_tokens", output.Usage.TotalTokens)
 
+	if e.brain != nil && output.Usage.TotalTokens > 0 {
+		e.brain.UpdateContextUsage(ctx, output.Usage.TotalTokens)
+	}
+
 	// Clear checkpoint on success
 	if e.checkPointStore != nil {
 		_ = e.checkPointStore.Delete(ctx, sess.ID)
+	}
+
+	if e.brain != nil && output.Answer != "" {
+		e.brain.AddToBuffer(sess.ID, schema.AssistantMessage(output.Answer, nil))
 	}
 
 	finalResp = output.Answer
@@ -572,6 +609,12 @@ func (e *EinoEngine) Respond(ctx context.Context, sess *session.Session, promptS
 
 func (e *EinoEngine) StreamRespond(ctx context.Context, sess *session.Session, promptStr string, humanContext string) (<-chan string, error) {
 	slog.Info("EinoEngine StreamRespond", "session_id", sess.ID, "prompt_len", len(promptStr))
+
+	// Add user prompt to brain buffer as it arrives
+	if e.brain != nil {
+		e.brain.AddToBuffer(sess.ID, schema.UserMessage(promptStr))
+	}
+
 	out := make(chan string, 100)
 
 	// Initialize callbacks with our streaming handler
@@ -590,9 +633,19 @@ func (e *EinoEngine) StreamRespond(ctx context.Context, sess *session.Session, p
 			}
 		}()
 
-		// Load history
-		mem := &Memory{session: sess}
-		history, _ := mem.Get(ctx, nil)
+		// Load history from brain
+		var history []*schema.Message
+		if e.brain != nil {
+			history = e.brain.GetBuffer(sess.ID)
+		}
+
+		// Filter out empty messages
+		var cleanHistory []*schema.Message
+		for _, m := range history {
+			if strings.TrimSpace(m.Content) != "" {
+				cleanHistory = append(cleanHistory, m)
+			}
+		}
 
 		// Collect dynamic options from context
 		var callOpts []model.Option
@@ -610,7 +663,7 @@ func (e *EinoEngine) StreamRespond(ctx context.Context, sess *session.Session, p
 
 		input := &graphInput{
 			SessionID:    sess.ID,
-			Messages:     history,
+			Messages:     cleanHistory,
 			Prompt:       promptStr,
 			HumanContext: humanContext,
 			Soul:         sess.GetSoul(),
@@ -646,10 +699,19 @@ func (e *EinoEngine) StreamRespond(ctx context.Context, sess *session.Session, p
 				_ = e.checkPointStore.Delete(ctx, sess.ID)
 			}
 			// Send usage as a special metadata chunk
-			out <- fmt.Sprintf("[Usage: %d prompt, %d completion, %d total tokens]",
+			out <- fmt.Sprintf("[Usage: %d prompt, %d completion, %d total tokens, %.6f cost]",
 				lastOutput.Usage.PromptTokens,
 				lastOutput.Usage.CompletionTokens,
-				lastOutput.Usage.TotalTokens)
+				lastOutput.Usage.TotalTokens,
+				lastOutput.Usage.TotalCost)
+
+			if e.brain != nil && lastOutput.Answer != "" {
+				e.brain.AddToBuffer(sess.ID, schema.AssistantMessage(lastOutput.Answer, nil))
+			}
+
+			if e.brain != nil && lastOutput.Usage.TotalTokens > 0 {
+				e.brain.UpdateContextUsage(ctx, lastOutput.Usage.TotalTokens)
+			}
 		}
 	}()
 
@@ -675,14 +737,13 @@ func (e *EinoEngine) ListSkillCommands(ctx context.Context) ([]SkillCommand, err
 	fetchTool := &tools.FetchToolWrapper{}
 	grokipediaTool := &tools.GrokipediaToolWrapper{}
 	cmdTool := tools.NewCmdTool(e.storageBaseDir)
-	saveFactTool := tools.NewSaveFactTool(e.storage)
 	skillRemoveTool := tools.NewSkillRemoveTool(&config.Config{StorageDir: e.storageBaseDir}, nil)
 	taskMgrTool := tools.NewTaskManagerTool(nil, "")
 	fileManagerTool := tools.NewFileManagerTool(e.storageBaseDir, nil)
 
 	allBase := []tool.BaseTool{
 		searchTool, fetchTool, grokipediaTool, cmdTool,
-		saveFactTool, skillRemoveTool, taskMgrTool, fileManagerTool,
+		skillRemoveTool, taskMgrTool, fileManagerTool,
 	}
 
 	var res []SkillCommand
@@ -720,8 +781,7 @@ func (e *EinoEngine) InstallSkill(ctx context.Context, name string) (string, err
 }
 
 func (e *EinoEngine) RemoveSkill(name string) error {
-	storageDir := filepath.Dir(e.storageBaseDir)
-	err := skillmanager.RemoveSkill(name, storageDir)
+	err := skillmanager.RemoveSkill(name, e.storageBaseDir)
 	if err != nil {
 		return err
 	}
@@ -749,32 +809,48 @@ func (e *EinoEngine) SetTaskGateway(gw any) {
 	}
 }
 
-func (e *EinoEngine) FlushAndCompact(ctx context.Context, sess *session.Session, humanContext string) error {
-	slog.Info("Explicit FlushAndCompact triggered", "session_id", sess.ID)
+func (e *EinoEngine) ClearHistory(sessionID string) {
+	if e.brain != nil {
+		e.brain.ClearBuffer(sessionID)
+	}
+}
 
-	// Collect dynamic options from context
-	var callOpts []model.Option
-	if opts, ok := FromContext(ctx); ok {
-		if opts.Model != "" {
-			callOpts = append(callOpts, model.WithModel(opts.Model))
+func (e *EinoEngine) CalculateCost(promptTokens, outputTokens int) float64 {
+	// Cost is typically per 1M tokens.
+	return (float64(promptTokens) * e.modelCost.Input / 1000000.0) + (float64(outputTokens) * e.modelCost.Output / 1000000.0)
+}
+
+func (e *EinoEngine) GetHistory(sessionID string) any {
+	if e.brain == nil {
+		return nil
+	}
+	msgs := e.brain.GetBuffer(sessionID)
+	res := make([]session.Message, 0, len(msgs)/2)
+	for i := 0; i < len(msgs); i++ {
+		if msgs[i].Role == schema.User {
+			m := session.Message{Prompt: msgs[i].Content}
+			if i+1 < len(msgs) && msgs[i+1].Role == schema.Assistant {
+				m.Response = msgs[i+1].Content
+				i++
+			}
+			res = append(res, m)
+		} else if msgs[i].Role == schema.Assistant {
+			res = append(res, session.Message{Response: msgs[i].Content})
 		}
 	}
+	return res
+}
 
-	mem := &Memory{session: sess}
-	history, _ := mem.Get(ctx, nil)
-
-	// Trigger flush (save facts to memory)
-	_, err := e.flushIfNeeded(ctx, history, e.contextWindow, callOpts) // Force it by passing e.contextWindow as usage
-	if err != nil {
-		slog.Error("Manual flush failed", "error", err)
+func (e *EinoEngine) Shutdown(ctx context.Context) {
+	if e.brain != nil {
+		slog.Info("Triggering final brain maintenance before shutdown")
+		e.brain.TriggerMaintenance(memory.TriggerShutdown)
 	}
+}
 
-	// Trigger summarize (compact session)
-	systemPrompt := sess.GetSoul() + humanContext
-	_, _, err = e.summarizeIfNeeded(ctx, systemPrompt, history, e.contextWindow, callOpts) // Force it
-	if err != nil {
-		slog.Error("Manual summarize failed", "error", err)
+func (e *EinoEngine) CompactMemory(ctx context.Context) {
+	if e.brain != nil {
+		slog.Info("Triggering brain maintenance for new session")
+		go e.brain.TriggerMaintenance(memory.TriggerNewSession)
 	}
-
-	return nil
 }

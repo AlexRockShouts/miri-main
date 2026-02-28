@@ -5,8 +5,8 @@
 
 Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
-**role** | **string** |  | [optional] [default to undefined]
-**content** | **string** |  | [optional] [default to undefined]
+**prompt** | **string** |  | [optional] [default to undefined]
+**response** | **string** |  | [optional] [default to undefined]
 
 ## Example
 
@@ -14,8 +14,8 @@ Name | Type | Description | Notes
 import { Message } from './api';
 
 const instance: Message = {
-    role,
-    content,
+    prompt,
+    response,
 };
 ```
 

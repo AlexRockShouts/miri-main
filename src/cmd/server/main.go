@@ -11,6 +11,7 @@ import (
 	"miri-main/src/internal/config"
 	"miri-main/src/internal/gateway"
 	"miri-main/src/internal/storage"
+	"miri-main/src/internal/system"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -129,6 +130,8 @@ func main() {
 	}
 
 	gw.StartEngine(ctx)
+
+	system.LogMemoryUsage("post_engine_start")
 
 	server := api.NewServer(gw)
 

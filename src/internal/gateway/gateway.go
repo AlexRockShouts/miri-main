@@ -13,6 +13,9 @@ import (
 	"miri-main/src/internal/storage"
 	"miri-main/src/internal/tasks"
 	"strings"
+	"sync"
+
+	"github.com/google/uuid"
 )
 
 type Gateway struct {
@@ -24,6 +27,9 @@ type Gateway struct {
 	Channels     map[string]channels.Channel
 	cronMgr      *cron.CronManager
 	engine       *engine.Loop
+
+	taskReportHandler func(sessionID, taskName, taskID, message string)
+	reportMu          sync.RWMutex
 }
 
 func New(cfg *config.Config, st *storage.Storage) *Gateway {
@@ -48,14 +54,19 @@ func New(cfg *config.Config, st *storage.Storage) *Gateway {
 		return gw.PrimaryAgent.DelegatePromptWithOptions(ctx, sessionID, prompt, opts)
 	}, func(t *tasks.Task, response string) {
 		// Report to session (WS chat clients)
-		if t.ReportSession != "" {
-			// In our current architecture, the WS is handled by the server.
-			// The server would need to be informed of this.
-			// However, since we added the message to the session via DelegatePrompt,
-			// the next time the WS client polls or if they are connected,
-			// they might see it if we had a notification system.
-			// For now, let's just log it and rely on channel reporting.
-			slog.Info("reporting task result to session", "task_id", t.ID, "session_id", t.ReportSession)
+		reportSession := t.ReportSession
+		if reportSession == "" {
+			reportSession = session.DefaultSessionID
+		}
+
+		gw.reportMu.RLock()
+		handler := gw.taskReportHandler
+		gw.reportMu.RUnlock()
+
+		if handler != nil {
+			handler(reportSession, t.Name, t.ID, response)
+		} else {
+			slog.Info("no task report handler set for session", "task_id", t.ID, "session_id", reportSession)
 		}
 
 		// Report to active channels
@@ -101,7 +112,7 @@ func New(cfg *config.Config, st *storage.Storage) *Gateway {
 
 	if w, ok := gw.Channels["whatsapp"].(*channels.Whatsapp); ok {
 		w.SetMessageHandler(func(device, msg string) {
-			sessionID := "default"
+			sessionID := session.DefaultSessionID
 			resp, err := gw.PrimaryAgent.DelegatePrompt(sessionID, msg)
 			if err != nil {
 				slog.Error("failed to handle incoming whatsapp msg", "device", device, "error", err)
@@ -117,7 +128,7 @@ func New(cfg *config.Config, st *storage.Storage) *Gateway {
 	if i, ok := gw.Channels["irc"].(*channels.IRC); ok {
 		i.SetMessageHandler(func(target, msg string) {
 			// For IRC, we use the target (channel or nick) as the session ID prefix or client ID
-			sessionID := "default"
+			sessionID := session.DefaultSessionID
 			resp, err := gw.PrimaryAgent.DelegatePrompt(sessionID, msg)
 			if err != nil {
 				slog.Error("failed to handle incoming irc msg", "target", target, "error", err)
@@ -184,7 +195,14 @@ func (gw *Gateway) ChannelChat(channel, device, prompt string) (string, error) {
 }
 
 func (gw *Gateway) CreateNewSession() string {
-	return gw.SessionMgr.CreateNewSession()
+	sessionID := gw.SessionMgr.CreateNewSession()
+	if gw.PrimaryAgent != nil {
+		if gw.PrimaryAgent.Eng != nil {
+			gw.PrimaryAgent.Eng.ClearHistory(sessionID)
+		}
+		gw.PrimaryAgent.CompactMemory(context.Background())
+	}
+	return sessionID
 }
 
 func (gw *Gateway) ListSessions() []string {
@@ -225,6 +243,10 @@ func (gw *Gateway) GetSession(id string) *session.Session {
 	return gw.SessionMgr.GetSession(id)
 }
 
+func (gw *Gateway) AddTokens(id string, prompt, output uint64, cost float64) {
+	gw.SessionMgr.AddTokens(id, prompt, output, cost)
+}
+
 func (gw *Gateway) ListSkills() []any {
 	return gw.PrimaryAgent.ListSkills()
 }
@@ -250,6 +272,9 @@ func (gw *Gateway) GetSkill(name string) (any, error) {
 }
 
 func (gw *Gateway) AddTask(t *tasks.Task) error {
+	if t.ID == "" {
+		t.ID = uuid.New().String()[:8]
+	}
 	if err := gw.Storage.SaveTask(t); err != nil {
 		return err
 	}
@@ -270,4 +295,10 @@ func (gw *Gateway) ListTasks() ([]*tasks.Task, error) {
 
 func (gw *Gateway) GetTask(id string) (*tasks.Task, error) {
 	return gw.Storage.LoadTask(id)
+}
+
+func (gw *Gateway) SetTaskReportHandler(h func(sessionID, taskName, taskID, message string)) {
+	gw.reportMu.Lock()
+	defer gw.reportMu.Unlock()
+	gw.taskReportHandler = h
 }

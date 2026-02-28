@@ -1,0 +1,19 @@
+You are an expert in information deduplication.
+Your task is to analyze a list of facts extracted from conversations and identify duplicates or near-duplicates that can be merged.
+
+Facts:
+{facts_list}
+
+Rules:
+1. Identify facts that convey the same information, even if phrased differently.
+2. For each group of duplicate facts, pick the most complete and clear version as the "primary" and list the IDs of the others as "duplicates".
+3. If a fact is unique, do not include it in the output.
+4. Output ONLY a JSON array of objects, each with "primary_id" and "duplicate_ids" (array of strings).
+
+Example Output:
+[
+  {"primary_id": "uuid-1", "duplicate_ids": ["uuid-2", "uuid-5"]},
+  {"primary_id": "uuid-3", "duplicate_ids": ["uuid-4"]}
+]
+
+JSON Output:

@@ -5,6 +5,7 @@ import (
 	"miri-main/src/internal/config"
 	"miri-main/src/internal/engine"
 	"miri-main/src/internal/gateway"
+	"miri-main/src/internal/session"
 	"miri-main/src/internal/storage"
 	"net/http"
 	"os"
@@ -38,7 +39,6 @@ func (s *Server) handleUpdateConfig(c *gin.Context) {
 
 type promptRequest struct {
 	Prompt      string          `json:"prompt"`
-	SessionID   string          `json:"session_id,omitempty"`
 	Model       string          `json:"model,omitempty"`
 	Temperature *float32        `json:"temperature,omitempty"`
 	MaxTokens   *int            `json:"max_tokens,omitempty"`
@@ -68,7 +68,7 @@ func (s *Server) handlePrompt(c *gin.Context) {
 	}
 
 	gw := c.MustGet("gateway").(*gateway.Gateway)
-	response, err := gw.PrimaryAgent.DelegatePromptWithOptions(c.Request.Context(), req.SessionID, req.Prompt, opts)
+	response, err := gw.PrimaryAgent.DelegatePromptWithOptions(c.Request.Context(), session.DefaultSessionID, req.Prompt, opts)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -253,7 +253,7 @@ func (s *Server) handleGetSession(c *gin.Context) {
 	c.JSON(http.StatusOK, sess)
 }
 
-func (s *Server) handleGetSessionHistory(c *gin.Context) {
+func (s *Server) handleGetSessionStats(c *gin.Context) {
 	gw := c.MustGet("gateway").(*gateway.Gateway)
 	id := c.Param("id")
 	sess := gw.GetSession(id)
@@ -262,7 +262,34 @@ func (s *Server) handleGetSessionHistory(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{
-		"messages":     sess.Messages,
+		"session_id":    sess.ID,
+		"total_tokens":  sess.TotalTokens,
+		"prompt_tokens": sess.PromptTokens,
+		"output_tokens": sess.OutputTokens,
+		"total_cost":    sess.TotalCost,
+	})
+}
+
+func (s *Server) handleGetSessionHistory(c *gin.Context) {
+	gw := c.MustGet("gateway").(*gateway.Gateway)
+	id := c.Param("id")
+	sess := gw.GetSession(id)
+	if sess == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "session not found"})
+		return
+	}
+	history := []session.Message{}
+	if gw.PrimaryAgent != nil && gw.PrimaryAgent.Eng != nil {
+		buf := gw.PrimaryAgent.Eng.(interface {
+			GetHistory(sessionID string) any
+		}).GetHistory(id)
+		if buf != nil {
+			history = buf.([]session.Message)
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"messages":     history,
 		"total_tokens": sess.TotalTokens,
 	})
 }
@@ -274,12 +301,22 @@ func (s *Server) handleGetSessionSkills(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "session not found"})
 		return
 	}
+
+	history := []session.Message{}
+	if gw.PrimaryAgent != nil && gw.PrimaryAgent.Eng != nil {
+		if h := gw.PrimaryAgent.Eng.(interface {
+			GetHistory(sessionID string) any
+		}).GetHistory(id); h != nil {
+			history = h.([]session.Message)
+		}
+	}
+
 	res := []string{}
-	if id == "default" || id == "miri:agent:main" {
+	if id == session.DefaultSessionID {
 		res = append(res, "learn", "skill_creator")
 	}
 	// Also check responses for "Skill '...' loaded successfully"
-	for _, msg := range sess.Messages {
+	for _, msg := range history {
 		if strings.Contains(msg.Response, "loaded successfully") {
 			// Try to extract skill name
 			// "Skill 'file-organizer' loaded successfully."
@@ -377,16 +414,20 @@ func (s *Server) handleGetFile(c *gin.Context) {
 		storageDir = filepath.Join(home, storageDir[1:])
 	}
 
-	// Strictly limit access to the 'generated' folder
-	genDir := filepath.Join(storageDir, "generated")
+	// Limit access to the .generated directory
 	subPath := c.Param("filepath")
-	// Prepend / and clean to prevent traversal
-	fullPath := filepath.Join(genDir, filepath.Clean("/"+subPath))
+	// Ensure it starts with /.generated/ or is .generated
+	cleanSubPath := filepath.Clean("/" + subPath)
+	if !strings.HasPrefix(cleanSubPath, "/.generated") {
+		cleanSubPath = filepath.Join("/.generated", cleanSubPath)
+	}
 
-	// Security check: ensure the file is within the generated directory
-	absGen, _ := filepath.Abs(genDir)
+	fullPath := filepath.Join(storageDir, cleanSubPath)
+
+	// Security check: ensure the file is within the storage directory
+	absStorage, _ := filepath.Abs(storageDir)
 	absFile, err := filepath.Abs(fullPath)
-	if err != nil || !strings.HasPrefix(absFile, absGen) {
+	if err != nil || !strings.HasPrefix(absFile, absStorage) {
 		c.JSON(http.StatusForbidden, gin.H{"error": "access denied"})
 		return
 	}
@@ -395,7 +436,7 @@ func (s *Server) handleGetFile(c *gin.Context) {
 	info, err := os.Stat(absFile)
 	if err != nil {
 		if os.IsNotExist(err) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "file not found in generated folder"})
+			c.JSON(http.StatusNotFound, gin.H{"error": "file not found in storage folder"})
 		} else {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		}

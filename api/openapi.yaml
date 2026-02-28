@@ -23,18 +23,23 @@ components:
       properties:
         id:
           type: string
+        soul:
+          type: string
         total_tokens:
           type: integer
-        messages:
-          type: array
-          items:
-            $ref: '#/components/schemas/Message'
+        prompt_tokens:
+          type: integer
+        output_tokens:
+          type: integer
+        total_cost:
+          type: number
+          format: float
     Message:
       type: object
       properties:
-        role:
+        prompt:
           type: string
-        content:
+        response:
           type: string
     Usage:
       type: object
@@ -45,6 +50,9 @@ components:
           type: integer
         total_tokens:
           type: integer
+        total_cost:
+          type: number
+          format: float
     HumanInfo:
       type: object
       properties:
@@ -74,6 +82,8 @@ components:
             admin_pass:
               type: string
               default: admin-password
+        miri:
+          $ref: '#/components/schemas/MiriSubConfig'
         models:
           type: object
           properties:
@@ -88,6 +98,8 @@ components:
           properties:
             debug:
               type: boolean
+            subagents:
+              type: integer
             defaults:
               type: object
               properties:
@@ -137,6 +149,8 @@ components:
                   type: array
                   items:
                     type: string
+                password:
+                  type: string
                 nickserv:
                   type: object
                   properties:
@@ -144,6 +158,46 @@ components:
                       type: boolean
                     password:
                       type: string
+                allowlist:
+                  type: array
+                  items:
+                    type: string
+                blocklist:
+                  type: array
+                  items:
+                    type: string
+
+    MiriSubConfig:
+      type: object
+      properties:
+        brain:
+          $ref: '#/components/schemas/BrainConfig'
+
+    BrainConfig:
+      type: object
+      properties:
+        embeddings:
+          $ref: '#/components/schemas/EmbeddingConfig'
+
+    EmbeddingConfig:
+      type: object
+      properties:
+        use_native_embeddings:
+          type: boolean
+        model:
+          $ref: '#/components/schemas/EmbeddingModelConfig'
+
+    EmbeddingModelConfig:
+      type: object
+      properties:
+        type:
+          type: string
+        api_key:
+          type: string
+        model:
+          type: string
+        url:
+          type: string
 
     ProviderConfig:
       type: object
@@ -262,8 +316,6 @@ paths:
               properties:
                 prompt:
                   type: string
-                session_id:
-                  type: string
                 model:
                   type: string
                 temperature:
@@ -290,10 +342,6 @@ paths:
         - name: prompt
           in: query
           required: true
-          schema:
-            type: string
-        - name: session_id
-          in: query
           schema:
             type: string
         - name: model
@@ -330,13 +378,20 @@ paths:
   /ws:
     get:
       summary: WebSocket for interactive streaming
+      description: |
+        WebSocket endpoint for real-time interaction and background task notifications.
+        When a background task completes, a message is sent in the following format:
+        ```json
+        {
+          "type": "task_complete",
+          "task_id": "uuid",
+          "task_name": "task name",
+          "response": "result string"
+        }
+        ```
       security:
         - ServerKey: []
       parameters:
-        - name: session_id
-          in: query
-          schema:
-            type: string
         - name: channel
           in: query
           schema:
@@ -506,6 +561,37 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Session'
+
+  /api/admin/v1/sessions/{id}/stats:
+    get:
+      summary: Get session token and cost statistics
+      security:
+        - BasicAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Session statistics
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  session_id:
+                    type: string
+                  total_tokens:
+                    type: integer
+                  prompt_tokens:
+                    type: integer
+                  output_tokens:
+                    type: integer
+                  total_cost:
+                    type: number
+                    format: float
 
   /api/admin/v1/sessions/{id}/history:
     get:
