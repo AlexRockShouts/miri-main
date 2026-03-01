@@ -37,6 +37,7 @@ func setupTestPrompts() func() {
 		"consolidate_summaries.prompt",
 		"topology_extraction.prompt",
 		"topology_injection.prompt",
+		"agent.prompt",
 	}
 	for _, p := range prompts {
 		content := "[]"

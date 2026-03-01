@@ -184,3 +184,50 @@ func TestSaveGetHuman(t *testing.T) {
 		t.Errorf("Expected content %q, got %q", content, got)
 	}
 }
+
+func TestGetBrainPromptInjection(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "miri-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	st, err := New(tempDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	brainDir := tempDir + "/brain"
+	if err := os.MkdirAll(brainDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	topologyContent := "TOPOLOGY INSTRUCTIONS"
+	if err := os.WriteFile(brainDir+"/topology_injection.prompt", []byte(topologyContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	agentContent := "AGENT INSTRUCTIONS"
+	if err := os.WriteFile(brainDir+"/agent.prompt", []byte(agentContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Test case 1: Request agent.prompt, should have topology prepended
+	p1, err := st.GetBrainPrompt("agent.prompt")
+	if err != nil {
+		t.Fatalf("GetBrainPrompt failed: %v", err)
+	}
+	expected1 := topologyContent + "\n\n" + agentContent
+	if p1 != expected1 {
+		t.Errorf("Expected %q, got %q", expected1, p1)
+	}
+
+	// Test case 2: Request topology_injection.prompt directly, should NOT be doubled
+	p2, err := st.GetBrainPrompt("topology_injection.prompt")
+	if err != nil {
+		t.Fatalf("GetBrainPrompt failed: %v", err)
+	}
+	if p2 != topologyContent {
+		t.Errorf("Expected %q, got %q (self-injection detected)", topologyContent, p2)
+	}
+}

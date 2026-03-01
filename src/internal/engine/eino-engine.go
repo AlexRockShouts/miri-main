@@ -235,6 +235,17 @@ func NewEinoEngine(cfg *config.Config, st *storage.Storage, providerName, modelN
 	// 1. Retriever node
 	chain.AppendLambda(compose.InvokableLambda(func(ctx context.Context, input *graphInput) (*graphInput, error) {
 
+		// Inject agent prompt (which includes topology injection if available)
+		if ee.brain != nil {
+			prompt, err := ee.brain.GetPrompt("agent.prompt")
+			if err == nil && prompt != "" {
+				input.Messages = append([]*schema.Message{schema.SystemMessage(prompt)}, input.Messages...)
+				if ee.debug {
+					slog.Info("EinoEngine Debug: Agent prompt injected")
+				}
+			}
+		}
+
 		// Inject retrieved memory
 		if ee.brain != nil && input.Prompt != "" {
 			memories, err := ee.brain.Retrieve(ctx, input.Prompt)
@@ -539,7 +550,7 @@ func (e *EinoEngine) Respond(ctx context.Context, sess *session.Session, promptS
 
 	// Add user prompt to brain buffer as it arrives
 	if e.brain != nil {
-		e.brain.AddToBuffer(sess.ID, schema.UserMessage("you are Miri (from chur) a ai assistent agent that will become a being"+promptStr))
+		e.brain.AddToBuffer(sess.ID, schema.UserMessage(promptStr))
 	}
 
 	// Initialize callbacks with slog handler
@@ -622,7 +633,7 @@ func (e *EinoEngine) StreamRespond(ctx context.Context, sess *session.Session, p
 
 	// Add user prompt to brain buffer as it arrives
 	if e.brain != nil {
-		e.brain.AddToBuffer(sess.ID, schema.UserMessage("you are Miri (from chur) a ai assistent agent that will become a being"+promptStr))
+		e.brain.AddToBuffer(sess.ID, schema.UserMessage(promptStr))
 	}
 
 	out := make(chan string, 100)

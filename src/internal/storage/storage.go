@@ -374,7 +374,9 @@ func (s *Storage) GetBrainPrompt(name string) (string, error) {
 	// Inject topology_injection.prompt if it exists
 	injectionPath := filepath.Join(promptsDir, "topology_injection.prompt")
 	if injection, err := os.ReadFile(injectionPath); err == nil {
-		return string(injection) + "\n\n" + prompt, nil
+		if name != "topology_injection.prompt" {
+			return string(injection) + "\n\n" + prompt, nil
+		}
 	}
 
 	return prompt, nil

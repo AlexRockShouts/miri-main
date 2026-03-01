@@ -72,7 +72,7 @@ func (b *Brain) syncPrompts() error {
 	return nil
 }
 
-func (b *Brain) getPrompt(name string) (string, error) {
+func (b *Brain) GetPrompt(name string) (string, error) {
 	return b.storage.GetBrainPrompt(name)
 }
 
@@ -158,7 +158,7 @@ func (b *Brain) ExtractFacts(ctx context.Context, messages []*schema.Message) er
 		return nil
 	}
 
-	prompt, err := b.getPrompt("extract.prompt")
+	prompt, err := b.GetPrompt("extract.prompt")
 	if err != nil {
 		return fmt.Errorf("read extract prompt: %w", err)
 	}
@@ -222,7 +222,7 @@ func (b *Brain) Reflect(ctx context.Context, messages []*schema.Message) error {
 		return nil
 	}
 
-	prompt, err := b.getPrompt("reflection.prompt")
+	prompt, err := b.GetPrompt("reflection.prompt")
 	if err != nil {
 		return fmt.Errorf("read reflection prompt: %w", err)
 	}
@@ -257,7 +257,7 @@ func (b *Brain) Summarize(ctx context.Context, messages []*schema.Message) error
 		return nil
 	}
 
-	prompt, err := b.getPrompt("compact.prompt")
+	prompt, err := b.GetPrompt("compact.prompt")
 	if err != nil {
 		return fmt.Errorf("read compact prompt: %w", err)
 	}
@@ -387,7 +387,7 @@ func (b *Brain) cleanup(ctx context.Context, items []SearchResult) error {
 
 func (b *Brain) promoteFacts(ctx context.Context, summaries []SearchResult) error {
 	slog.Info("Promoting facts from summaries", "count", len(summaries))
-	prompt, err := b.getPrompt("promote_facts.prompt")
+	prompt, err := b.GetPrompt("promote_facts.prompt")
 	if err != nil {
 		return err
 	}
@@ -448,7 +448,7 @@ func (b *Brain) promoteFacts(ctx context.Context, summaries []SearchResult) erro
 func (b *Brain) deduplicateFacts(ctx context.Context, facts []SearchResult) error {
 	slog.Info("Deduplicating facts", "count", len(facts))
 
-	prompt, err := b.getPrompt("deduplicate_facts.prompt")
+	prompt, err := b.GetPrompt("deduplicate_facts.prompt")
 	if err != nil {
 		return err
 	}
@@ -495,7 +495,7 @@ func (b *Brain) deduplicateFacts(ctx context.Context, facts []SearchResult) erro
 func (b *Brain) consolidateSummaries(ctx context.Context, summaries []SearchResult) error {
 	slog.Info("Consolidating summaries", "count", len(summaries))
 
-	prompt, err := b.getPrompt("consolidate_summaries.prompt")
+	prompt, err := b.GetPrompt("consolidate_summaries.prompt")
 	if err != nil {
 		return err
 	}
@@ -689,7 +689,7 @@ func (b *Brain) Retrieve(ctx context.Context, query string) (string, error) {
 }
 
 func (b *Brain) analyzeTopology(ctx context.Context, trace string) (*mole_syn.TopologyAnalysis, error) {
-	prompt, err := b.getPrompt("topology_extraction.prompt")
+	prompt, err := b.GetPrompt("topology_extraction.prompt")
 	if err != nil {
 		return nil, fmt.Errorf("read topology extraction prompt: %w", err)
 	}
