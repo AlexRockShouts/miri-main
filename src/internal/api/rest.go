@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"log/slog"
 	"miri-main/src/internal/config"
 	"miri-main/src/internal/engine"
 	"miri-main/src/internal/gateway"
@@ -450,4 +451,50 @@ func (s *Server) handleGetFile(c *gin.Context) {
 	}
 
 	c.File(absFile)
+}
+
+func (s *Server) handleUploadFile(c *gin.Context) {
+	gw := c.MustGet("gateway").(*gateway.Gateway)
+	storageDir := gw.Config.StorageDir
+
+	if strings.HasPrefix(storageDir, "~") {
+		home, _ := os.UserHomeDir()
+		storageDir = filepath.Join(home, storageDir[1:])
+	}
+
+	uploadDir := filepath.Join(storageDir, ".generated", "uploads")
+	if err := os.MkdirAll(uploadDir, 0755); err != nil {
+		slog.Error("failed to create upload directory", "path", uploadDir, "error", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create upload directory"})
+		return
+	}
+
+	file, err := c.FormFile("file")
+	if err != nil {
+		slog.Warn("no file uploaded", "error", err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "no file uploaded"})
+		return
+	}
+
+	// Security: clean the filename
+	filename := filepath.Base(file.Filename)
+	dst := filepath.Join(uploadDir, filename)
+
+	if err := c.SaveUploadedFile(file, dst); err != nil {
+		slog.Error("failed to save uploaded file", "filename", filename, "destination", dst, "error", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save file"})
+		return
+	}
+
+	slog.Info("file uploaded successfully", "filename", filename, "path", dst)
+
+	// Return the path relative to storage root for use with file_manager
+	relPath := filepath.Join(".generated", "uploads", filename)
+
+	c.JSON(http.StatusOK, gin.H{
+		"status":   "file uploaded",
+		"filename": filename,
+		"path":     relPath,
+		"download": "/api/v1/files/" + relPath,
+	})
 }

@@ -47,6 +47,7 @@ func (s *SkillInstallToolWrapper) InvokableRun(ctx context.Context, argumentsInJ
 		SkillName string `json:"skill_name"`
 	}
 	if err := json.Unmarshal([]byte(argumentsInJSON), &args); err != nil {
+		slog.Error("failed to unmarshal skill install arguments", "error", err, "arguments", argumentsInJSON)
 		return "", err
 	}
 	slog.Debug("installing skill", "skill", args.SkillName)
@@ -83,6 +84,7 @@ func (s *SkillInstallToolWrapper) StreamableRun(ctx context.Context, argumentsIn
 		SkillName string `json:"skill_name"`
 	}
 	if err := json.Unmarshal([]byte(argumentsInJSON), &args); err != nil {
+		slog.Error("failed to unmarshal skill install (stream) arguments", "error", err, "arguments", argumentsInJSON)
 		return nil, err
 	}
 	slog.Debug("installing skill (streaming)", "skill", args.SkillName)
@@ -140,7 +142,9 @@ func (s *SkillRemoteListToolWrapper) InvokableRun(ctx context.Context, arguments
 	var args struct {
 		Query string `json:"query"`
 	}
-	_ = json.Unmarshal([]byte(argumentsInJSON), &args)
+	if err := json.Unmarshal([]byte(argumentsInJSON), &args); err != nil {
+		slog.Error("failed to unmarshal skill list remote arguments", "error", err, "arguments", argumentsInJSON)
+	}
 
 	allSkills, err := skillmanager.ListRemoteSkills(ctx)
 	if err != nil {
@@ -254,10 +258,12 @@ func (s *SkillRemoveToolWrapper) InvokableRun(ctx context.Context, argumentsInJS
 		SkillName string `json:"skill_name"`
 	}
 	if err := json.Unmarshal([]byte(argumentsInJSON), &args); err != nil {
+		slog.Error("failed to unmarshal skill remove arguments", "error", err, "arguments", argumentsInJSON)
 		return "", err
 	}
 	err := skillmanager.RemoveSkill(args.SkillName, s.Config.StorageDir)
 	if err != nil {
+		slog.Error("failed to remove skill", "skill", args.SkillName, "error", err)
 		return "", err
 	}
 	if s.OnRemoved != nil {

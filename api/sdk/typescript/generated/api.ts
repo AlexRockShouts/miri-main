@@ -209,6 +209,12 @@ export interface Task {
     'report_session'?: string;
     'report_channels'?: Array<string>;
 }
+export interface UploadResponse {
+    'status'?: string;
+    'filename'?: string;
+    'path'?: string;
+    'download'?: string;
+}
 export interface Usage {
     'prompt_tokens'?: number;
     'completion_tokens'?: number;
@@ -877,6 +883,47 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
         },
         /**
          * 
+         * @summary Upload a file to the local storage
+         * @param {File} [file] 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        apiV1FilesUploadPost: async (file?: File, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            const localVarPath = `/api/v1/files/upload`;
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'POST', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+            const localVarFormParams = new ((configuration && configuration.formDataCtor) || FormData)();
+
+            // authentication ServerKey required
+            await setApiKeyToObject(localVarHeaderParameter, "X-Server-Key", configuration)
+
+
+            if (file !== undefined) { 
+                localVarFormParams.append('file', file as any);
+            }
+            localVarHeaderParameter['Content-Type'] = 'multipart/form-data';
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+            localVarRequestOptions.data = localVarFormParams;
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * 
          * @summary Manage sessions or check global status
          * @param {ApiV1InteractionPostRequest} apiV1InteractionPostRequest 
          * @param {*} [options] Override http request option.
@@ -1275,6 +1322,19 @@ export const DefaultApiFp = function(configuration?: Configuration) {
         },
         /**
          * 
+         * @summary Upload a file to the local storage
+         * @param {File} [file] 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async apiV1FilesUploadPost(file?: File, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<UploadResponse>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.apiV1FilesUploadPost(file, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.apiV1FilesUploadPost']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * 
          * @summary Manage sessions or check global status
          * @param {ApiV1InteractionPostRequest} apiV1InteractionPostRequest 
          * @param {*} [options] Override http request option.
@@ -1508,6 +1568,16 @@ export const DefaultApiFactory = function (configuration?: Configuration, basePa
          */
         apiV1FilesFilepathGet(filepath: string, options?: RawAxiosRequestConfig): AxiosPromise<File> {
             return localVarFp.apiV1FilesFilepathGet(filepath, options).then((request) => request(axios, basePath));
+        },
+        /**
+         * 
+         * @summary Upload a file to the local storage
+         * @param {File} [file] 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        apiV1FilesUploadPost(file?: File, options?: RawAxiosRequestConfig): AxiosPromise<UploadResponse> {
+            return localVarFp.apiV1FilesUploadPost(file, options).then((request) => request(axios, basePath));
         },
         /**
          * 
@@ -1747,6 +1817,17 @@ export class DefaultApi extends BaseAPI {
      */
     public apiV1FilesFilepathGet(filepath: string, options?: RawAxiosRequestConfig) {
         return DefaultApiFp(this.configuration).apiV1FilesFilepathGet(filepath, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * 
+     * @summary Upload a file to the local storage
+     * @param {File} [file] 
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public apiV1FilesUploadPost(file?: File, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).apiV1FilesUploadPost(file, options).then((request) => request(this.axios, this.basePath));
     }
 
     /**

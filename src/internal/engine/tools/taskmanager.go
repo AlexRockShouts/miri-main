@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"miri-main/src/internal/tasks"
 	"time"
 
@@ -95,12 +96,14 @@ func (t *TaskManagerToolWrapper) InvokableRun(ctx context.Context, argumentsInJS
 		Silent       *bool    `json:"silent"`
 	}
 	if err := json.Unmarshal([]byte(argumentsInJSON), &args); err != nil {
+		slog.Error("failed to unmarshal task manager arguments", "error", err, "arguments", argumentsInJSON)
 		return "", err
 	}
 
 	switch args.Action {
 	case "add":
 		if args.Cron == "" || args.Prompt == "" || args.Name == "" {
+			slog.Warn("missing required fields for task add", "name", args.Name, "cron", args.Cron, "prompt", args.Prompt != "")
 			return "", fmt.Errorf("name, cron, and prompt are required for add")
 		}
 		task := &tasks.Task{
@@ -127,13 +130,16 @@ func (t *TaskManagerToolWrapper) InvokableRun(ctx context.Context, argumentsInJS
 		}
 
 		if err := t.gw.AddTask(task); err != nil {
+			slog.Error("failed to add task", "task_id", task.ID, "name", task.Name, "error", err)
 			return "", err
 		}
+		slog.Info("task added successfully", "task_id", task.ID, "name", task.Name)
 		return fmt.Sprintf("Task added successfully with ID: %s", task.ID), nil
 
 	case "list":
 		taskList, err := t.gw.ListTasks()
 		if err != nil {
+			slog.Error("failed to list tasks", "error", err)
 			return "", err
 		}
 		b, _ := json.MarshalIndent(taskList, "", "  ")
@@ -141,19 +147,24 @@ func (t *TaskManagerToolWrapper) InvokableRun(ctx context.Context, argumentsInJS
 
 	case "delete":
 		if args.ID == "" {
+			slog.Warn("id is required for task delete")
 			return "", fmt.Errorf("id is required for delete")
 		}
 		if err := t.gw.DeleteTask(args.ID); err != nil {
+			slog.Error("failed to delete task", "task_id", args.ID, "error", err)
 			return "", err
 		}
+		slog.Info("task deleted successfully", "task_id", args.ID)
 		return "Task deleted successfully", nil
 
 	case "update":
 		if args.ID == "" {
+			slog.Warn("id is required for task update")
 			return "", fmt.Errorf("id is required for update")
 		}
 		task, err := t.gw.GetTask(args.ID)
 		if err != nil {
+			slog.Warn("failed to get task for update", "task_id", args.ID, "error", err)
 			return "", err
 		}
 		if args.Name != "" {
@@ -181,8 +192,10 @@ func (t *TaskManagerToolWrapper) InvokableRun(ctx context.Context, argumentsInJS
 		task.Updated = time.Now()
 
 		if err := t.gw.AddTask(task); err != nil {
+			slog.Error("failed to update task", "task_id", task.ID, "error", err)
 			return "", err
 		}
+		slog.Info("task updated successfully", "task_id", task.ID)
 		return "Task updated successfully", nil
 
 	default:

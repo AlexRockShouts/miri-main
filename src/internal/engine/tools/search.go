@@ -3,6 +3,7 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 	"miri-main/src/internal/tools/websearch"
 
 	"github.com/cloudwego/eino/components/tool"
@@ -34,10 +35,12 @@ func (s *SearchToolWrapper) InvokableRun(ctx context.Context, argumentsInJSON st
 		Query string `json:"query"`
 	}
 	if err := json.Unmarshal([]byte(argumentsInJSON), &args); err != nil {
+		slog.Error("failed to unmarshal web search arguments", "error", err, "arguments", argumentsInJSON)
 		return "", err
 	}
 	results, err := websearch.Search(ctx, args.Query)
 	if err != nil {
+		slog.Error("failed to perform web search", "query", args.Query, "error", err)
 		return "", err
 	}
 	b, _ := json.Marshal(results)

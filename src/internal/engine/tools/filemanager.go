@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -72,6 +73,7 @@ func (f *FileManagerToolWrapper) InvokableRun(ctx context.Context, argumentsInJS
 		Caption string `json:"caption"`
 	}
 	if err := json.Unmarshal([]byte(argumentsInJSON), &args); err != nil {
+		slog.Error("failed to unmarshal file manager arguments", "error", err, "arguments", argumentsInJSON)
 		return "", err
 	}
 
@@ -93,11 +95,13 @@ func (f *FileManagerToolWrapper) InvokableRun(ctx context.Context, argumentsInJS
 
 		// Ensure the directory exists
 		if err := os.MkdirAll(fullPath, 0755); err != nil {
+			slog.Error("failed to create directory in file manager", "path", fullPath, "error", err)
 			return "", err
 		}
 
 		entries, err := os.ReadDir(fullPath)
 		if err != nil {
+			slog.Error("failed to read directory in file manager", "path", fullPath, "error", err)
 			return "", err
 		}
 		var files []string
@@ -112,6 +116,7 @@ func (f *FileManagerToolWrapper) InvokableRun(ctx context.Context, argumentsInJS
 
 	case "share":
 		if args.Path == "" {
+			slog.Warn("path is required for file manager share action")
 			return "", fmt.Errorf("path is required for share")
 		}
 		// Try to find the file in storageDir
@@ -119,6 +124,7 @@ func (f *FileManagerToolWrapper) InvokableRun(ctx context.Context, argumentsInJS
 		fullPath := filepath.Join(storageDir, cleanPath)
 
 		if _, err := os.Stat(fullPath); err != nil {
+			slog.Warn("file not found for sharing", "path", args.Path, "full_path", fullPath)
 			return "", fmt.Errorf("file not found in storage: %s", args.Path)
 		}
 
@@ -127,8 +133,10 @@ func (f *FileManagerToolWrapper) InvokableRun(ctx context.Context, argumentsInJS
 		if args.Channel != "" && args.Device != "" && f.gw != nil {
 			err := f.gw.ChannelSendFile(args.Channel, args.Device, fullPath, args.Caption)
 			if err != nil {
+				slog.Error("failed to share file via channel", "channel", args.Channel, "device", args.Device, "path", fullPath, "error", err)
 				res += fmt.Sprintf("Failed to share to %s: %v", args.Channel, err)
 			} else {
+				slog.Info("successfully shared file via channel", "channel", args.Channel, "device", args.Device, "path", fullPath)
 				res += fmt.Sprintf("Successfully shared to %s (%s)", args.Channel, args.Device)
 			}
 		}

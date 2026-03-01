@@ -35,6 +35,7 @@ docs/Session.md
 docs/Skill.md
 docs/SkillCommand.md
 docs/Task.md
+docs/UploadResponse.md
 docs/Usage.md
 git_push.sh
 index.ts

@@ -22,6 +22,7 @@ All URIs are relative to *http://localhost:8080*
 |[**apiAdminV1TasksGet**](#apiadminv1tasksget) | **GET** /api/admin/v1/tasks | List all recurring tasks|
 |[**apiAdminV1TasksIdGet**](#apiadminv1tasksidget) | **GET** /api/admin/v1/tasks/{id} | Get task details|
 |[**apiV1FilesFilepathGet**](#apiv1filesfilepathget) | **GET** /api/v1/files/{filepath} | Download a file from the local storage|
+|[**apiV1FilesUploadPost**](#apiv1filesuploadpost) | **POST** /api/v1/files/upload | Upload a file to the local storage|
 |[**apiV1InteractionPost**](#apiv1interactionpost) | **POST** /api/v1/interaction | Manage sessions or check global status|
 |[**apiV1PromptPost**](#apiv1promptpost) | **POST** /api/v1/prompt | Send a prompt to the agent|
 |[**apiV1PromptStreamGet**](#apiv1promptstreamget) | **GET** /api/v1/prompt/stream | Stream a prompt response via SSE|
@@ -880,6 +881,58 @@ const { status, data } = await apiInstance.apiV1FilesFilepathGet(
 |**200** | The file content |  -  |
 |**404** | File not found |  -  |
 |**403** | Access denied |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
+# **apiV1FilesUploadPost**
+> UploadResponse apiV1FilesUploadPost()
+
+
+### Example
+
+```typescript
+import {
+    DefaultApi,
+    Configuration
+} from './api';
+
+const configuration = new Configuration();
+const apiInstance = new DefaultApi(configuration);
+
+let file: File; // (optional) (default to undefined)
+
+const { status, data } = await apiInstance.apiV1FilesUploadPost(
+    file
+);
+```
+
+### Parameters
+
+|Name | Type | Description  | Notes|
+|------------- | ------------- | ------------- | -------------|
+| **file** | [**File**] |  | (optional) defaults to undefined|
+
+
+### Return type
+
+**UploadResponse**
+
+### Authorization
+
+[ServerKey](../README.md#ServerKey)
+
+### HTTP request headers
+
+ - **Content-Type**: multipart/form-data
+ - **Accept**: application/json
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+|**200** | File uploaded successfully |  -  |
+|**400** | Invalid request |  -  |
+|**500** | Server error |  -  |
 
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
 

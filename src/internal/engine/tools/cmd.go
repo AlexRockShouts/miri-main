@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"miri-main/src/internal/tools/cmd"
 	"os"
 	"path/filepath"
@@ -43,14 +44,17 @@ func (c *CmdToolWrapper) InvokableRun(ctx context.Context, argumentsInJSON strin
 		Command string `json:"command"`
 	}
 	if err := json.Unmarshal([]byte(argumentsInJSON), &args); err != nil {
+		slog.Error("failed to unmarshal cmd tool arguments", "error", err, "input", argumentsInJSON)
 		return "", err
 	}
 
 	// Ensure the generated directory exists
 	if err := os.MkdirAll(c.StorageDir, 0755); err != nil {
+		slog.Error("failed to create storage directory", "path", c.StorageDir, "error", err)
 		return "", fmt.Errorf("failed to create storage directory: %w", err)
 	}
 
+	slog.Debug("executing command", "command", args.Command, "dir", c.StorageDir)
 	stdout, stderr, exitCode, err := cmd.Execute(ctx, args.Command, c.StorageDir)
 
 	// Post-execution: if files were created in the base storage dir (one level up), move them to .generated
@@ -73,9 +77,13 @@ func (c *CmdToolWrapper) InvokableRun(ctx context.Context, argumentsInJSON strin
 				dst := filepath.Join(c.StorageDir, name)
 				// Only move if dst doesn't exist to avoid overwriting (or should we overwrite?)
 				// Let's overwrite to ensure it's in the sandbox.
-				os.Rename(src, dst)
+				if err := os.Rename(src, dst); err != nil {
+					slog.Warn("failed to move file to generated directory", "src", src, "dst", dst, "error", err)
+				}
 			}
 		}
+	} else {
+		slog.Warn("failed to read parent directory for sandboxing", "path", parentDir, "error", err)
 	}
 
 	const maxOutput = 4096
@@ -97,7 +105,10 @@ func (c *CmdToolWrapper) InvokableRun(ctx context.Context, argumentsInJSON strin
 		ExitCode: exitCode,
 	}
 	if err != nil {
+		slog.Error("command execution failed", "command", args.Command, "error", err, "stderr", stderr, "exit_code", exitCode)
 		res.Error = err.Error()
+	} else if exitCode != 0 {
+		slog.Warn("command finished with non-zero exit code", "command", args.Command, "exit_code", exitCode, "stderr", stderr)
 	}
 	b, _ := json.Marshal(res)
 	return string(b), nil

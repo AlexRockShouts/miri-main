@@ -3,6 +3,7 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 	"miri-main/src/internal/tools/webfetch"
 
 	"github.com/cloudwego/eino/components/tool"
@@ -34,10 +35,12 @@ func (f *FetchToolWrapper) InvokableRun(ctx context.Context, argumentsInJSON str
 		URL string `json:"url"`
 	}
 	if err := json.Unmarshal([]byte(argumentsInJSON), &args); err != nil {
+		slog.Error("failed to unmarshal fetch arguments", "error", err, "arguments", argumentsInJSON)
 		return "", err
 	}
 	_, _, body, err := webfetch.Fetch(ctx, args.URL, 0)
 	if err != nil {
+		slog.Error("failed to fetch URL", "url", args.URL, "error", err)
 		return "", err
 	}
 

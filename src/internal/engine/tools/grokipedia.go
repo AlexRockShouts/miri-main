@@ -3,6 +3,7 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 	"miri-main/src/internal/tools/grokipedia"
 
 	"github.com/cloudwego/eino/components/tool"
@@ -34,10 +35,12 @@ func (g *GrokipediaToolWrapper) InvokableRun(ctx context.Context, argumentsInJSO
 		Query string `json:"query"`
 	}
 	if err := json.Unmarshal([]byte(argumentsInJSON), &args); err != nil {
+		slog.Error("failed to unmarshal grokipedia arguments", "error", err, "arguments", argumentsInJSON)
 		return "", err
 	}
 	result, err := grokipedia.Search(ctx, args.Query)
 	if err != nil {
+		slog.Error("failed to search grokipedia", "query", args.Query, "error", err)
 		return "", err
 	}
 	return result, nil
