@@ -417,14 +417,9 @@ func (s *Server) handleGetFile(c *gin.Context) {
 		storageDir = filepath.Join(home, storageDir[1:])
 	}
 
-	// Limit access to the .generated directory
+	// Limit access to the storage directory
 	subPath := c.Param("filepath")
-	// Ensure it starts with /.generated/ or is .generated
 	cleanSubPath := filepath.Clean("/" + subPath)
-	if !strings.HasPrefix(cleanSubPath, "/.generated") {
-		cleanSubPath = filepath.Join("/.generated", cleanSubPath)
-	}
-
 	fullPath := filepath.Join(storageDir, cleanSubPath)
 
 	// Security check: ensure the file is within the storage directory
@@ -462,7 +457,7 @@ func (s *Server) handleUploadFile(c *gin.Context) {
 		storageDir = filepath.Join(home, storageDir[1:])
 	}
 
-	uploadDir := filepath.Join(storageDir, ".generated", "uploads")
+	uploadDir := filepath.Join(storageDir, "uploads")
 	if err := os.MkdirAll(uploadDir, 0755); err != nil {
 		slog.Error("failed to create upload directory", "path", uploadDir, "error", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create upload directory"})
@@ -489,7 +484,7 @@ func (s *Server) handleUploadFile(c *gin.Context) {
 	slog.Info("file uploaded successfully", "filename", filename, "path", dst)
 
 	// Return the path relative to storage root for use with file_manager
-	relPath := filepath.Join(".generated", "uploads", filename)
+	relPath := filepath.Join("uploads", filename)
 
 	c.JSON(http.StatusOK, gin.H{
 		"status":   "file uploaded",

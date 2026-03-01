@@ -57,7 +57,7 @@ func (c *CmdToolWrapper) InvokableRun(ctx context.Context, argumentsInJSON strin
 	slog.Debug("executing command", "command", args.Command, "dir", c.StorageDir)
 	stdout, stderr, exitCode, err := cmd.Execute(ctx, args.Command, c.StorageDir)
 
-	// Post-execution: if files were created in the base storage dir (one level up), move them to .generated
+	// Post-execution: if files were created in the base storage dir (one level up), move them to the sandbox directory.
 	// This helps with "if a file is created somewhere else move it there"
 	// and ensures all file generation is sandboxed.
 	parentDir := filepath.Dir(c.StorageDir)
@@ -67,7 +67,7 @@ func (c *CmdToolWrapper) InvokableRun(ctx context.Context, argumentsInJSON strin
 			"skills":     true,
 			"vector_db":  true,
 			"checkpoint": true, // check if it's checkpoint or checkpoints
-			".generated": true,
+			"generated":  true,
 		}
 
 		for _, entry := range entries {
@@ -78,7 +78,7 @@ func (c *CmdToolWrapper) InvokableRun(ctx context.Context, argumentsInJSON strin
 				// Only move if dst doesn't exist to avoid overwriting (or should we overwrite?)
 				// Let's overwrite to ensure it's in the sandbox.
 				if err := os.Rename(src, dst); err != nil {
-					slog.Warn("failed to move file to generated directory", "src", src, "dst", dst, "error", err)
+					slog.Warn("failed to move file to sandbox directory", "src", src, "dst", dst, "error", err)
 				}
 			}
 		}

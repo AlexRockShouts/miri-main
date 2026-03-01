@@ -87,10 +87,6 @@ func (f *FileManagerToolWrapper) InvokableRun(ctx context.Context, argumentsInJS
 	case "list":
 		// List from storageDir (this includes 'generated' if it exists there)
 		cleanPath := filepath.Clean("/" + args.Path)
-		// Default to .generated if path is empty
-		if args.Path == "" || args.Path == "/" {
-			cleanPath = "/.generated"
-		}
 		fullPath := filepath.Join(storageDir, cleanPath)
 
 		// Ensure the directory exists

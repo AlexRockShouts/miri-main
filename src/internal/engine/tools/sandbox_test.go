@@ -14,12 +14,12 @@ func TestCmdTool_Sandbox(t *testing.T) {
 	}
 	defer os.RemoveAll(tmpDir)
 
-	genDir := filepath.Join(tmpDir, ".generated")
+	genDir := filepath.Join(tmpDir, "generated")
 	tool := NewCmdTool(genDir)
 
 	ctx := context.Background()
 
-	// 1. Test relative file creation (should go to .generated)
+	// 1. Test relative file creation (should go to generated)
 	args := `{"command": "echo 'hello' > relative.txt"}`
 	_, err = tool.InvokableRun(ctx, args)
 	if err != nil {
@@ -27,10 +27,10 @@ func TestCmdTool_Sandbox(t *testing.T) {
 	}
 
 	if _, err := os.Stat(filepath.Join(genDir, "relative.txt")); err != nil {
-		t.Errorf("relative.txt not found in .generated: %v", err)
+		t.Errorf("relative.txt not found in generated: %v", err)
 	}
 
-	// 2. Test file creation in parent (should be moved to .generated)
+	// 2. Test file creation in parent (should be moved to generated)
 	// We use absolute path to parent to be sure
 	parentDir := tmpDir
 	args = `{"command": "echo 'parent' > ` + filepath.Join(parentDir, "outside.txt") + `"}`
@@ -44,7 +44,7 @@ func TestCmdTool_Sandbox(t *testing.T) {
 	}
 
 	if _, err := os.Stat(filepath.Join(genDir, "outside.txt")); err != nil {
-		t.Errorf("outside.txt not found in .generated: %v", err)
+		t.Errorf("outside.txt not found in generated: %v", err)
 	}
 
 	// 3. Test whitelist (soul.md should NOT be moved)
@@ -66,15 +66,13 @@ func TestFileManagerTool_ListDefault(t *testing.T) {
 	}
 	defer os.RemoveAll(tmpDir)
 
-	genDir := filepath.Join(tmpDir, ".generated")
-	os.MkdirAll(genDir, 0755)
-	os.WriteFile(filepath.Join(genDir, "gen.txt"), []byte("gen"), 0644)
+	os.WriteFile(filepath.Join(tmpDir, "gen.txt"), []byte("gen"), 0644)
 
 	tool := NewFileManagerTool(tmpDir, nil)
 
 	ctx := context.Background()
 
-	// Test default list (should list .generated)
+	// Test default list (should list tmpDir)
 	args := `{"action": "list"}`
 	res, err := tool.InvokableRun(ctx, args)
 	if err != nil {

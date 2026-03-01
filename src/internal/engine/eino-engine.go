@@ -144,9 +144,9 @@ func NewEinoEngine(cfg *config.Config, st *storage.Storage, providerName, modelN
 	searchTool := &tools.SearchToolWrapper{}
 	fetchTool := &tools.FetchToolWrapper{}
 	grokipediaTool := &tools.GrokipediaToolWrapper{}
-	generatedDir := filepath.Join(cfg.StorageDir, "Generated")
+	generatedDir := filepath.Join(cfg.StorageDir, "generated")
 	cmdTool := tools.NewCmdTool(generatedDir)
-	fileManagerTool := tools.NewFileManagerTool(generatedDir, nil) // Will be properly set if gateway is available
+	fileManagerTool := tools.NewFileManagerTool(cfg.StorageDir, nil) // Will be properly set if gateway is available
 
 	cpStore, err := NewFileCheckPointStore(cfg.StorageDir)
 	if err != nil {

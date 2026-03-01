@@ -339,51 +339,45 @@ func TestAPI_Files(t *testing.T) {
 	s, tmpDir := setupTestServer(t)
 	defer os.RemoveAll(tmpDir)
 
-	// Files are now restricted to .generated
-	genDir := filepath.Join(tmpDir, ".generated")
+	// Files are now accessible within storageDir
+	genDir := filepath.Join(tmpDir, "generated")
 	os.MkdirAll(genDir, 0755)
 
-	// Test file in .generated
+	// Test file in a subfolder
 	testFile := filepath.Join(genDir, "test.txt")
 	os.WriteFile(testFile, []byte("hello world"), 0644)
 
-	// Should be accessible via /api/v1/files/test.txt (mapped to .generated/test.txt)
-	req := httptest.NewRequest("GET", "/api/v1/files/test.txt", nil)
+	// Should be accessible via /api/v1/files/generated/test.txt
+	req := httptest.NewRequest("GET", "/api/v1/files/generated/test.txt", nil)
 	req.Header.Set("X-Server-Key", "test-server-key")
 	resp := httptest.NewRecorder()
 	s.Engine.ServeHTTP(resp, req)
 
 	if resp.Code != http.StatusOK {
-		t.Errorf("GET file mapped to .generated: expected 200, got %d", resp.Code)
+		t.Errorf("GET file in generated folder: expected 200, got %d", resp.Code)
 	}
 
-	// Test file in deeper subfolder of .generated
-	subDir := filepath.Join(genDir, "subdir")
-	os.MkdirAll(subDir, 0755)
-	subFile := filepath.Join(subDir, "sub.txt")
-	os.WriteFile(subFile, []byte("sub content"), 0644)
+	// Test file directly in storageDir
+	rootFile := filepath.Join(tmpDir, "root.txt")
+	os.WriteFile(rootFile, []byte("root content"), 0644)
 
-	req = httptest.NewRequest("GET", "/api/v1/files/subdir/sub.txt", nil)
+	req = httptest.NewRequest("GET", "/api/v1/files/root.txt", nil)
 	req.Header.Set("X-Server-Key", "test-server-key")
 	resp = httptest.NewRecorder()
 	s.Engine.ServeHTTP(resp, req)
 
 	if resp.Code != http.StatusOK {
-		t.Errorf("GET file in .generated/subdir: expected 200, got %d", resp.Code)
+		t.Errorf("GET file in root storage: expected 200, got %d", resp.Code)
 	}
 
-	// Test file OUTSIDE .generated (should be blocked or not found because of prepending)
-	outsideFile := filepath.Join(tmpDir, "outside.txt")
-	os.WriteFile(outsideFile, []byte("outside"), 0644)
-
-	// /api/v1/files/outside.txt will be mapped to /.generated/outside.txt, which doesn't exist
-	req = httptest.NewRequest("GET", "/api/v1/files/outside.txt", nil)
+	// Test security: path traversal
+	req = httptest.NewRequest("GET", "/api/v1/files/../some_outside_file.txt", nil)
 	req.Header.Set("X-Server-Key", "test-server-key")
 	resp = httptest.NewRecorder()
 	s.Engine.ServeHTTP(resp, req)
 
 	if resp.Code == http.StatusOK {
-		t.Errorf("GET file outside .generated: expected non-200, got %d", resp.Code)
+		t.Errorf("GET file outside storage: expected non-200, got %d", resp.Code)
 	}
 }
 
