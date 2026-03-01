@@ -143,10 +143,8 @@ func TestAPI_AdminHuman(t *testing.T) {
 	s, tmpDir := setupTestServer(t)
 	defer os.RemoveAll(tmpDir)
 
-	human := storage.HumanInfo{
-		ID:    "test-user",
-		Data:  map[string]string{"name": "Test"},
-		Notes: "Test notes",
+	human := map[string]string{
+		"content": "# Test Human\nThis is a test human.",
 	}
 	body, _ := json.Marshal(human)
 	req := httptest.NewRequest("POST", "/api/admin/v1/human", bytes.NewReader(body))
@@ -166,6 +164,12 @@ func TestAPI_AdminHuman(t *testing.T) {
 
 	if resp.Code != http.StatusOK {
 		t.Errorf("GET human: expected 200, got %d", resp.Code)
+	}
+
+	var got map[string]string
+	json.Unmarshal(resp.Body.Bytes(), &got)
+	if got["content"] != human["content"] {
+		t.Errorf("Expected content %q, got %q", human["content"], got["content"])
 	}
 }
 
@@ -303,6 +307,31 @@ func TestAPI_AdminTasks(t *testing.T) {
 
 	if resp.Code != http.StatusOK {
 		t.Errorf("Get task: expected 200, got %d", resp.Code)
+	}
+
+	// Test task with Silent flag
+	silentTask := &tasks.Task{
+		ID:             "silent123",
+		Name:           "Silent Task",
+		CronExpression: "0 0 * * * *",
+		Prompt:         "silent prompt",
+		Silent:         true,
+	}
+	s.Gateway.AddTask(silentTask)
+
+	req = httptest.NewRequest("GET", "/api/admin/v1/tasks/silent123", nil)
+	req.Header.Set("Authorization", adminAuth("admin", "admin-password"))
+	resp = httptest.NewRecorder()
+	s.Engine.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Errorf("Get silent task: expected 200, got %d", resp.Code)
+	}
+
+	var fetchedTask tasks.Task
+	json.Unmarshal(resp.Body.Bytes(), &fetchedTask)
+	if !fetchedTask.Silent {
+		t.Errorf("expected task to be silent")
 	}
 }
 

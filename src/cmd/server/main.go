@@ -38,38 +38,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	soulPath := filepath.Join(cfg.StorageDir, "soul.txt")
-	if _, err := os.Stat(soulPath); os.IsNotExist(err) {
-		templatePath := filepath.Join(".", "templates", "soul.txt")
-		templateData, err := os.ReadFile(templatePath)
-		if err != nil {
-			slog.Warn("failed to read project template soul.txt", "error", err)
-		} else {
-			if err := os.WriteFile(soulPath, templateData, 0644); err != nil {
-				slog.Warn("failed to bootstrap soul.txt from template", "error", err)
-			} else {
-				slog.Info("bootstrapped soul.txt from project template")
-			}
-		}
-	}
-
-	memoryPath := filepath.Join(cfg.StorageDir, "memory.md")
-	if _, err := os.Stat(memoryPath); os.IsNotExist(err) {
-		templatePath := filepath.Join(".", "templates", "memory.md")
-		templateData, err := os.ReadFile(templatePath)
-		if err != nil {
-			slog.Warn("failed to read project template memory.md", "error", err)
-		} else {
-			if err := os.WriteFile(memoryPath, templateData, 0644); err != nil {
-				slog.Warn("failed to bootstrap memory.md from template", "error", err)
-			} else {
-				slog.Info("bootstrapped memory.md from project template")
-			}
-		}
-	}
-
-	// Channels CLI: go run src/cmd/cmd_channels.go [subcmd]
-
 	// PID file management
 	pidPath := filepath.Join(cfg.StorageDir, "miri.pid")
 

@@ -3,7 +3,9 @@ package memory
 import (
 	"context"
 	"miri-main/src/internal/config"
+	"miri-main/src/internal/storage"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -24,7 +26,34 @@ func (m *mockChat) Stream(ctx context.Context, messages []*schema.Message, opts 
 	return nil, nil
 }
 
+func setupTestPrompts() func() {
+	_ = os.MkdirAll("templates/brain", 0755)
+	prompts := []string{
+		"extract.prompt",
+		"reflection.prompt",
+		"compact.prompt",
+		"promote_facts.prompt",
+		"deduplicate_facts.prompt",
+		"consolidate_summaries.prompt",
+		"topology_extraction.prompt",
+		"topology_injection.prompt",
+	}
+	for _, p := range prompts {
+		content := "[]"
+		if p == "topology_extraction.prompt" {
+			content = "{agent_cot_trace + final_answer}"
+		}
+		_ = os.WriteFile(filepath.Join("templates/brain", p), []byte(content), 0644)
+	}
+	return func() {
+		_ = os.RemoveAll("templates")
+	}
+}
+
 func TestBrain_Compact(t *testing.T) {
+	cleanup := setupTestPrompts()
+	defer cleanup()
+
 	tmpDir, err := os.MkdirTemp("", "miri-brain-test-*")
 	if err != nil {
 		t.Fatal(err)
@@ -67,7 +96,8 @@ func TestBrain_Compact(t *testing.T) {
 	_ = os.WriteFile("templates/brain/promote_facts.prompt", []byte(`[{"fact": "Fact 1", "category": "general", "confidence": 0.9}]`), 0644)
 	defer os.RemoveAll("templates")
 
-	brain := NewBrain(chat, vm, 1000, tmpDir)
+	st, _ := storage.New(tmpDir)
+	brain := NewBrain(chat, vm, 1000, st)
 
 	err = brain.Compact(ctx)
 	if err != nil {
@@ -103,6 +133,58 @@ func TestBrain_Compact(t *testing.T) {
 	}
 }
 
+func TestBrain_IngestMetadata(t *testing.T) {
+	cleanup := setupTestPrompts()
+	defer cleanup()
+
+	tmpDir, err := os.MkdirTemp("", "miri-brain-ingest-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	cfg := &config.Config{
+		StorageDir: tmpDir,
+		Miri: config.MiriConfig{
+			Brain: config.BrainConfig{
+				Embeddings: config.EmbeddingConfig{
+					UseNativeEmbeddings: true,
+				},
+			},
+		},
+	}
+
+	vm, err := NewVectorMemory(cfg, "test_brain_ingest_collection")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ctx := context.Background()
+	chat := &mockChat{
+		response: `[{"fact": "User likes coffee", "category": "preference", "confidence": 0.9, "source_turn": "metadata"}]`,
+	}
+
+	st, _ := storage.New(tmpDir)
+	brain := NewBrain(chat, vm, 1000, st)
+
+	err = brain.IngestMetadata(ctx, "I like coffee", "I am a helpful assistant")
+	if err != nil {
+		t.Fatalf("IngestMetadata failed: %v", err)
+	}
+
+	// Verify that fact was extracted and added to memory
+	results, err := vm.Search(ctx, "coffee", 1, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(results) == 0 {
+		t.Errorf("Fact not found in memory after ingest")
+	} else if results[0].Content != "User likes coffee" {
+		t.Errorf("Unexpected fact content: %s", results[0].Content)
+	}
+}
+
 func TestBrain_InteractionThreshold(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "miri-brain-test-threshold-*")
 	if err != nil {
@@ -127,7 +209,8 @@ func TestBrain_InteractionThreshold(t *testing.T) {
 	}
 
 	chat := &mockChat{response: "[]"}
-	brain := NewBrain(chat, vm, 1000, tmpDir)
+	st, _ := storage.New(tmpDir)
+	brain := NewBrain(chat, vm, 1000, st)
 
 	// Interaction 1 to 99 should not trigger compaction
 	for i := 1; i < 100; i++ {
@@ -140,6 +223,9 @@ func TestBrain_InteractionThreshold(t *testing.T) {
 	if count != 99 {
 		t.Errorf("Expected interaction count 99, got %d", count)
 	}
+
+	cleanup := setupTestPrompts()
+	defer cleanup()
 
 	// Interaction 100 should trigger compaction
 	_, _ = brain.Retrieve(context.Background(), "query")
@@ -181,10 +267,15 @@ func TestBrain_ContextUsageThreshold(t *testing.T) {
 	}
 
 	chat := &mockChat{response: "[]"}
-	// Window 1000, 60% = 600
-	brain := NewBrain(chat, vm, 1000, tmpDir)
 
-	// Usage 500 should not trigger compaction
+	cleanup := setupTestPrompts()
+	defer cleanup()
+
+	// Window 1000, 60% = 600
+	st, _ := storage.New(tmpDir)
+	brain := NewBrain(chat, vm, 1000, st)
+
+	// Usage 500 should not trigger maintenance
 	brain.UpdateContextUsage(context.Background(), 500)
 	time.Sleep(100 * time.Millisecond)
 
@@ -197,17 +288,111 @@ func TestBrain_ContextUsageThreshold(t *testing.T) {
 
 	brain.mu.Lock()
 	if brain.interactionCount != 10 {
-		t.Errorf("Expected interaction count 10, got %d (compaction should not have triggered)", brain.interactionCount)
+		t.Errorf("Expected interaction count 10, got %d (maintenance should not have triggered)", brain.interactionCount)
 	}
 	brain.mu.Unlock()
 
-	// Usage 600 should trigger compaction
+	// Usage 600 should trigger maintenance via UpdateContextUsage
 	brain.UpdateContextUsage(context.Background(), 600)
 	time.Sleep(200 * time.Millisecond)
 
 	brain.mu.Lock()
 	if brain.interactionCount != 0 {
-		t.Errorf("Expected interaction count 0, got %d (compaction should have triggered and reset it)", brain.interactionCount)
+		t.Errorf("Expected interaction count 0, got %d (maintenance should have triggered and reset it)", brain.interactionCount)
 	}
 	brain.mu.Unlock()
+
+	// Now test Retrieve triggering maintenance if usage is high
+	brain.mu.Lock()
+	brain.interactionCount = 5
+	brain.lastContextUsage = 700 // High usage
+	brain.mu.Unlock()
+
+	// Add some messages to buffer to test clearing
+	brain.AddToBuffer("sess1", schema.UserMessage("Hello"))
+
+	_, _ = brain.Retrieve(context.Background(), "query")
+	time.Sleep(200 * time.Millisecond)
+
+	brain.mu.Lock()
+	if brain.interactionCount != 0 {
+		t.Errorf("Expected interaction count to be reset to 0 after Retrieve triggered maintenance, got %d", brain.interactionCount)
+	}
+	// Buffer should be cleared after summarization
+	if len(brain.buffer["sess1"]) != 0 {
+		t.Errorf("Expected buffer to be cleared after maintenance, got %d messages", len(brain.buffer["sess1"]))
+	}
+	brain.mu.Unlock()
+}
+
+func TestBrain_AnalyzeTopology(t *testing.T) {
+	cleanup := setupTestPrompts()
+	defer cleanup()
+
+	tmpDir, _ := os.MkdirTemp("", "brain-topology-test-*")
+	defer os.RemoveAll(tmpDir)
+
+	chat := &mockChat{
+		response: `{
+			"steps": [
+				{"id": 1, "content": "Node 1"},
+				{"id": 2, "content": "Node 2"}
+			],
+			"bonds": [
+				{"from": 1, "to": 2, "type": "D", "explanation": "Logic"}
+			],
+			"topology_score": 9,
+			"bond_distribution": {"D": 1.0, "R": 0.0, "E": 0.0},
+			"assessment": "Good"
+		}`,
+	}
+
+	st, _ := storage.New(tmpDir)
+	brain := NewBrain(chat, nil, 1000, st)
+	analysis, err := brain.analyzeTopology(context.Background(), "some trace")
+	if err != nil {
+		t.Fatalf("analyzeTopology failed: %v", err)
+	}
+
+	if analysis.TopologyScore != 9 {
+		t.Errorf("expected score 9, got %d", analysis.TopologyScore)
+	}
+	if len(analysis.Steps) != 2 {
+		t.Errorf("expected 2 steps, got %d", len(analysis.Steps))
+	}
+}
+
+func TestBrain_TriggerMaintenanceScheduled(t *testing.T) {
+	cleanup := setupTestPrompts()
+	defer cleanup()
+
+	tmpDir, err := os.MkdirTemp("", "miri-brain-test-scheduled-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	cfg := &config.Config{
+		StorageDir: tmpDir,
+		Miri: config.MiriConfig{
+			Brain: config.BrainConfig{
+				Embeddings: config.EmbeddingConfig{
+					UseNativeEmbeddings: true,
+				},
+			},
+		},
+	}
+
+	vm, _ := NewVectorMemory(cfg, "test_scheduled_collection")
+	chat := &mockChat{response: `{}`}
+
+	st, _ := storage.New(tmpDir)
+	brain := NewBrain(chat, vm, 1000, st)
+
+	// Trigger scheduled maintenance
+	brain.TriggerMaintenance(TriggerScheduled)
+
+	if brain.lastMaintenance.IsZero() {
+		t.Errorf("lastMaintenance should have been updated")
+	}
 }

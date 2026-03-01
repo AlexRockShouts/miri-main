@@ -70,6 +70,11 @@ func (t *TaskManagerToolWrapper) GetInfo() *schema.ToolInfo {
 				Desc:     "Whether the task is active",
 				Required: false,
 			},
+			"silent": {
+				Type:     schema.Boolean,
+				Desc:     "Whether to suppress reporting results to chat/channels",
+				Required: false,
+			},
 		}),
 	}
 }
@@ -87,6 +92,7 @@ func (t *TaskManagerToolWrapper) InvokableRun(ctx context.Context, argumentsInJS
 		Prompt       string   `json:"prompt"`
 		NeededSkills []string `json:"needed_skills"`
 		Active       *bool    `json:"active"`
+		Silent       *bool    `json:"silent"`
 	}
 	if err := json.Unmarshal([]byte(argumentsInJSON), &args); err != nil {
 		return "", err
@@ -110,6 +116,9 @@ func (t *TaskManagerToolWrapper) InvokableRun(ctx context.Context, argumentsInJS
 		}
 		if args.Active != nil {
 			task.Active = *args.Active
+		}
+		if args.Silent != nil {
+			task.Silent = *args.Silent
 		}
 
 		// Pre-install skills if specified
@@ -165,6 +174,9 @@ func (t *TaskManagerToolWrapper) InvokableRun(ctx context.Context, argumentsInJS
 		}
 		if args.Active != nil {
 			task.Active = *args.Active
+		}
+		if args.Silent != nil {
+			task.Silent = *args.Silent
 		}
 		task.Updated = time.Now()
 

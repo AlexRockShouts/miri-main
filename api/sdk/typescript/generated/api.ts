@@ -145,10 +145,8 @@ export interface EmbeddingModelConfig {
     'model'?: string;
     'url'?: string;
 }
-export interface HumanInfo {
-    'id'?: string;
-    'data'?: { [key: string]: string; };
-    'notes'?: string;
+export interface Human {
+    'content'?: string;
 }
 export interface Message {
     'prompt'?: string;
@@ -369,7 +367,7 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
         },
         /**
          * 
-         * @summary List all stored human information
+         * @summary Get the human information (Markdown)
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
@@ -403,14 +401,14 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
         },
         /**
          * 
-         * @summary Store human information
-         * @param {HumanInfo} humanInfo 
+         * @summary Save human information (Markdown)
+         * @param {Human} human 
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        apiAdminV1HumanPost: async (humanInfo: HumanInfo, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
-            // verify required parameter 'humanInfo' is not null or undefined
-            assertParamExists('apiAdminV1HumanPost', 'humanInfo', humanInfo)
+        apiAdminV1HumanPost: async (human: Human, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'human' is not null or undefined
+            assertParamExists('apiAdminV1HumanPost', 'human', human)
             const localVarPath = `/api/admin/v1/human`;
             // use dummy base URL string because the URL constructor only accepts absolute URLs.
             const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
@@ -432,7 +430,7 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
             setSearchParams(localVarUrlObj, localVarQueryParameter);
             let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
             localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
-            localVarRequestOptions.data = serializeDataIfNeeded(humanInfo, localVarRequestOptions, configuration)
+            localVarRequestOptions.data = serializeDataIfNeeded(human, localVarRequestOptions, configuration)
 
             return {
                 url: toPathString(localVarUrlObj),
@@ -1100,11 +1098,11 @@ export const DefaultApiFp = function(configuration?: Configuration) {
         },
         /**
          * 
-         * @summary List all stored human information
+         * @summary Get the human information (Markdown)
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        async apiAdminV1HumanGet(options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<Array<HumanInfo>>> {
+        async apiAdminV1HumanGet(options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<Human>> {
             const localVarAxiosArgs = await localVarAxiosParamCreator.apiAdminV1HumanGet(options);
             const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
             const localVarOperationServerBasePath = operationServerMap['DefaultApi.apiAdminV1HumanGet']?.[localVarOperationServerIndex]?.url;
@@ -1112,13 +1110,13 @@ export const DefaultApiFp = function(configuration?: Configuration) {
         },
         /**
          * 
-         * @summary Store human information
-         * @param {HumanInfo} humanInfo 
+         * @summary Save human information (Markdown)
+         * @param {Human} human 
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        async apiAdminV1HumanPost(humanInfo: HumanInfo, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<void>> {
-            const localVarAxiosArgs = await localVarAxiosParamCreator.apiAdminV1HumanPost(humanInfo, options);
+        async apiAdminV1HumanPost(human: Human, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<void>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.apiAdminV1HumanPost(human, options);
             const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
             const localVarOperationServerBasePath = operationServerMap['DefaultApi.apiAdminV1HumanPost']?.[localVarOperationServerIndex]?.url;
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
@@ -1378,22 +1376,22 @@ export const DefaultApiFactory = function (configuration?: Configuration, basePa
         },
         /**
          * 
-         * @summary List all stored human information
+         * @summary Get the human information (Markdown)
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        apiAdminV1HumanGet(options?: RawAxiosRequestConfig): AxiosPromise<Array<HumanInfo>> {
+        apiAdminV1HumanGet(options?: RawAxiosRequestConfig): AxiosPromise<Human> {
             return localVarFp.apiAdminV1HumanGet(options).then((request) => request(axios, basePath));
         },
         /**
          * 
-         * @summary Store human information
-         * @param {HumanInfo} humanInfo 
+         * @summary Save human information (Markdown)
+         * @param {Human} human 
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        apiAdminV1HumanPost(humanInfo: HumanInfo, options?: RawAxiosRequestConfig): AxiosPromise<void> {
-            return localVarFp.apiAdminV1HumanPost(humanInfo, options).then((request) => request(axios, basePath));
+        apiAdminV1HumanPost(human: Human, options?: RawAxiosRequestConfig): AxiosPromise<void> {
+            return localVarFp.apiAdminV1HumanPost(human, options).then((request) => request(axios, basePath));
         },
         /**
          * 
@@ -1604,7 +1602,7 @@ export class DefaultApi extends BaseAPI {
 
     /**
      * 
-     * @summary List all stored human information
+     * @summary Get the human information (Markdown)
      * @param {*} [options] Override http request option.
      * @throws {RequiredError}
      */
@@ -1614,13 +1612,13 @@ export class DefaultApi extends BaseAPI {
 
     /**
      * 
-     * @summary Store human information
-     * @param {HumanInfo} humanInfo 
+     * @summary Save human information (Markdown)
+     * @param {Human} human 
      * @param {*} [options] Override http request option.
      * @throws {RequiredError}
      */
-    public apiAdminV1HumanPost(humanInfo: HumanInfo, options?: RawAxiosRequestConfig) {
-        return DefaultApiFp(this.configuration).apiAdminV1HumanPost(humanInfo, options).then((request) => request(this.axios, this.basePath));
+    public apiAdminV1HumanPost(human: Human, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).apiAdminV1HumanPost(human, options).then((request) => request(this.axios, this.basePath));
     }
 
     /**

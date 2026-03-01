@@ -2,6 +2,7 @@ package storage
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"miri-main/src/internal/tasks"
 	"os"
@@ -15,12 +16,6 @@ type Storage struct {
 	mu      sync.RWMutex
 }
 
-type HumanInfo struct {
-	ID    string            `json:"id"`
-	Data  map[string]string `json:"data"`
-	Notes string            `json:"notes"`
-}
-
 type CronTxtJob struct {
 	Spec   string
 	Prompt string
@@ -29,12 +24,6 @@ type CronTxtJob struct {
 func New(baseDir string) (*Storage, error) {
 	if _, err := os.Stat(baseDir); os.IsNotExist(err) {
 		if err := os.MkdirAll(baseDir, 0755); err != nil {
-			return nil, err
-		}
-	}
-	humanDir := filepath.Join(baseDir, "human_info")
-	if _, err := os.Stat(humanDir); os.IsNotExist(err) {
-		if err := os.MkdirAll(humanDir, 0755); err != nil {
 			return nil, err
 		}
 	}
@@ -51,6 +40,10 @@ func New(baseDir string) (*Storage, error) {
 		}
 	}
 	return &Storage{baseDir: baseDir}, nil
+}
+
+func (s *Storage) GetBaseDir() string {
+	return s.baseDir
 }
 
 func (s *Storage) CopySkills(srcDir string) error {
@@ -102,55 +95,50 @@ func (s *Storage) CopySkills(srcDir string) error {
 	})
 }
 
-func (s *Storage) SaveHumanInfo(info *HumanInfo) error {
+// BootstrapSoul ensures that soul.md exists in the storage directory,
+// copying it from the provided template path if it doesn't.
+// Returns true if the file was bootstrapped, false if it already existed.
+func (s *Storage) BootstrapSoul(templatePath string) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	path := filepath.Join(s.baseDir, "human_info", info.ID+".json")
-	data, err := json.MarshalIndent(info, "", "  ")
-	if err != nil {
-		return err
+	soulPath := filepath.Join(s.baseDir, "soul.md")
+	if _, err := os.Stat(soulPath); err == nil {
+		return false, nil // Already exists
 	}
-	return os.WriteFile(path, data, 0644)
+
+	templateData, err := os.ReadFile(templatePath)
+	if err != nil {
+		return false, fmt.Errorf("failed to read template soul.md: %w", err)
+	}
+
+	if err := os.WriteFile(soulPath, templateData, 0644); err != nil {
+		return false, fmt.Errorf("failed to bootstrap soul.md: %w", err)
+	}
+	return true, nil
 }
 
-func (s *Storage) GetHumanInfo(id string) (*HumanInfo, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+// BootstrapHuman ensures that human.md exists in the storage directory,
+// copying it from the provided template path if it doesn't.
+// Returns true if the file was bootstrapped, false if it already existed.
+func (s *Storage) BootstrapHuman(templatePath string) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
-	path := filepath.Join(s.baseDir, "human_info", id+".json")
-	data, err := os.ReadFile(path)
+	humanPath := filepath.Join(s.baseDir, "human.md")
+	if _, err := os.Stat(humanPath); err == nil {
+		return false, nil // Already exists
+	}
+
+	templateData, err := os.ReadFile(templatePath)
 	if err != nil {
-		return nil, err
+		return false, fmt.Errorf("failed to read template human.md: %w", err)
 	}
 
-	var info HumanInfo
-	if err := json.Unmarshal(data, &info); err != nil {
-		return nil, err
+	if err := os.WriteFile(humanPath, templateData, 0644); err != nil {
+		return false, fmt.Errorf("failed to bootstrap human.md: %w", err)
 	}
-	return &info, nil
-}
-
-func (s *Storage) ListHumanInfo() ([]*HumanInfo, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	humanDir := filepath.Join(s.baseDir, "human_info")
-	files, err := os.ReadDir(humanDir)
-	if err != nil {
-		return nil, err
-	}
-
-	var results []*HumanInfo
-	for _, f := range files {
-		if filepath.Ext(f.Name()) == ".json" {
-			info, err := s.GetHumanInfo(f.Name()[:len(f.Name())-5])
-			if err == nil {
-				results = append(results, info)
-			}
-		}
-	}
-	return results, nil
+	return true, nil
 }
 
 func (s *Storage) SaveState(name string, state interface{}) error {
@@ -208,8 +196,34 @@ func (s *Storage) LoadCronTxt() ([]CronTxtJob, error) {
 	return jobs, nil
 }
 
+func (s *Storage) SaveHuman(content string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	path := filepath.Join(s.baseDir, "human.md")
+	return os.WriteFile(path, []byte(content), 0644)
+}
+
+func (s *Storage) GetHuman() (string, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	path := filepath.Join(s.baseDir, "human.md")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", nil
+		}
+		return "", err
+	}
+	return string(data), nil
+}
+
 func (s *Storage) GetSoul() (string, error) {
-	path := filepath.Join(s.baseDir, "soul.txt")
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	path := filepath.Join(s.baseDir, "soul.md")
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -221,56 +235,24 @@ func (s *Storage) GetSoul() (string, error) {
 }
 
 func (s *Storage) ReadMemory() (string, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	path := filepath.Join(s.baseDir, "memory.md")
-	data, err := os.ReadFile(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return "", nil
-		}
-		return "", err
-	}
-	return string(data), nil
+	return s.GetSoul()
 }
 
-func (s *Storage) AppendToMemory(content string) error {
+func (s *Storage) AppendToMemory(text string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	path := filepath.Join(s.baseDir, "memory.md")
-	data, err := os.ReadFile(path)
-	if err != nil && !os.IsNotExist(err) {
-		return err
-	}
-
-	if os.IsNotExist(err) || len(data) == 0 {
-		return os.WriteFile(path, []byte(content+"\n"), 0644)
-	}
-
-	// If file exists, try to insert into section 8
-	strData := string(data)
-	section8Header := "## 8. Memory Log / Decisions Changelog / What We Learned"
-	section9Header := "## 9. Optional: Quick Reference / Cheat Sheet"
-
-	if strings.Contains(strData, section8Header) && strings.Contains(strData, section9Header) {
-		parts := strings.Split(strData, section9Header)
-		if len(parts) >= 2 {
-			newContent := parts[0] + content + "\n\n" + section9Header + parts[1]
-			return os.WriteFile(path, []byte(newContent), 0644)
-		}
-	}
-
-	// Fallback to append if headers not found
-	f, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND, 0644)
+	path := filepath.Join(s.baseDir, "soul.md")
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		return err
 	}
 	defer f.Close()
 
-	_, err = f.WriteString(content + "\n")
-	return err
+	if _, err := f.WriteString("\n" + text + "\n"); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (s *Storage) SaveTask(t *tasks.Task) error {
@@ -342,4 +324,58 @@ func (s *Storage) DeleteTask(id string) error {
 
 	path := filepath.Join(s.baseDir, "tasks", id+".json")
 	return os.Remove(path)
+}
+
+func (s *Storage) SyncBrainPrompts(srcDir string) error {
+	destDir := filepath.Join(s.baseDir, "brain")
+	if err := os.MkdirAll(destDir, 0755); err != nil {
+		return fmt.Errorf("failed to create brain prompts directory: %w", err)
+	}
+
+	files, err := os.ReadDir(srcDir)
+	if err != nil {
+		return fmt.Errorf("failed to read source prompts: %w", err)
+	}
+
+	for _, file := range files {
+		if file.IsDir() {
+			continue
+		}
+
+		srcPath := filepath.Join(srcDir, file.Name())
+		destPath := filepath.Join(destDir, file.Name())
+
+		content, err := os.ReadFile(srcPath)
+		if err != nil {
+			continue
+		}
+
+		if err := os.WriteFile(destPath, content, 0644); err != nil {
+			continue
+		}
+	}
+	return nil
+}
+
+func (s *Storage) GetBrainPrompt(name string) (string, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	promptsDir := filepath.Join(s.baseDir, "brain")
+	promptPath := filepath.Join(promptsDir, name)
+
+	content, err := os.ReadFile(promptPath)
+	if err != nil {
+		return "", err
+	}
+
+	prompt := string(content)
+
+	// Inject topology_injection.prompt if it exists
+	injectionPath := filepath.Join(promptsDir, "topology_injection.prompt")
+	if injection, err := os.ReadFile(injectionPath); err == nil {
+		return string(injection) + "\n\n" + prompt, nil
+	}
+
+	return prompt, nil
 }

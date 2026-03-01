@@ -16,4 +16,5 @@ type Task struct {
 	Updated        time.Time `json:"updated"`
 	ReportSession  string    `json:"report_session,omitempty"`  // If set, report to this session (e.g., from which it was created)
 	ReportChannels []string  `json:"report_channels,omitempty"` // If set, report to these channels (e.g., "whatsapp:device_id", "irc:#channel")
+	Silent         bool      `json:"silent,omitempty"`          // If true, do not report results to WS or channels
 }

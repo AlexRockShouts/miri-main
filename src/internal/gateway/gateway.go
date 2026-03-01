@@ -53,6 +53,11 @@ func New(cfg *config.Config, st *storage.Storage) *Gateway {
 	gw.cronMgr = cron.NewCronManager(gw.Storage, func(ctx context.Context, sessionID, prompt string, opts engine.Options) (string, error) {
 		return gw.PrimaryAgent.DelegatePromptWithOptions(ctx, sessionID, prompt, opts)
 	}, func(t *tasks.Task, response string) {
+		if t.Silent {
+			slog.Info("task execution silent, skipping reports", "task_id", t.ID, "task_name", t.Name)
+			return
+		}
+
 		// Report to session (WS chat clients)
 		reportSession := t.ReportSession
 		if reportSession == "" {
@@ -82,6 +87,14 @@ func New(cfg *config.Config, st *storage.Storage) *Gateway {
 		}
 	})
 	gw.cronMgr.Start()
+
+	// Add scheduled maintenance: every 12 hours (0:00 and 12:00)
+	if _, err := gw.cronMgr.AddFunc("0 0 0,12 * * *", func() {
+		slog.Info("Starting scheduled brain maintenance")
+		gw.PrimaryAgent.TriggerMaintenance(context.Background())
+	}); err != nil {
+		slog.Error("Failed to schedule brain maintenance", "error", err)
+	}
 
 	gw.PrimaryAgent.SetTaskGateway(gw)
 	for _, sub := range gw.SubAgents {
@@ -225,17 +238,22 @@ func (gw *Gateway) UpdateConfig(newCfg *config.Config) {
 	}
 }
 
-func (gw *Gateway) SaveHumanInfo(info *storage.HumanInfo) error {
-	return gw.Storage.SaveHumanInfo(info)
+func (gw *Gateway) SaveHuman(content string) error {
+	return gw.Storage.SaveHuman(content)
 }
 
-func (gw *Gateway) ListHumanInfo() ([]*storage.HumanInfo, error) {
-	return gw.Storage.ListHumanInfo()
+func (gw *Gateway) GetHuman() (string, error) {
+	return gw.Storage.GetHuman()
 }
 
 func (gw *Gateway) StartEngine(ctx context.Context) {
 	if gw.engine != nil {
 		gw.engine.Start(ctx)
+	}
+	// Trigger startup brain maintenance
+	if gw.PrimaryAgent != nil {
+		slog.Info("Triggering startup brain maintenance")
+		gw.PrimaryAgent.TriggerMaintenance(ctx)
 	}
 }
 

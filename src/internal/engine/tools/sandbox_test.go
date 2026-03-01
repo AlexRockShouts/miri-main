@@ -47,15 +47,15 @@ func TestCmdTool_Sandbox(t *testing.T) {
 		t.Errorf("outside.txt not found in .generated: %v", err)
 	}
 
-	// 3. Test whitelist (soul.txt should NOT be moved)
-	soulFile := filepath.Join(parentDir, "soul.txt")
+	// 3. Test whitelist (soul.md should NOT be moved)
+	soulFile := filepath.Join(parentDir, "soul.md")
 	os.WriteFile(soulFile, []byte("soul"), 0644)
 
 	args = `{"command": "ls"}` // Just trigger a run
 	tool.InvokableRun(ctx, args)
 
 	if _, err := os.Stat(soulFile); err != nil {
-		t.Errorf("soul.txt was moved but it is whitelisted")
+		t.Errorf("soul.md was moved but it is whitelisted")
 	}
 }
 

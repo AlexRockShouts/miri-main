@@ -1,7 +1,6 @@
 package session
 
 import (
-	"miri-main/src/internal/storage"
 	"sync"
 )
 
@@ -26,20 +25,6 @@ func NewSession(id string) *Session {
 	return &Session{
 		ID: id,
 	}
-}
-
-func (s *Session) SetSoulIfEmpty(st *storage.Storage) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.Soul != "" {
-		return nil
-	}
-	soul, err := st.GetSoul()
-	if err != nil {
-		return err
-	}
-	s.Soul = soul
-	return nil
 }
 
 func (s *Session) GetSoul() string {

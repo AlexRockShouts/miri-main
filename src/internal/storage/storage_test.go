@@ -26,7 +26,7 @@ Last updated: 2026-02-25
 
 ## 9. Optional: Quick Reference / Cheat Sheet
 `
-	err = os.WriteFile(st.baseDir+"/memory.md", []byte(template), 0644)
+	err = os.WriteFile(st.baseDir+"/soul.md", []byte(template), 0644)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -64,4 +64,123 @@ Last updated: 2026-02-25
 	}
 
 	t.Logf("Memory content:\n%s", mem)
+}
+
+func TestBootstrapSoul(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "miri-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	st, err := New(tempDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	templatePath := tempDir + "/template_soul.md"
+	templateContent := "template soul content"
+	if err := os.WriteFile(templatePath, []byte(templateContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// First bootstrap: should succeed and return true
+	bootstrapped, err := st.BootstrapSoul(templatePath)
+	if err != nil {
+		t.Fatalf("First bootstrap failed: %v", err)
+	}
+	if !bootstrapped {
+		t.Error("First bootstrap should have returned true")
+	}
+
+	// Verify content
+	content, err := st.GetSoul()
+	if err != nil {
+		t.Fatalf("GetSoul failed: %v", err)
+	}
+	if content != templateContent {
+		t.Errorf("Expected content %q, got %q", templateContent, content)
+	}
+
+	// Second bootstrap: should succeed and return false
+	bootstrapped, err = st.BootstrapSoul(templatePath)
+	if err != nil {
+		t.Fatalf("Second bootstrap failed: %v", err)
+	}
+	if bootstrapped {
+		t.Error("Second bootstrap should have returned false")
+	}
+}
+
+func TestBootstrapHuman(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "miri-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	st, err := New(tempDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	templatePath := tempDir + "/template_human.md"
+	templateContent := "template human content"
+	if err := os.WriteFile(templatePath, []byte(templateContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// First bootstrap: should succeed and return true
+	bootstrapped, err := st.BootstrapHuman(templatePath)
+	if err != nil {
+		t.Fatalf("First bootstrap failed: %v", err)
+	}
+	if !bootstrapped {
+		t.Error("First bootstrap should have returned true")
+	}
+
+	// Verify content
+	content, err := st.GetHuman()
+	if err != nil {
+		t.Fatalf("GetHuman failed: %v", err)
+	}
+	if content != templateContent {
+		t.Errorf("Expected content %q, got %q", templateContent, content)
+	}
+
+	// Second bootstrap: should succeed and return false
+	bootstrapped, err = st.BootstrapHuman(templatePath)
+	if err != nil {
+		t.Fatalf("Second bootstrap failed: %v", err)
+	}
+	if bootstrapped {
+		t.Error("Second bootstrap should have returned false")
+	}
+}
+
+func TestSaveGetHuman(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "miri-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	st, err := New(tempDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	content := "Updated human content"
+	err = st.SaveHuman(content)
+	if err != nil {
+		t.Fatalf("SaveHuman failed: %v", err)
+	}
+
+	got, err := st.GetHuman()
+	if err != nil {
+		t.Fatalf("GetHuman failed: %v", err)
+	}
+	if got != content {
+		t.Errorf("Expected content %q, got %q", content, got)
+	}
 }

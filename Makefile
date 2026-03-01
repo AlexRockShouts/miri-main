@@ -1,4 +1,4 @@
-.PHONY: all server clean test install ts-sdk ts-sdk-generate ts-sdk-install ts-sdk-build ts-sdk-publish wasm run-server build
+.PHONY: all server clean test install ts-sdk ts-sdk-generate ts-sdk-install ts-sdk-build ts-sdk-publish run-server build
 
 BIN_DIR := bin
 SERVER_BIN := $(BIN_DIR)/miri-server
@@ -26,9 +26,6 @@ install: server
 run-server: server
 	./$(SERVER_BIN)
 
-wasm:
-	mkdir -p api/sdk/wasm
-	GOOS=js GOARCH=wasm go build -o api/sdk/wasm/miri.wasm src/cmd/wasm/main.go
 
 # --- TypeScript SDK tasks ---
 # Generate the TypeScript SDK from the OpenAPI spec into a dedicated "generated" folder

@@ -2,6 +2,7 @@
 miri
 miri.exe
 miri.test
+miri-server
 
 # Test output
 *.out
@@ -14,6 +15,9 @@ vendor/
 # Go workspace
 go.work
 go.work.sum
+
+server
+tui
 
 # IDE / Editor
 .idea/
@@ -33,3 +37,4 @@ Thumbs.db
 bin
 main
 *.yaml  # optional, but since sensitive API keys
+/templates/human_r.md

@@ -113,6 +113,10 @@ func (m *CronManager) RemoveTask(id string) {
 	}
 }
 
+func (m *CronManager) AddFunc(spec string, f func()) (cron.EntryID, error) {
+	return m.c.AddFunc(spec, f)
+}
+
 func (m *CronManager) runTask(t *tasks.Task) {
 	slog.Info("running cron task", "task_id", t.ID, "name", t.Name)
 

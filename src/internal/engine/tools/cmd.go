@@ -59,7 +59,7 @@ func (c *CmdToolWrapper) InvokableRun(ctx context.Context, argumentsInJSON strin
 	parentDir := filepath.Dir(c.StorageDir)
 	if entries, err := os.ReadDir(parentDir); err == nil {
 		whitelist := map[string]bool{
-			"soul.txt":   true,
+			"soul.md":    true,
 			"skills":     true,
 			"vector_db":  true,
 			"checkpoint": true, // check if it's checkpoint or checkpoints

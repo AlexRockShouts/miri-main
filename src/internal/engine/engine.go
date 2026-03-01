@@ -42,7 +42,9 @@ type Engine interface {
 	SetTaskGateway(gw any)
 	ClearHistory(sessionID string)
 	CompactMemory(ctx context.Context)
+	TriggerMaintenance(ctx context.Context)
 	Shutdown(ctx context.Context)
+	Startup(ctx context.Context)
 }
 
 type SkillCommand struct {

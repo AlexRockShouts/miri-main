@@ -8,6 +8,7 @@ require (
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/cloudwego/eino v0.7.36
 	github.com/cloudwego/eino-ext/components/model/openai v0.1.8
+	github.com/dominikbraun/graph v0.23.0
 	github.com/gdamore/tcell/v2 v2.13.8
 	github.com/gin-gonic/gin v1.11.0
 	github.com/google/uuid v1.6.0
@@ -18,9 +19,11 @@ require (
 	github.com/philippgille/chromem-go v0.7.0
 	github.com/rivo/tview v0.42.0
 	github.com/robfig/cron/v3 v3.0.1
+	github.com/sashabaranov/go-openai v1.41.2
 	github.com/spf13/viper v1.21.0
 	github.com/vmihailenco/msgpack/v5 v5.4.1
 	go.mau.fi/whatsmeow v0.0.0-20260227112304-c9652e4448a2
+	golang.org/x/sync v0.19.0
 	google.golang.org/protobuf v1.36.11
 	gopkg.in/yaml.v3 v3.0.1
 )

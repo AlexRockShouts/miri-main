@@ -93,8 +93,8 @@ func (s *Server) setupRoutesAdmin() {
 		// Administrative endpoints moved from /api/v1
 		admin.GET("/config", s.handleGetConfig)
 		admin.POST("/config", s.handleUpdateConfig)
-		admin.POST("/human", s.handleSaveHumanInfo)
-		admin.GET("/human", s.handleListHumanInfo)
+		admin.POST("/human", s.handleSaveHuman)
+		admin.GET("/human", s.handleGetHuman)
 		admin.POST("/channels", s.handleChannels)
 		admin.GET("/sessions", s.handleListSessions)
 		admin.GET("/sessions/:id", s.handleGetSession)

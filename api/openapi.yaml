@@ -53,16 +53,10 @@ components:
         total_cost:
           type: number
           format: float
-    HumanInfo:
+    Human:
       type: object
       properties:
-        id:
-          type: string
-        data:
-          type: object
-          additionalProperties:
-            type: string
-        notes:
+        content:
           type: string
     Config:
       type: object
@@ -475,20 +469,18 @@ paths:
 
   /api/admin/v1/human:
     get:
-      summary: List all stored human information
+      summary: Get the human information (Markdown)
       security:
         - BasicAuth: []
       responses:
         '200':
-          description: List of human info
+          description: Human information
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/HumanInfo'
+                $ref: '#/components/schemas/Human'
     post:
-      summary: Store human information
+      summary: Save human information (Markdown)
       security:
         - BasicAuth: []
       requestBody:
@@ -496,10 +488,10 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/HumanInfo'
+              $ref: '#/components/schemas/Human'
       responses:
         '200':
-          description: Human info saved
+          description: Human information saved
 
   /api/admin/v1/channels:
     post:

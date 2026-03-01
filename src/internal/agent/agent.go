@@ -43,6 +43,7 @@ func (a *Agent) InitEngine() {
 		if a.taskGateway != nil {
 			a.Eng.SetTaskGateway(a.taskGateway)
 		}
+		a.Eng.Startup(context.Background())
 	}
 }
 
@@ -77,19 +78,6 @@ func (a *Agent) DelegatePromptStream(sessionID string, prompt string) (<-chan st
 }
 
 func (a *Agent) DelegatePromptWithOptions(ctx context.Context, sessionID string, prompt string, opts engine.Options) (string, error) {
-	// Gather context from indexed human info
-	humanInfos, err := a.Storage.ListHumanInfo()
-	if err != nil {
-		return "", fmt.Errorf("list human info: %w", err)
-	}
-	var contextBuilder strings.Builder
-	if len(humanInfos) > 0 {
-		contextBuilder.WriteString("\nInformation about my human:\n")
-		for _, info := range humanInfos {
-			contextBuilder.WriteString(fmt.Sprintf("- %s: %v. Notes: %s\\n", info.ID, info.Data, info.Notes))
-		}
-	}
-	humanContext := contextBuilder.String()
 
 	// Gather system context
 	sysContext := fmt.Sprintf("\nSystem information:\n- %s\n", system.GetInfo())
@@ -110,10 +98,6 @@ func (a *Agent) DelegatePromptWithOptions(ctx context.Context, sessionID string,
 		return "Session renewed. Current history cleared.", nil
 	}
 
-	if err := session.SetSoulIfEmpty(a.Storage); err != nil {
-		return "", fmt.Errorf("load soul for session %s: %w", sessionID, err)
-	}
-
 	// Wrap context with dynamic options
 	engineCtx := engine.WithOptions(ctx, opts)
 
@@ -130,7 +114,7 @@ func (a *Agent) DelegatePromptWithOptions(ctx context.Context, sessionID string,
 		}
 	}
 
-	resp, usage, err := eng.Respond(engineCtx, session, prompt, humanContext+sysContext)
+	resp, usage, err := eng.Respond(engineCtx, session, prompt, sysContext)
 	if err != nil {
 		return "", err
 	}
@@ -138,29 +122,10 @@ func (a *Agent) DelegatePromptWithOptions(ctx context.Context, sessionID string,
 		session.AddTokens(uint64(usage.PromptTokens), uint64(usage.CompletionTokens), usage.TotalCost)
 	}
 
-	lowerPrompt := strings.ToLower(prompt)
-	if strings.Contains(lowerPrompt, "write to memory") || strings.Contains(lowerPrompt, "save a fact to memory") {
-		if err := a.Storage.AppendToMemory(fmt.Sprintf("Session %s: %s", sessionID, resp)); err != nil {
-			slog.Error("failed to append to memory", "error", err)
-		}
-	}
 	return resp, nil
 }
 
 func (a *Agent) DelegatePromptStreamWithOptions(ctx context.Context, sessionID string, prompt string, opts engine.Options) (<-chan string, error) {
-	// Gather context from indexed human info
-	humanInfos, err := a.Storage.ListHumanInfo()
-	if err != nil {
-		return nil, fmt.Errorf("list human info: %w", err)
-	}
-	var contextBuilder strings.Builder
-	if len(humanInfos) > 0 {
-		contextBuilder.WriteString("\nInformation about my human:\n")
-		for _, info := range humanInfos {
-			contextBuilder.WriteString(fmt.Sprintf("- %s: %v. Notes: %s\\n", info.ID, info.Data, info.Notes))
-		}
-	}
-	humanContext := contextBuilder.String()
 
 	// Gather system context
 	sysContext := fmt.Sprintf("\nSystem information:\n- %s\n", system.GetInfo())
@@ -184,10 +149,6 @@ func (a *Agent) DelegatePromptStreamWithOptions(ctx context.Context, sessionID s
 		return proxy, nil
 	}
 
-	if err := session.SetSoulIfEmpty(a.Storage); err != nil {
-		return nil, fmt.Errorf("load soul for session %s: %w", sessionID, err)
-	}
-
 	// Wrap context with dynamic options
 	engineCtx := engine.WithOptions(ctx, opts)
 
@@ -203,7 +164,7 @@ func (a *Agent) DelegatePromptStreamWithOptions(ctx context.Context, sessionID s
 		}
 	}
 
-	stream, err := eng.StreamRespond(engineCtx, session, prompt, humanContext+sysContext)
+	stream, err := eng.StreamRespond(engineCtx, session, prompt, sysContext)
 	if err != nil {
 		return nil, err
 	}
@@ -241,15 +202,6 @@ func (a *Agent) DelegatePromptStreamWithOptions(ctx context.Context, sessionID s
 				fullResp.WriteString(chunk)
 			}
 			proxy <- chunk
-		}
-		resp := fullResp.String()
-		if resp != "" {
-			lowerPrompt := strings.ToLower(prompt)
-			if strings.Contains(lowerPrompt, "write to memory") || strings.Contains(lowerPrompt, "save a fact to memory") {
-				if err := a.Storage.AppendToMemory(fmt.Sprintf("Session %s: %s", sessionID, resp)); err != nil {
-					slog.Error("failed to append to memory (stream)", "error", err)
-				}
-			}
 		}
 	}()
 
@@ -289,5 +241,11 @@ func (a *Agent) Shutdown(ctx context.Context) {
 func (a *Agent) CompactMemory(ctx context.Context) {
 	if a.Eng != nil {
 		a.Eng.CompactMemory(ctx)
+	}
+}
+
+func (a *Agent) TriggerMaintenance(ctx context.Context) {
+	if a.Eng != nil {
+		a.Eng.TriggerMaintenance(ctx)
 	}
 }

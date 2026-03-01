@@ -6,7 +6,6 @@ import (
 	"miri-main/src/internal/engine"
 	"miri-main/src/internal/gateway"
 	"miri-main/src/internal/session"
-	"miri-main/src/internal/storage"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -77,31 +76,34 @@ func (s *Server) handlePrompt(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"response": response})
 }
 
-func (s *Server) handleSaveHumanInfo(c *gin.Context) {
-	var info storage.HumanInfo
-	if err := c.ShouldBindJSON(&info); err != nil {
+func (s *Server) handleSaveHuman(c *gin.Context) {
+	type humanReq struct {
+		Content string `json:"content" binding:"required"`
+	}
+	var req humanReq
+	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
 	gw := c.MustGet("gateway").(*gateway.Gateway)
-	if err := gw.SaveHumanInfo(&info); err != nil {
+	if err := gw.SaveHuman(req.Content); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"status": "human info saved"})
+	c.JSON(http.StatusOK, gin.H{"status": "human markdown saved"})
 }
 
-func (s *Server) handleListHumanInfo(c *gin.Context) {
+func (s *Server) handleGetHuman(c *gin.Context) {
 	gw := c.MustGet("gateway").(*gateway.Gateway)
-	infos, err := gw.ListHumanInfo()
+	content, err := gw.GetHuman()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, infos)
+	c.JSON(http.StatusOK, gin.H{"content": content})
 }
 
 func (s *Server) handleListSkills(c *gin.Context) {

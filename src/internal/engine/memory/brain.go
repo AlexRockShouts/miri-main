@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"os"
-	"path/filepath"
+	"miri-main/src/internal/engine/memory/mole_syn"
+	"miri-main/src/internal/storage"
 	"strconv"
 	"strings"
 	"sync"
@@ -23,8 +23,10 @@ const (
 	TriggerInteraction  MaintenanceTrigger = "interaction_threshold"
 	TriggerContextUsage MaintenanceTrigger = "context_usage_high"
 	TriggerNewSession   MaintenanceTrigger = "new_session"
+	TriggerStartup      MaintenanceTrigger = "startup"
 	TriggerShutdown     MaintenanceTrigger = "shutdown"
 	TriggerManual       MaintenanceTrigger = "manual"
+	TriggerScheduled    MaintenanceTrigger = "scheduled"
 )
 
 type Brain struct {
@@ -33,55 +35,45 @@ type Brain struct {
 	buffer           map[string][]*schema.Message
 	mu               sync.RWMutex
 	interactionCount int
+	lastContextUsage int
 	contextWindow    int
 	lastMaintenance  time.Time
-	promptsDir       string
+	storage          *storage.Storage
+	Graph            *mole_syn.MemoryGraph
 }
 
-func NewBrain(chat model.BaseChatModel, ms MemorySystem, contextWindow int, storageDir string) *Brain {
+func NewBrain(chat model.BaseChatModel, ms MemorySystem, contextWindow int, st *storage.Storage) *Brain {
+	mg := mole_syn.New(chat, st)
 	b := &Brain{
 		chat:             chat,
 		memorySystem:     ms,
 		buffer:           make(map[string][]*schema.Message),
 		interactionCount: 0,
 		contextWindow:    contextWindow,
-		promptsDir:       filepath.Join(storageDir, "brain"),
+		storage:          st,
+		Graph:            mg,
 	}
 	_ = b.syncPrompts()
 	return b
 }
 
 func (b *Brain) syncPrompts() error {
-	if err := os.MkdirAll(b.promptsDir, 0755); err != nil {
-		return fmt.Errorf("mkdir prompts dir: %w", err)
+	const templatesDir = "templates/brain"
+	if err := b.storage.SyncBrainPrompts(templatesDir); err != nil {
+		if strings.Contains(err.Error(), "failed to read source prompts") {
+			slog.Warn("Template prompts directory not found, skipping sync", "dir", templatesDir)
+			return nil
+		}
+		slog.Error("Failed to synchronize brain prompts", "error", err)
+		return err
 	}
 
-	files, err := os.ReadDir("templates/brain")
-	if err != nil {
-		// If templates/brain doesn't exist, we skip sync (maybe running in production without source)
-		slog.Warn("Template prompts directory not found, skipping sync", "dir", "templates/brain")
-		return nil
-	}
-
-	for _, file := range files {
-		if file.IsDir() {
-			continue
-		}
-		src := filepath.Join("templates/brain", file.Name())
-		dst := filepath.Join(b.promptsDir, file.Name())
-
-		content, err := os.ReadFile(src)
-		if err != nil {
-			slog.Error("Failed to read template", "file", src, "error", err)
-			continue
-		}
-
-		if err := os.WriteFile(dst, content, 0644); err != nil {
-			slog.Error("Failed to write prompt", "file", dst, "error", err)
-		}
-	}
-	slog.Info("Brain prompts synchronized", "dir", b.promptsDir)
+	slog.Info("Brain prompts synchronized")
 	return nil
+}
+
+func (b *Brain) getPrompt(name string) (string, error) {
+	return b.storage.GetBrainPrompt(name)
 }
 
 func (b *Brain) AddToBuffer(sessionID string, msg *schema.Message) {
@@ -94,8 +86,8 @@ func (b *Brain) AddToBuffer(sessionID string, msg *schema.Message) {
 
 	b.buffer[sessionID] = append(b.buffer[sessionID], msg)
 
-	// Short-term buffer: Keep last N turns (e.g., 200 messages = ~20 turns)
-	const maxBuffer = 40
+	// Short-term buffer: Keep last N turns (e.g., 100 messages = ~10-50 turns)
+	const maxBuffer = 100
 	if len(b.buffer[sessionID]) > maxBuffer {
 		b.buffer[sessionID] = b.buffer[sessionID][len(b.buffer[sessionID])-maxBuffer:]
 	}
@@ -106,6 +98,39 @@ func (b *Brain) ClearBuffer(sessionID string) {
 	defer b.mu.Unlock()
 
 	delete(b.buffer, sessionID)
+}
+
+func (b *Brain) IngestMetadata(ctx context.Context, human, soul string) error {
+	if human == "" && soul == "" {
+		return nil
+	}
+
+	slog.Info("Ingesting persona metadata into brain", "has_human", human != "", "has_soul", soul != "")
+
+	var msgs []*schema.Message
+	if soul != "" {
+		msgs = append(msgs, &schema.Message{
+			Role:    schema.Assistant,
+			Content: "My Soul Configuration:\n" + soul,
+		})
+	}
+
+	if human != "" {
+		msgs = append(msgs, &schema.Message{
+			Role:    schema.User,
+			Content: "Information about my human:\n" + human,
+		})
+	}
+
+	// 1. Extract facts from this context
+	if err := b.ExtractFacts(ctx, msgs); err != nil {
+		slog.Error("Failed to extract facts from metadata", "error", err)
+	}
+
+	// 2. We don't necessarily need to reflect or summarize persona files as they are static source of truth.
+	// But ExtractFacts will populate the vector DB with individual facts found in these files.
+
+	return nil
 }
 
 func (b *Brain) GetBuffer(sessionID string) []*schema.Message {
@@ -133,7 +158,7 @@ func (b *Brain) ExtractFacts(ctx context.Context, messages []*schema.Message) er
 		return nil
 	}
 
-	prompt, err := os.ReadFile(filepath.Join(b.promptsDir, "extract.prompt"))
+	prompt, err := b.getPrompt("extract.prompt")
 	if err != nil {
 		return fmt.Errorf("read extract prompt: %w", err)
 	}
@@ -197,7 +222,7 @@ func (b *Brain) Reflect(ctx context.Context, messages []*schema.Message) error {
 		return nil
 	}
 
-	prompt, err := os.ReadFile(filepath.Join(b.promptsDir, "reflection.prompt"))
+	prompt, err := b.getPrompt("reflection.prompt")
 	if err != nil {
 		return fmt.Errorf("read reflection prompt: %w", err)
 	}
@@ -232,7 +257,7 @@ func (b *Brain) Summarize(ctx context.Context, messages []*schema.Message) error
 		return nil
 	}
 
-	prompt, err := os.ReadFile(filepath.Join(b.promptsDir, "compact.prompt"))
+	prompt, err := b.getPrompt("compact.prompt")
 	if err != nil {
 		return fmt.Errorf("read compact prompt: %w", err)
 	}
@@ -362,7 +387,7 @@ func (b *Brain) cleanup(ctx context.Context, items []SearchResult) error {
 
 func (b *Brain) promoteFacts(ctx context.Context, summaries []SearchResult) error {
 	slog.Info("Promoting facts from summaries", "count", len(summaries))
-	prompt, err := os.ReadFile(filepath.Join(b.promptsDir, "promote_facts.prompt"))
+	prompt, err := b.getPrompt("promote_facts.prompt")
 	if err != nil {
 		return err
 	}
@@ -416,13 +441,14 @@ func (b *Brain) promoteFacts(ctx context.Context, summaries []SearchResult) erro
 			_ = b.memorySystem.Add(ctx, p.Fact, metadata)
 		}
 	}
+
 	return nil
 }
 
 func (b *Brain) deduplicateFacts(ctx context.Context, facts []SearchResult) error {
 	slog.Info("Deduplicating facts", "count", len(facts))
 
-	prompt, err := os.ReadFile(filepath.Join(b.promptsDir, "deduplicate_facts.prompt"))
+	prompt, err := b.getPrompt("deduplicate_facts.prompt")
 	if err != nil {
 		return err
 	}
@@ -469,7 +495,7 @@ func (b *Brain) deduplicateFacts(ctx context.Context, facts []SearchResult) erro
 func (b *Brain) consolidateSummaries(ctx context.Context, summaries []SearchResult) error {
 	slog.Info("Consolidating summaries", "count", len(summaries))
 
-	prompt, err := os.ReadFile(filepath.Join(b.promptsDir, "consolidate_summaries.prompt"))
+	prompt, err := b.getPrompt("consolidate_summaries.prompt")
 	if err != nil {
 		return err
 	}
@@ -523,6 +549,10 @@ func (b *Brain) UpdateContextUsage(ctx context.Context, usage int) {
 		return
 	}
 
+	b.mu.Lock()
+	b.lastContextUsage = usage
+	b.mu.Unlock()
+
 	percent := float64(usage) / float64(b.contextWindow)
 	if percent >= 0.6 {
 		slog.Info("Context window usage high, triggering brain maintenance", "usage", usage, "window", b.contextWindow, "percent", fmt.Sprintf("%.2f%%", percent*100))
@@ -550,7 +580,35 @@ func (b *Brain) TriggerMaintenance(trigger MaintenanceTrigger) {
 			slog.Debug("Running extraction tasks for session", "session_id", sid)
 			_ = b.ExtractFacts(bgCtx, msgs)
 			_ = b.Reflect(bgCtx, msgs)
-			_ = b.Summarize(bgCtx, msgs)
+
+			// Topology analysis
+			var sb strings.Builder
+			for _, m := range msgs {
+				role := string(m.Role)
+				content := m.Content
+				if m.ReasoningContent != "" {
+					content = fmt.Sprintf("<thought>\n%s\n</thought>\n%s", m.ReasoningContent, content)
+				}
+				if len(m.ToolCalls) > 0 {
+					tcBytes, _ := json.Marshal(m.ToolCalls)
+					content += fmt.Sprintf("\n[Tool Calls: %s]", string(tcBytes))
+				}
+				if m.Role == schema.Tool {
+					content = fmt.Sprintf("[Tool ID: %s] %s", m.ToolCallID, content)
+				}
+				sb.WriteString(fmt.Sprintf("%s: %s\n", role, content))
+			}
+			analysis, err := b.analyzeTopology(bgCtx, sb.String())
+			if err == nil && b.Graph != nil {
+				_ = b.Graph.AddStepsFromAnalysis(sid, analysis)
+				slog.Info("Updated memory graph with topology analysis", "session_id", sid, "steps", len(analysis.Steps))
+			}
+
+			if err := b.Summarize(bgCtx, msgs); err == nil {
+				// Clear buffer after successful summarization to reduce context usage
+				b.ClearBuffer(sid)
+				slog.Info("Cleared message buffer after summarization", "session_id", sid)
+			}
 		}
 	}
 
@@ -572,11 +630,17 @@ func (b *Brain) Retrieve(ctx context.Context, query string) (string, error) {
 	b.mu.Lock()
 	b.interactionCount++
 	count := b.interactionCount
+	usage := b.lastContextUsage
+	window := b.contextWindow
 	b.mu.Unlock()
 
-	// Trigger maintenance every 100 interactions
-	if count > 0 && count%100 == 0 {
-		go b.TriggerMaintenance(TriggerInteraction)
+	// Trigger maintenance every 100 interactions or if context usage is high
+	if (count > 0 && count%100 == 0) || (window > 0 && float64(usage)/float64(window) >= 0.6) {
+		t := TriggerInteraction
+		if window > 0 && float64(usage)/float64(window) >= 0.6 {
+			t = TriggerContextUsage
+		}
+		go b.TriggerMaintenance(t)
 	}
 
 	// 1. Facts (high value)
@@ -622,4 +686,35 @@ func (b *Brain) Retrieve(ctx context.Context, query string) (string, error) {
 	}
 
 	return sb.String(), nil
+}
+
+func (b *Brain) analyzeTopology(ctx context.Context, trace string) (*mole_syn.TopologyAnalysis, error) {
+	prompt, err := b.getPrompt("topology_extraction.prompt")
+	if err != nil {
+		return nil, fmt.Errorf("read topology extraction prompt: %w", err)
+	}
+
+	fullPrompt := strings.Replace(prompt, "{agent_cot_trace + final_answer}", trace, 1)
+
+	resp, err := b.chat.Generate(ctx, []*schema.Message{
+		schema.UserMessage(fullPrompt),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	content := resp.Content
+	// Extract JSON if it's wrapped in triple backticks
+	if start := strings.Index(content, "{"); start != -1 {
+		if end := strings.LastIndex(content, "}"); end != -1 && end > start {
+			content = content[start : end+1]
+		}
+	}
+
+	var analysis mole_syn.TopologyAnalysis
+	if err := json.Unmarshal([]byte(content), &analysis); err != nil {
+		return nil, fmt.Errorf("JSON parse error: %w\nRaw output:\n%s", err, content)
+	}
+
+	return &analysis, nil
 }

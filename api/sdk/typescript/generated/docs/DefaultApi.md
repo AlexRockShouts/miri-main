@@ -8,8 +8,8 @@ All URIs are relative to *http://localhost:8080*
 |[**apiAdminV1ConfigGet**](#apiadminv1configget) | **GET** /api/admin/v1/config | Get current configuration|
 |[**apiAdminV1ConfigPost**](#apiadminv1configpost) | **POST** /api/admin/v1/config | Update configuration|
 |[**apiAdminV1HealthGet**](#apiadminv1healthget) | **GET** /api/admin/v1/health | Check health of the admin API|
-|[**apiAdminV1HumanGet**](#apiadminv1humanget) | **GET** /api/admin/v1/human | List all stored human information|
-|[**apiAdminV1HumanPost**](#apiadminv1humanpost) | **POST** /api/admin/v1/human | Store human information|
+|[**apiAdminV1HumanGet**](#apiadminv1humanget) | **GET** /api/admin/v1/human | Get the human information (Markdown)|
+|[**apiAdminV1HumanPost**](#apiadminv1humanpost) | **POST** /api/admin/v1/human | Save human information (Markdown)|
 |[**apiAdminV1SessionsGet**](#apiadminv1sessionsget) | **GET** /api/admin/v1/sessions | List active session IDs|
 |[**apiAdminV1SessionsIdGet**](#apiadminv1sessionsidget) | **GET** /api/admin/v1/sessions/{id} | Get session details|
 |[**apiAdminV1SessionsIdHistoryGet**](#apiadminv1sessionsidhistoryget) | **GET** /api/admin/v1/sessions/{id}/history | Get session message history|
@@ -216,7 +216,7 @@ This endpoint does not have any parameters.
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
 
 # **apiAdminV1HumanGet**
-> Array<HumanInfo> apiAdminV1HumanGet()
+> Human apiAdminV1HumanGet()
 
 
 ### Example
@@ -239,7 +239,7 @@ This endpoint does not have any parameters.
 
 ### Return type
 
-**Array<HumanInfo>**
+**Human**
 
 ### Authorization
 
@@ -254,12 +254,12 @@ This endpoint does not have any parameters.
 ### HTTP response details
 | Status code | Description | Response headers |
 |-------------|-------------|------------------|
-|**200** | List of human info |  -  |
+|**200** | Human information |  -  |
 
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
 
 # **apiAdminV1HumanPost**
-> apiAdminV1HumanPost(humanInfo)
+> apiAdminV1HumanPost(human)
 
 
 ### Example
@@ -268,16 +268,16 @@ This endpoint does not have any parameters.
 import {
     DefaultApi,
     Configuration,
-    HumanInfo
+    Human
 } from './api';
 
 const configuration = new Configuration();
 const apiInstance = new DefaultApi(configuration);
 
-let humanInfo: HumanInfo; //
+let human: Human; //
 
 const { status, data } = await apiInstance.apiAdminV1HumanPost(
-    humanInfo
+    human
 );
 ```
 
@@ -285,7 +285,7 @@ const { status, data } = await apiInstance.apiAdminV1HumanPost(
 
 |Name | Type | Description  | Notes|
 |------------- | ------------- | ------------- | -------------|
-| **humanInfo** | **HumanInfo**|  | |
+| **human** | **Human**|  | |
 
 
 ### Return type
@@ -305,7 +305,7 @@ void (empty response body)
 ### HTTP response details
 | Status code | Description | Response headers |
 |-------------|-------------|------------------|
-|**200** | Human info saved |  -  |
+|**200** | Human information saved |  -  |
 
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
 

@@ -1,34 +1,46 @@
-You are a reasoning topology annotator (inspired by Mole-Syn / molecular structure of thought).
+You are a strict reasoning topology annotator based on the Mole-Syn framework (molecular structure of thought).
 
-Analyze the agent's reasoning trace below.
-Split it into logical steps/nodes.
-Classify each important transition between steps as one of three bond types:
+Given the full reasoning trace below (including intermediate thoughts, reflections, tool calls if any, and the final answer):
 
-- D = Deep Reasoning (covalent-like): strong, continuous logical progression, core deduction
-- R = Self-Reflection (hydrogen-like): consistency check, error detection, backtrack, verification
-- E = Self-Exploration (van der Waals-like): hypothesis branching, alternative consideration, loose probing
+1. Split the trace into 4–18 meaningful logical steps / nodes.
+   - Merge filler phrases, pure rephrasing, or redundant statements.
+   - Each node should represent a distinct semantic unit or decision point.
+   - Use very concise 1-sentence summaries for each node's "content" field.
 
-Ignore weak or filler transitions.
-Also give:
-- Overall topology score (1–10): how stable/balanced was the structure?
-- Bond distribution (% D, % R, % E)
-- One sentence: main strength/weakness of the topology
+2. Identify and classify **only the important transitions** between consecutive steps as one bond type:
+   - D = Deep Reasoning     (covalent-like): direct, strong, irreversible logical continuation / core deduction
+   - R = Self-Reflection    (hydrogen-like): consistency check, contradiction detection, error correction, assumption verification
+   - E = Self-Exploration   (van der Waals-like): branching into alternatives, hypothesis testing, side consideration (usually short)
 
-Output clean JSON only:
+   Do **not** create bonds for trivial filler, formatting, or repetition.
+
+3. Compute:
+   - topology_score: integer 1–10 (10 = very stable, balanced, fast-converging structure; penalize missing reflections, long ungrounded exploration chains, oscillation)
+   - bond_distribution: percentages as floats (sum should be ~1.0, rounded to 2 decimal places)
+   - assessment: exactly one concise sentence describing the main strength or primary weakness of the topology
+
+Rules:
+- Output **nothing but valid JSON**. No explanations, no markdown, no introductory text, no trailing commas.
+- Use the exact schema below — do not add or remove fields.
+- IDs in steps and bonds must be consecutive integers starting from 1.
+- Bond types must be exactly "D", "R", or "E" (uppercase).
+
+Output format (JSON only):
 
 {
   "steps": [
-    {"id": 1, "content": "short summary of step", "type": "node"},
+    {"id": 1, "content": "short one-sentence summary"},
     ...
   ],
   "bonds": [
-    {"from": 1, "to": 2, "type": "D|R|E", "explanation": "brief reason"},
+    {"from": 1, "to": 2, "type": "D", "explanation": "5–15 word reason"},
     ...
   ],
   "topology_score": 8,
   "bond_distribution": {"D": 0.65, "R": 0.25, "E": 0.10},
-  "assessment": "Strong backbone but could use more early reflection"
+  "assessment": "Strong covalent backbone supported by timely reflections"
 }
 
 Reasoning trace to analyze:
+
 {agent_cot_trace + final_answer}
