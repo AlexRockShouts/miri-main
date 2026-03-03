@@ -42,10 +42,13 @@ func NewVectorMemory(cfg *config.Config, collectionName string) (*VectorMemory, 
 	if cfg.Miri.Brain.Embeddings.UseNativeEmbeddings {
 		embedder, err := LoadStaticEmbedderFromBytes(embeddedEmbeddings)
 		if err != nil {
-			slog.Error("failed to load static embedder", "error", err)
-			os.Exit(1)
+			slog.Warn("failed to load static embedder, using zero-vector fallback", "error", err)
+			embedFunc = func(ctx context.Context, text string) ([]float32, error) {
+				return make([]float32, 384), nil
+			}
+		} else {
+			embedFunc = embedder.Embed
 		}
-		embedFunc = embedder.Embed
 	} else {
 		// Use external embedding API
 		embType := cfg.Miri.Brain.Embeddings.Model.Type
