@@ -44,3 +44,18 @@ type PaginatedResponse struct {
 	Limit  int `json:"limit,omitempty"`
 	Offset int `json:"offset,omitempty"`
 }
+
+func Paginate[T any](all []T, offset, limit int) PaginatedResponse {
+	total := len(all)
+	data := []T{}
+	if offset < total {
+		end := min(offset+limit, total)
+		data = all[offset:end]
+	}
+	return PaginatedResponse{
+		Data:   data,
+		Total:  total,
+		Limit:  limit,
+		Offset: offset,
+	}
+}

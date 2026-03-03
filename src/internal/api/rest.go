@@ -125,27 +125,25 @@ func (s *Server) handleListSkills(c *gin.Context) {
 	gw := c.MustGet("gateway").(*gateway.Gateway)
 	allSkills := gw.ListSkills()
 	total := len(allSkills)
-	end := offset + limit
-	if end > total {
-		end = total
-	}
-	sliced := allSkills[offset:end]
-
 	type skillShort struct {
 		Name        string   `json:"name"`
 		Description string   `json:"description"`
 		Version     string   `json:"version"`
 		Tags        []string `json:"tags"`
 	}
-
-	res := make([]skillShort, 0, len(sliced))
-	for _, sk := range sliced {
-		res = append(res, skillShort{
-			Name:        sk.Name,
-			Description: sk.Description,
-			Version:     sk.Version,
-			Tags:        sk.Tags,
-		})
+	var res []skillShort
+	if offset < total {
+		end := min(offset+limit, total)
+		sliced := allSkills[offset:end]
+		res = make([]skillShort, 0, len(sliced))
+		for _, sk := range sliced {
+			res = append(res, skillShort{
+				Name:        sk.Name,
+				Description: sk.Description,
+				Version:     sk.Version,
+				Tags:        sk.Tags,
+			})
+		}
 	}
 	c.JSON(http.StatusOK, PaginatedResponse{
 		Data:   res,
@@ -175,17 +173,7 @@ func (s *Server) handleListSkillCommands(c *gin.Context) {
 		s.sendError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
-	total := len(allCommands)
-	end := offset + limit
-	if end > total {
-		end = total
-	}
-	c.JSON(http.StatusOK, PaginatedResponse{
-		Data:   allCommands[offset:end],
-		Total:  total,
-		Limit:  limit,
-		Offset: offset,
-	})
+	c.JSON(http.StatusOK, Paginate(allCommands, offset, limit))
 }
 
 func (s *Server) handleGetSkill(c *gin.Context) {
@@ -266,17 +254,7 @@ func (s *Server) handleListSessions(c *gin.Context) {
 	}
 	gw := c.MustGet("gateway").(*gateway.Gateway)
 	all := gw.ListSessions()
-	total := len(all)
-	end := offset + limit
-	if end > total {
-		end = total
-	}
-	c.JSON(http.StatusOK, PaginatedResponse{
-		Data:   all[offset:end],
-		Total:  total,
-		Limit:  limit,
-		Offset: offset,
-	})
+	c.JSON(http.StatusOK, Paginate(all, offset, limit))
 }
 
 func (s *Server) handleListTasks(c *gin.Context) {
@@ -299,17 +277,7 @@ func (s *Server) handleListTasks(c *gin.Context) {
 		s.sendError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
-	total := len(allTasks)
-	end := offset + limit
-	if end > total {
-		end = total
-	}
-	c.JSON(http.StatusOK, PaginatedResponse{
-		Data:   allTasks[offset:end],
-		Total:  total,
-		Limit:  limit,
-		Offset: offset,
-	})
+	c.JSON(http.StatusOK, Paginate(allTasks, offset, limit))
 }
 
 func (s *Server) handleGetTask(c *gin.Context) {
@@ -618,17 +586,7 @@ func (s *Server) handleGetBrainFacts(c *gin.Context) {
 		s.sendError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
-	total := len(allFacts)
-	end := offset + limit
-	if end > total {
-		end = total
-	}
-	c.JSON(http.StatusOK, PaginatedResponse{
-		Data:   allFacts[offset:end],
-		Total:  total,
-		Limit:  limit,
-		Offset: offset,
-	})
+	c.JSON(http.StatusOK, Paginate(allFacts, offset, limit))
 }
 
 func (s *Server) handleGetBrainSummaries(c *gin.Context) {
@@ -650,17 +608,7 @@ func (s *Server) handleGetBrainSummaries(c *gin.Context) {
 		s.sendError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
-	total := len(allSummaries)
-	end := offset + limit
-	if end > total {
-		end = total
-	}
-	c.JSON(http.StatusOK, PaginatedResponse{
-		Data:   allSummaries[offset:end],
-		Total:  total,
-		Limit:  limit,
-		Offset: offset,
-	})
+	c.JSON(http.StatusOK, Paginate(allSummaries, offset, limit))
 }
 
 func (s *Server) handleGetBrainTopology(c *gin.Context) {
