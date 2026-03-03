@@ -8,6 +8,7 @@ import (
 	"miri-main/src/internal/tools/cmd"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/cloudwego/eino/components/tool"
 	"github.com/cloudwego/eino/schema"
@@ -39,7 +40,15 @@ func (c *CmdToolWrapper) Info(_ context.Context) (*schema.ToolInfo, error) {
 	return c.GetInfo(), nil
 }
 
-func (c *CmdToolWrapper) InvokableRun(ctx context.Context, argumentsInJSON string, _ ...tool.Option) (string, error) {
+func (c *CmdToolWrapper) InvokableRun(ctx context.Context, argumentsInJSON string, _ ...tool.Option) (resStr string, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			slog.Error("panic in cmd tool", "recover", r)
+			resStr = fmt.Sprintf(`{"stdout":"", "stderr":"internal error: tool panicked", "exit_code":-1, "error":"%v"}`, r)
+			err = nil // Return nil error so Eino doesn't crash, but gives the error to the LLM
+		}
+	}()
+
 	var args struct {
 		Command string `json:"command"`
 	}
@@ -48,19 +57,31 @@ func (c *CmdToolWrapper) InvokableRun(ctx context.Context, argumentsInJSON strin
 		return "", err
 	}
 
+	// Validate shell syntax
+	if strings.Contains(args.Command, "&quot;") || strings.Contains(args.Command, "quot:") {
+		return `{"stdout":"","stderr":"","exit_code":1,"error":"Invalid sh syntax: use 'single' or \"double\" quotes. Avoid HTML &quot; in command."}`, nil
+	}
+
+	// Auto-prefix Homebrew on Apple Silicon macOS
+	if strings.HasPrefix(args.Command, "brew") {
+		args.Command = "/opt/homebrew/bin/" + strings.TrimPrefix(args.Command, "brew")
+		slog.Debug("cmd tool: auto-prefixed Homebrew path", "original", args.Command)
+	}
+
 	// Ensure the generated directory exists
 	if err := os.MkdirAll(c.StorageDir, 0755); err != nil {
 		slog.Error("failed to create storage directory", "path", c.StorageDir, "error", err)
 		return "", fmt.Errorf("failed to create storage directory: %w", err)
 	}
 
-	slog.Debug("executing command", "command", args.Command, "dir", c.StorageDir)
+	slog.Info("cmd tool: executing command", "command", args.Command, "dir", c.StorageDir)
 	stdout, stderr, exitCode, err := cmd.Execute(ctx, args.Command, c.StorageDir)
 
 	// Post-execution: if files were created in the base storage dir (one level up), move them to the sandbox directory.
 	// This helps with "if a file is created somewhere else move it there"
 	// and ensures all file generation is sandboxed.
 	parentDir := filepath.Dir(c.StorageDir)
+	slog.Debug("cmd tool: sandboxing files", "parent_dir", parentDir)
 	if entries, err := os.ReadDir(parentDir); err == nil {
 		whitelist := map[string]bool{
 			"soul.md":    true,
@@ -75,15 +96,16 @@ func (c *CmdToolWrapper) InvokableRun(ctx context.Context, argumentsInJSON strin
 			if !whitelist[name] && !entry.IsDir() {
 				src := filepath.Join(parentDir, name)
 				dst := filepath.Join(c.StorageDir, name)
+				slog.Debug("cmd tool: moving file to sandbox", "src", src, "dst", dst)
 				// Only move if dst doesn't exist to avoid overwriting (or should we overwrite?)
 				// Let's overwrite to ensure it's in the sandbox.
 				if err := os.Rename(src, dst); err != nil {
-					slog.Warn("failed to move file to sandbox directory", "src", src, "dst", dst, "error", err)
+					slog.Warn("cmd tool: failed to move file to sandbox directory", "src", src, "dst", dst, "error", err)
 				}
 			}
 		}
 	} else {
-		slog.Warn("failed to read parent directory for sandboxing", "path", parentDir, "error", err)
+		slog.Warn("cmd tool: failed to read parent directory for sandboxing", "path", parentDir, "error", err)
 	}
 
 	const maxOutput = 4096
@@ -105,11 +127,12 @@ func (c *CmdToolWrapper) InvokableRun(ctx context.Context, argumentsInJSON strin
 		ExitCode: exitCode,
 	}
 	if err != nil {
-		slog.Error("command execution failed", "command", args.Command, "error", err, "stderr", stderr, "exit_code", exitCode)
+		slog.Error("cmd tool: command execution failed", "command", args.Command, "error", err, "stderr", stderr, "exit_code", exitCode)
 		res.Error = err.Error()
 	} else if exitCode != 0 {
-		slog.Warn("command finished with non-zero exit code", "command", args.Command, "exit_code", exitCode, "stderr", stderr)
+		slog.Warn("cmd tool: command finished with non-zero exit code", "command", args.Command, "exit_code", exitCode, "stderr", stderr)
 	}
 	b, _ := json.Marshal(res)
+	slog.Info("cmd tool: execution complete", "command", args.Command, "exit_code", exitCode)
 	return string(b), nil
 }

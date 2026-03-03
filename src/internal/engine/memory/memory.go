@@ -17,8 +17,12 @@ type MemorySystem interface {
 	Search(ctx context.Context, query string, limit int, filter map[string]string) ([]SearchResult, error)
 	// ListAll returns all documents in the collection (use with caution).
 	ListAll(ctx context.Context) ([]SearchResult, error)
+	// GetByID retrieves a document by ID.
+	GetByID(ctx context.Context, id string) (*SearchResult, error)
 	// Delete deletes a document by ID.
 	Delete(ctx context.Context, id string) error
+	// Update updates an existing memory entry.
+	Update(ctx context.Context, id string, content string, metadata map[string]string) error
 	// Close closes the memory system.
 	Close() error
 }

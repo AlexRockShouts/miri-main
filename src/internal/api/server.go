@@ -12,6 +12,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"strconv"
 )
 
 type Server struct {
@@ -23,6 +26,37 @@ type Server struct {
 	wsSessions map[string][]*websocket.Conn
 }
 
+var (
+	requestsTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "http_requests_total",
+			Help: "Number of http requests",
+		},
+		[]string{"method", "endpoint", "status"},
+	)
+
+	requestDuration = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name: "http_request_duration_seconds",
+			Help: "Duration of http requests in seconds",
+		},
+		[]string{"method", "endpoint"},
+	)
+
+	promptsTotal = prometheus.NewCounter(
+		prometheus.CounterOpts{
+			Name: "miri_prompts_total",
+			Help: "Total number of prompts processed",
+		},
+	)
+)
+
+func init() {
+	prometheus.MustRegister(requestsTotal)
+	prometheus.MustRegister(requestDuration)
+	prometheus.MustRegister(promptsTotal)
+}
+
 func NewServer(gw *gateway.Gateway) *Server {
 	e := gin.Default()
 	s := &Server{
@@ -31,11 +65,14 @@ func NewServer(gw *gateway.Gateway) *Server {
 		wsSessions: make(map[string][]*websocket.Conn),
 	}
 	s.Engine.Use(s.corsMiddleware())
+	s.Engine.Use(s.recoveryMiddleware())
 	s.Engine.Use(s.injectMiddleware())
 	s.Engine.Use(s.authMiddleware())
+	s.Engine.Use(metricsMiddleware())
 	s.setupRoutesRest()
 	s.setupRoutesWebSocket()
 	s.setupRoutesAdmin()
+	s.Engine.GET("/metrics", gin.WrapH(promhttp.Handler()))
 	s.Gateway.SetTaskReportHandler(s.handleTaskReport)
 	return s
 }
@@ -85,6 +122,20 @@ func (s *Server) corsMiddleware() gin.HandlerFunc {
 	}
 }
 
+func metricsMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		start := time.Now()
+		path := c.FullPath()
+		if path == "" {
+			path = c.Request.URL.Path
+		}
+		c.Next()
+		code := strconv.Itoa(c.Writer.Status())
+		requestsTotal.WithLabelValues(c.Request.Method, path, code).Inc()
+		requestDuration.WithLabelValues(c.Request.Method, path).Observe(time.Since(start).Seconds())
+	}
+}
+
 func (s *Server) setupRoutesAdmin() {
 	admin := s.Engine.Group("/api/admin/v1", s.adminMiddleware())
 	{
@@ -111,6 +162,11 @@ func (s *Server) setupRoutesAdmin() {
 		// Task management
 		admin.GET("/tasks", s.handleListTasks)
 		admin.GET("/tasks/:id", s.handleGetTask)
+
+		//brain
+		admin.GET("/brain/facts", s.handleGetBrainFacts)
+		admin.GET("/brain/summaries", s.handleGetBrainSummaries)
+		admin.GET("/brain/topology", s.handleGetBrainTopology)
 	}
 }
 
@@ -126,6 +182,7 @@ func (s *Server) setupRoutesRest() {
 		v1.POST("/interaction", s.handleInteraction)
 		v1.GET("/files/*filepath", s.handleGetFile)
 		v1.POST("/files/upload", s.handleUploadFile)
+		v1.GET("/sessions/:id/cost", s.handleGetSessionCost)
 	}
 }
 
@@ -200,8 +257,7 @@ func (s *Server) authMiddleware() gin.HandlerFunc {
 
 		if provided != key {
 			slog.Warn("unauthorized request", "path", c.Request.URL.Path, "remote", c.ClientIP(), "provided", provided != "")
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing server key"})
-			c.Abort()
+			s.sendError(c, http.StatusUnauthorized, "Invalid or missing server key")
 			return
 		}
 		c.Next()
@@ -217,19 +273,41 @@ func (s *Server) adminMiddleware() gin.HandlerFunc {
 		// If no admin credentials set, deny all admin access
 		if user == "" || pass == "" {
 			c.Header("WWW-Authenticate", `Basic realm="Admin Restricted"`)
-			c.AbortWithStatus(http.StatusUnauthorized)
+			s.sendError(c, http.StatusUnauthorized, "Admin access denied")
 			return
 		}
 
 		providedUser, providedPass, ok := c.Request.BasicAuth()
 		if !ok || providedUser != user || providedPass != pass {
 			c.Header("WWW-Authenticate", `Basic realm="Admin Restricted"`)
-			c.AbortWithStatus(http.StatusUnauthorized)
+			s.sendError(c, http.StatusUnauthorized, "Admin access denied")
 			return
 		}
 
 		c.Next()
 	}
+}
+
+func (s *Server) sendError(c *gin.Context, code int, msg string) {
+	c.JSON(code, APIError{
+		Code:    code,
+		Message: msg,
+	})
+	c.Abort()
+}
+
+func (s *Server) sendWSError(ws *websocket.Conn, code int, msg string) error {
+	return ws.WriteJSON(APIError{
+		Code:    code,
+		Message: msg,
+	})
+}
+
+func (s *Server) recoveryMiddleware() gin.HandlerFunc {
+	return gin.CustomRecovery(func(c *gin.Context, recovered interface{}) {
+		slog.Error("panic recovered", "panic", recovered)
+		s.sendError(c, http.StatusInternalServerError, "Internal server error")
+	})
 }
 
 func (s *Server) Run(addr string) error {

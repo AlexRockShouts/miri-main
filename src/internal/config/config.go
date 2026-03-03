@@ -25,7 +25,15 @@ type MiriConfig struct {
 }
 
 type BrainConfig struct {
-	Embeddings EmbeddingConfig `mapstructure:"embeddings" json:"embeddings"`
+	Embeddings         EmbeddingConfig `mapstructure:"embeddings" json:"embeddings"`
+	Retrieval          RetrievalConfig `mapstructure:"retrieval" json:"retrieval"`
+	MaxNodesPerSession int             `mapstructure:"max_nodes_per_session" json:"max_nodes_per_session"`
+}
+
+type RetrievalConfig struct {
+	GraphSteps    int `mapstructure:"graph_steps" json:"graph_steps"`
+	FactsTopK     int `mapstructure:"facts_top_k" json:"facts_top_k"`
+	SummariesTopK int `mapstructure:"summaries_top_k" json:"summaries_top_k"`
 }
 
 type ModelsConfig struct {

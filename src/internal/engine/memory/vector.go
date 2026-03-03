@@ -5,6 +5,7 @@ import (
 	_ "embed"
 	"fmt"
 	"log/slog"
+	"math"
 	"miri-main/src/internal/config"
 	"miri-main/src/internal/system"
 	"os"
@@ -134,10 +135,25 @@ func (v *VectorMemory) Search(ctx context.Context, query string, limit int, filt
 
 	var searchResults []SearchResult
 	for _, r := range results {
+		// Include ID in metadata for deletion/update
+		meta := r.Metadata
+		if meta == nil {
+			meta = make(map[string]string)
+		}
+		meta["id"] = r.ID
+
+		// chromem-go returns cosine similarity:
+		// 1.0 is identical, 0.0 is orthogonal, -1.0 is opposite.
+		// Our "Distance" conceptually should be (1.0 - Similarity), where 0.0 is identical.
+		distance := 1.0 - r.Similarity
+		if math.IsNaN(float64(distance)) || math.IsInf(float64(distance), 0) {
+			distance = 1.0 // Default to max distance if invalid
+		}
+
 		searchResults = append(searchResults, SearchResult{
 			Content:  r.Content,
-			Metadata: r.Metadata,
-			Distance: r.Similarity,
+			Metadata: meta,
+			Distance: distance,
 		})
 	}
 	if len(searchResults) > 0 {
@@ -163,23 +179,70 @@ func (v *VectorMemory) ListAll(ctx context.Context) ([]SearchResult, error) {
 
 	var searchResults []SearchResult
 	for _, r := range results {
+		// Include ID in metadata for deletion/update
+		meta := r.Metadata
+		if meta == nil {
+			meta = make(map[string]string)
+		}
+		meta["id"] = r.ID
+
+		distance := 1.0 - r.Similarity
+		if math.IsNaN(float64(distance)) || math.IsInf(float64(distance), 0) {
+			distance = 1.0
+		}
 		res := SearchResult{
 			Content:  r.Content,
-			Metadata: r.Metadata,
-			Distance: r.Similarity,
+			Metadata: meta,
+			Distance: distance,
 		}
-		// Include ID in metadata for deletion/update
-		if res.Metadata == nil {
-			res.Metadata = make(map[string]string)
-		}
-		res.Metadata["id"] = r.ID
 		searchResults = append(searchResults, res)
 	}
 	return searchResults, nil
 }
 
+func (v *VectorMemory) GetByID(ctx context.Context, id string) (*SearchResult, error) {
+	// chromem-go doesn't have a GetByID by default, but we can use Query with ID filtering if supported
+	// or ListAll and filter manually.
+	// For now, we'll list all and filter, or we can use the internal collection store if available.
+	// Actually, chromem-go doesn't have a direct "GetByID" API exposed on the collection easily.
+	// Let's list all and find it (slow, but fine for small collections like our current state).
+	all, err := v.ListAll(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for _, r := range all {
+		if r.Metadata["id"] == id {
+			return &r, nil
+		}
+	}
+	return nil, nil
+}
+
 func (v *VectorMemory) Delete(ctx context.Context, id string) error {
 	return v.collection.Delete(ctx, nil, nil, id)
+}
+
+func (v *VectorMemory) Update(ctx context.Context, id string, content string, metadata map[string]string) error {
+	// If ID is in metadata, remove it so it's not stored twice (once as ID, once in metadata)
+	// but chromem-go actually stores both if we don't.
+	// Actually, let's just make sure we use the provided id.
+	// We'll clone metadata to avoid side effects if needed, but for now we'll just delete if present.
+	delete(metadata, "id")
+
+	// In chromem-go, AddDocument with the same ID will replace the existing one
+	doc := chromem.Document{
+		ID:       id,
+		Content:  content,
+		Metadata: metadata,
+	}
+
+	err := v.collection.AddDocument(ctx, doc)
+	if err != nil {
+		slog.Error("failed to update document in vector memory", "id", id, "error", err)
+		return err
+	}
+	slog.Debug("updated document in vector memory", "id", doc.ID)
+	return nil
 }
 
 func (v *VectorMemory) Close() error {

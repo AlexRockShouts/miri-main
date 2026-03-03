@@ -1,7 +1,6 @@
 package api
 
 import (
-	"encoding/json"
 	"log/slog"
 	"miri-main/src/internal/config"
 	"miri-main/src/internal/engine"
@@ -23,12 +22,12 @@ func (s *Server) handleGetConfig(c *gin.Context) {
 func (s *Server) handleUpdateConfig(c *gin.Context) {
 	var cfg config.Config
 	if err := c.ShouldBindJSON(&cfg); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		s.sendError(c, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	if err := config.Save(&cfg); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		s.sendError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
 
@@ -48,7 +47,7 @@ type promptRequest struct {
 func (s *Server) handlePrompt(c *gin.Context) {
 	var req promptRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		s.sendError(c, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -67,10 +66,12 @@ func (s *Server) handlePrompt(c *gin.Context) {
 		opts.MaxTokens = req.MaxTokens
 	}
 
+	promptsTotal.Inc()
+
 	gw := c.MustGet("gateway").(*gateway.Gateway)
 	response, err := gw.PrimaryAgent.DelegatePromptWithOptions(c.Request.Context(), session.DefaultSessionID, req.Prompt, opts)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		s.sendError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
 
@@ -83,13 +84,13 @@ func (s *Server) handleSaveHuman(c *gin.Context) {
 	}
 	var req humanReq
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		s.sendError(c, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	gw := c.MustGet("gateway").(*gateway.Gateway)
 	if err := gw.SaveHuman(req.Content); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		s.sendError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
 
@@ -100,7 +101,7 @@ func (s *Server) handleGetHuman(c *gin.Context) {
 	gw := c.MustGet("gateway").(*gateway.Gateway)
 	content, err := gw.GetHuman()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		s.sendError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
 
@@ -108,10 +109,28 @@ func (s *Server) handleGetHuman(c *gin.Context) {
 }
 
 func (s *Server) handleListSkills(c *gin.Context) {
+	var pq PaginationQuery
+	if err := c.ShouldBindQuery(&pq); err != nil {
+		s.sendError(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	limit := pq.Limit
+	if limit == 0 {
+		limit = 50
+	}
+	offset := pq.Offset
+	if offset < 0 {
+		offset = 0
+	}
 	gw := c.MustGet("gateway").(*gateway.Gateway)
-	skills := gw.ListSkills()
+	allSkills := gw.ListSkills()
+	total := len(allSkills)
+	end := offset + limit
+	if end > total {
+		end = total
+	}
+	sliced := allSkills[offset:end]
 
-	// Return name, description, version, tags
 	type skillShort struct {
 		Name        string   `json:"name"`
 		Description string   `json:"description"`
@@ -119,41 +138,54 @@ func (s *Server) handleListSkills(c *gin.Context) {
 		Tags        []string `json:"tags"`
 	}
 
-	res := make([]skillShort, 0, len(skills))
-	for _, s := range skills {
-		// Use a simple map conversion if we don't want to import the skills package here
-		// or if ListSkills returns any. Since we know the structure of Skill:
-		if m, ok := s.(interface {
-			GetName() string
-			GetDescription() string
-			GetVersion() string
-			GetTags() []string
-		}); ok {
-			res = append(res, skillShort{
-				Name:        m.GetName(),
-				Description: m.GetDescription(),
-				Version:     m.GetVersion(),
-				Tags:        m.GetTags(),
-			})
-		} else {
-			// Fallback to manual extraction or JSON marshal/unmarshal
-			data, _ := json.Marshal(s)
-			var ss skillShort
-			json.Unmarshal(data, &ss)
-			res = append(res, ss)
-		}
+	res := make([]skillShort, 0, len(sliced))
+	for _, sk := range sliced {
+		res = append(res, skillShort{
+			Name:        sk.Name,
+			Description: sk.Description,
+			Version:     sk.Version,
+			Tags:        sk.Tags,
+		})
 	}
-	c.JSON(http.StatusOK, res)
+	c.JSON(http.StatusOK, PaginatedResponse{
+		Data:   res,
+		Total:  total,
+		Limit:  limit,
+		Offset: offset,
+	})
 }
 
 func (s *Server) handleListSkillCommands(c *gin.Context) {
-	gw := c.MustGet("gateway").(*gateway.Gateway)
-	commands, err := gw.ListSkillCommands(c.Request.Context())
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	var pq PaginationQuery
+	if err := c.ShouldBindQuery(&pq); err != nil {
+		s.sendError(c, http.StatusBadRequest, err.Error())
 		return
 	}
-	c.JSON(http.StatusOK, commands)
+	limit := pq.Limit
+	if limit == 0 {
+		limit = 50
+	}
+	offset := pq.Offset
+	if offset < 0 {
+		offset = 0
+	}
+	gw := c.MustGet("gateway").(*gateway.Gateway)
+	allCommands, err := gw.ListSkillCommands(c.Request.Context())
+	if err != nil {
+		s.sendError(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	total := len(allCommands)
+	end := offset + limit
+	if end > total {
+		end = total
+	}
+	c.JSON(http.StatusOK, PaginatedResponse{
+		Data:   allCommands[offset:end],
+		Total:  total,
+		Limit:  limit,
+		Offset: offset,
+	})
 }
 
 func (s *Server) handleGetSkill(c *gin.Context) {
@@ -195,7 +227,7 @@ type interactionRequest struct {
 func (s *Server) handleInteraction(c *gin.Context) {
 	var req interactionRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		s.sendError(c, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -219,19 +251,65 @@ func (s *Server) handleInteraction(c *gin.Context) {
 }
 
 func (s *Server) handleListSessions(c *gin.Context) {
+	var pq PaginationQuery
+	if err := c.ShouldBindQuery(&pq); err != nil {
+		s.sendError(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	limit := pq.Limit
+	if limit == 0 {
+		limit = 50
+	}
+	offset := pq.Offset
+	if offset < 0 {
+		offset = 0
+	}
 	gw := c.MustGet("gateway").(*gateway.Gateway)
-	ids := gw.ListSessions()
-	c.JSON(http.StatusOK, ids)
+	all := gw.ListSessions()
+	total := len(all)
+	end := offset + limit
+	if end > total {
+		end = total
+	}
+	c.JSON(http.StatusOK, PaginatedResponse{
+		Data:   all[offset:end],
+		Total:  total,
+		Limit:  limit,
+		Offset: offset,
+	})
 }
 
 func (s *Server) handleListTasks(c *gin.Context) {
-	gw := c.MustGet("gateway").(*gateway.Gateway)
-	tasks, err := gw.ListTasks()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	var pq PaginationQuery
+	if err := c.ShouldBindQuery(&pq); err != nil {
+		s.sendError(c, http.StatusBadRequest, err.Error())
 		return
 	}
-	c.JSON(http.StatusOK, tasks)
+	limit := pq.Limit
+	if limit == 0 {
+		limit = 50
+	}
+	offset := pq.Offset
+	if offset < 0 {
+		offset = 0
+	}
+	gw := c.MustGet("gateway").(*gateway.Gateway)
+	allTasks, err := gw.ListTasks()
+	if err != nil {
+		s.sendError(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	total := len(allTasks)
+	end := offset + limit
+	if end > total {
+		end = total
+	}
+	c.JSON(http.StatusOK, PaginatedResponse{
+		Data:   allTasks[offset:end],
+		Total:  total,
+		Limit:  limit,
+		Offset: offset,
+	})
 }
 
 func (s *Server) handleGetTask(c *gin.Context) {
@@ -273,27 +351,56 @@ func (s *Server) handleGetSessionStats(c *gin.Context) {
 	})
 }
 
-func (s *Server) handleGetSessionHistory(c *gin.Context) {
+func (s *Server) handleGetSessionCost(c *gin.Context) {
 	gw := c.MustGet("gateway").(*gateway.Gateway)
 	id := c.Param("id")
 	sess := gw.GetSession(id)
 	if sess == nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "session not found"})
+		s.sendError(c, http.StatusNotFound, "session not found")
 		return
 	}
-	history := []session.Message{}
+	c.JSON(http.StatusOK, gin.H{"total_cost": sess.TotalCost})
+}
+
+func (s *Server) handleGetSessionHistory(c *gin.Context) {
+	var pq PaginationQuery
+	if err := c.ShouldBindQuery(&pq); err != nil {
+		s.sendError(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	limit := pq.Limit
+	if limit == 0 {
+		limit = 50
+	}
+	offset := pq.Offset
+	if offset < 0 {
+		offset = 0
+	}
+	gw := c.MustGet("gateway").(*gateway.Gateway)
+	id := c.Param("id")
+	sess := gw.GetSession(id)
+	if sess == nil {
+		s.sendError(c, http.StatusNotFound, "session not found")
+		return
+	}
+	allHistory := []session.Message{}
 	if gw.PrimaryAgent != nil && gw.PrimaryAgent.Eng != nil {
-		buf := gw.PrimaryAgent.Eng.(interface {
-			GetHistory(sessionID string) any
-		}).GetHistory(id)
-		if buf != nil {
-			history = buf.([]session.Message)
+		if h := gw.PrimaryAgent.Eng.GetHistory(id); h != nil {
+			allHistory = h
 		}
 	}
-
+	total := len(allHistory)
+	end := offset + limit
+	if end > total {
+		end = total
+	}
+	sliced := allHistory[offset:end]
 	c.JSON(http.StatusOK, gin.H{
-		"messages":     history,
-		"total_tokens": sess.TotalTokens,
+		"messages":       sliced,
+		"total_messages": total,
+		"total_tokens":   sess.TotalTokens,
+		"limit":          limit,
+		"offset":         offset,
 	})
 }
 func (s *Server) handleGetSessionSkills(c *gin.Context) {
@@ -307,10 +414,8 @@ func (s *Server) handleGetSessionSkills(c *gin.Context) {
 
 	history := []session.Message{}
 	if gw.PrimaryAgent != nil && gw.PrimaryAgent.Eng != nil {
-		if h := gw.PrimaryAgent.Eng.(interface {
-			GetHistory(sessionID string) any
-		}).GetHistory(id); h != nil {
-			history = h.([]session.Message)
+		if h := gw.PrimaryAgent.Eng.GetHistory(id); h != nil {
+			history = h
 		}
 	}
 
@@ -357,7 +462,7 @@ type ChannelActionReq struct {
 func (s *Server) handleChannels(c *gin.Context) {
 	var req ChannelActionReq
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		s.sendError(c, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -492,4 +597,78 @@ func (s *Server) handleUploadFile(c *gin.Context) {
 		"path":     relPath,
 		"download": "/api/v1/files/" + relPath,
 	})
+}
+
+func (s *Server) handleGetBrainFacts(c *gin.Context) {
+	var pq PaginationQuery
+	if err := c.ShouldBindQuery(&pq); err != nil {
+		s.sendError(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	limit := pq.Limit
+	if limit == 0 {
+		limit = 50
+	}
+	offset := pq.Offset
+	if offset < 0 {
+		offset = 0
+	}
+	allFacts, err := s.Gateway.PrimaryAgent.Eng.GetBrainFacts(c.Request.Context())
+	if err != nil {
+		s.sendError(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	total := len(allFacts)
+	end := offset + limit
+	if end > total {
+		end = total
+	}
+	c.JSON(http.StatusOK, PaginatedResponse{
+		Data:   allFacts[offset:end],
+		Total:  total,
+		Limit:  limit,
+		Offset: offset,
+	})
+}
+
+func (s *Server) handleGetBrainSummaries(c *gin.Context) {
+	var pq PaginationQuery
+	if err := c.ShouldBindQuery(&pq); err != nil {
+		s.sendError(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	limit := pq.Limit
+	if limit == 0 {
+		limit = 50
+	}
+	offset := pq.Offset
+	if offset < 0 {
+		offset = 0
+	}
+	allSummaries, err := s.Gateway.PrimaryAgent.Eng.GetBrainSummaries(c.Request.Context())
+	if err != nil {
+		s.sendError(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	total := len(allSummaries)
+	end := offset + limit
+	if end > total {
+		end = total
+	}
+	c.JSON(http.StatusOK, PaginatedResponse{
+		Data:   allSummaries[offset:end],
+		Total:  total,
+		Limit:  limit,
+		Offset: offset,
+	})
+}
+
+func (s *Server) handleGetBrainTopology(c *gin.Context) {
+	sessionID := c.Query("session_id")
+	topology, err := s.Gateway.PrimaryAgent.Eng.GetBrainTopology(c.Request.Context(), sessionID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, topology)
 }

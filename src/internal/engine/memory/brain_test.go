@@ -3,9 +3,11 @@ package memory
 import (
 	"context"
 	"miri-main/src/internal/config"
+	"miri-main/src/internal/engine/memory/mole_syn"
 	"miri-main/src/internal/storage"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -98,7 +100,7 @@ func TestBrain_Compact(t *testing.T) {
 	defer os.RemoveAll("templates")
 
 	st, _ := storage.New(tmpDir)
-	brain := NewBrain(chat, vm, 1000, st)
+	brain := NewBrain(chat, vm, vm, vm, 1000, st, config.RetrievalConfig{}, 0)
 
 	err = brain.Compact(ctx)
 	if err != nil {
@@ -166,7 +168,7 @@ func TestBrain_IngestMetadata(t *testing.T) {
 	}
 
 	st, _ := storage.New(tmpDir)
-	brain := NewBrain(chat, vm, 1000, st)
+	brain := NewBrain(chat, vm, vm, vm, 1000, st, config.RetrievalConfig{}, 0)
 
 	err = brain.IngestMetadata(ctx, "I like coffee", "I am a helpful assistant")
 	if err != nil {
@@ -209,13 +211,16 @@ func TestBrain_InteractionThreshold(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	cleanup := setupTestPrompts()
+	defer cleanup()
+
 	chat := &mockChat{response: "[]"}
 	st, _ := storage.New(tmpDir)
-	brain := NewBrain(chat, vm, 1000, st)
+	brain := NewBrain(chat, vm, vm, vm, 1000, st, config.RetrievalConfig{}, 0)
 
 	// Interaction 1 to 99 should not trigger compaction
 	for i := 1; i < 100; i++ {
-		_, _ = brain.Retrieve(context.Background(), "query")
+		brain.AddToBuffer("sess-id", schema.UserMessage("msg"))
 	}
 
 	brain.mu.Lock()
@@ -225,11 +230,8 @@ func TestBrain_InteractionThreshold(t *testing.T) {
 		t.Errorf("Expected interaction count 99, got %d", count)
 	}
 
-	cleanup := setupTestPrompts()
-	defer cleanup()
-
 	// Interaction 100 should trigger compaction
-	_, _ = brain.Retrieve(context.Background(), "query")
+	brain.AddToBuffer("sess-id", schema.UserMessage("msg"))
 
 	// Compaction is async, wait a bit or check if interactionCount was reset
 	// Since compaction resets count to 0
@@ -274,7 +276,7 @@ func TestBrain_ContextUsageThreshold(t *testing.T) {
 
 	// Window 1000, 60% = 600
 	st, _ := storage.New(tmpDir)
-	brain := NewBrain(chat, vm, 1000, st)
+	brain := NewBrain(chat, vm, vm, vm, 1000, st, config.RetrievalConfig{}, 0)
 
 	// Usage 500 should not trigger maintenance
 	brain.UpdateContextUsage(context.Background(), 500)
@@ -312,7 +314,7 @@ func TestBrain_ContextUsageThreshold(t *testing.T) {
 	// Add some messages to buffer to test clearing
 	brain.AddToBuffer("sess1", schema.UserMessage("Hello"))
 
-	_, _ = brain.Retrieve(context.Background(), "query")
+	_, _ = brain.Retrieve(context.Background(), "sess1", "query")
 	time.Sleep(200 * time.Millisecond)
 
 	brain.mu.Lock()
@@ -349,7 +351,7 @@ func TestBrain_AnalyzeTopology(t *testing.T) {
 	}
 
 	st, _ := storage.New(tmpDir)
-	brain := NewBrain(chat, nil, 1000, st)
+	brain := NewBrain(chat, nil, nil, nil, 1000, st, config.RetrievalConfig{}, 0)
 	analysis, err := brain.analyzeTopology(context.Background(), "some trace")
 	if err != nil {
 		t.Fatalf("analyzeTopology failed: %v", err)
@@ -388,12 +390,101 @@ func TestBrain_TriggerMaintenanceScheduled(t *testing.T) {
 	chat := &mockChat{response: `{}`}
 
 	st, _ := storage.New(tmpDir)
-	brain := NewBrain(chat, vm, 1000, st)
+	brain := NewBrain(chat, vm, vm, vm, 1000, st, config.RetrievalConfig{}, 0)
 
 	// Trigger scheduled maintenance
 	brain.TriggerMaintenance(TriggerScheduled)
 
 	if brain.lastMaintenance.IsZero() {
 		t.Errorf("lastMaintenance should have been updated")
+	}
+}
+
+func TestBrain_HybridRetrieve(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "miri-brain-test-hybrid-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	cfg := &config.Config{
+		StorageDir: tmpDir,
+		Miri: config.MiriConfig{
+			Brain: config.BrainConfig{
+				Embeddings: config.EmbeddingConfig{
+					UseNativeEmbeddings: true,
+				},
+			},
+		},
+	}
+
+	vm, _ := NewVectorMemory(cfg, "test_hybrid_vector")
+	chat := &mockChat{response: "{}"}
+	st, _ := storage.New(tmpDir)
+	brain := NewBrain(chat, vm, vm, vm, 1000, st, config.RetrievalConfig{}, 0)
+
+	// 1. Add some vector memories with different deep_bond_uses scores.
+	// "High quality" has been retrieved 10 times in Deep-bond sessions → 50% distance boost.
+	// "Low quality" has never been used in a Deep-bond session → no boost.
+	ctx := context.Background()
+	_ = vm.Add(ctx, "High quality reasoning", map[string]string{"type": "fact", "deep_bond_uses": "10", "topology_score": "80", "id": "1"})
+	_ = vm.Add(ctx, "Low quality reasoning", map[string]string{"type": "fact", "deep_bond_uses": "0", "topology_score": "80", "id": "2"})
+
+	// 2. Add some graph nodes
+	sessionID := "sess-hybrid"
+	analysis := &mole_syn.TopologyAnalysis{
+		Steps: []struct {
+			ID      int    `json:"id"`
+			Content string `json:"content"`
+		}{
+			{ID: 1, Content: "Step 1: Introduction"},
+			{ID: 2, Content: "Step 2: Deep Analysis"},
+		},
+		Bonds: []struct {
+			From        int    `json:"from"`
+			To          int    `json:"to"`
+			Type        string `json:"type"`
+			Explanation string `json:"explanation"`
+		}{
+			{From: 1, To: 2, Type: "D", Explanation: "Deep dive"},
+		},
+	}
+	_ = brain.Graph.AddStepsFromAnalysis(sessionID, analysis)
+
+	// 3. Retrieve
+	res, err := brain.Retrieve(ctx, sessionID, "reasoning")
+	if err != nil {
+		t.Fatalf("Retrieve failed: %v", err)
+	}
+
+	// Verify Graph priority (should be first)
+	if !strings.Contains(res, "### Reasoning Backbone (Mole-Syn) ###") {
+		t.Error("Result should contain Graph backbone")
+	}
+	if !strings.Contains(res, "Step 1: Introduction") || !strings.Contains(res, "Step 2: Deep Analysis") {
+		t.Error("Result should contain graph steps")
+	}
+
+	// Verify Vector results
+	if !strings.Contains(res, "### Retrieved Relevant Memories ###") {
+		t.Error("Result should contain vector memories section")
+	}
+
+	// Verify Hybrid Ranking: "High quality" should come before "Low quality"
+	// because its deep_bond_uses is 10 vs 0, giving it a 50% distance reduction
+	idxHigh := strings.Index(res, "High quality reasoning")
+	idxLow := strings.Index(res, "Low quality reasoning")
+	if idxHigh == -1 || idxLow == -1 {
+		t.Fatal("Result missing vector memories")
+	}
+	if idxHigh > idxLow {
+		t.Errorf("Hybrid ranking failed: High quality (95) should be before Low quality (10). Index High: %d, Low: %d", idxHigh, idxLow)
+	}
+
+	// Verify structural priority: Graph should be before Vector
+	idxGraph := strings.Index(res, "### Reasoning Backbone (Mole-Syn) ###")
+	idxVector := strings.Index(res, "### Retrieved Relevant Memories ###")
+	if idxGraph > idxVector {
+		t.Error("Structural priority failed: Graph should be before Vector memories")
 	}
 }

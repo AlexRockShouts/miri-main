@@ -6,6 +6,8 @@ import (
 	"log/slog"
 	"miri-main/src/internal/config"
 	"miri-main/src/internal/engine"
+	"miri-main/src/internal/engine/skills"
+	"miri-main/src/internal/engine/tools"
 	"miri-main/src/internal/session"
 	"miri-main/src/internal/storage"
 	"miri-main/src/internal/system"
@@ -13,44 +15,33 @@ import (
 )
 
 type Agent struct {
-	Config      *config.Config
-	SessionMgr  *session.SessionManager `json:"-"`
-	Storage     *storage.Storage        `json:"-"`
-	Parent      *Agent                  `json:"-"`
-	Eng         engine.Engine           `json:"-"`
-	taskGateway any
+	Config     *config.Config
+	SessionMgr *session.SessionManager `json:"-"`
+	Storage    *storage.Storage        `json:"-"`
+	Parent     *Agent                  `json:"-"`
+	Eng        engine.Engine           `json:"-"`
 }
 
-func NewAgent(cfg *config.Config, sm *session.SessionManager, st *storage.Storage) *Agent {
+func NewAgent(cfg *config.Config, sm *session.SessionManager, st *storage.Storage, gw tools.TaskGateway) *Agent {
 	a := &Agent{
 		Config:     cfg,
 		SessionMgr: sm,
 		Storage:    st,
 	}
 
-	a.InitEngine()
+	a.InitEngine(gw)
 
 	return a
 }
 
-func (a *Agent) InitEngine() {
+func (a *Agent) InitEngine(gw tools.TaskGateway) {
 	provider, model := a.splitModel(a.PrimaryModel())
-	react, err := engine.NewEinoEngine(a.Config, a.Storage, provider, model)
+	react, err := engine.NewEinoEngine(a.Config, a.Storage, provider, model, gw)
 	if err != nil {
 		slog.Error("failed to initialize Eino engine", "error", err)
 	} else {
 		a.Eng = react
-		if a.taskGateway != nil {
-			a.Eng.SetTaskGateway(a.taskGateway)
-		}
 		a.Eng.Startup(context.Background())
-	}
-}
-
-func (a *Agent) SetTaskGateway(gw any) {
-	a.taskGateway = gw
-	if a.Eng != nil {
-		a.Eng.SetTaskGateway(gw)
 	}
 }
 
@@ -91,8 +82,8 @@ func (a *Agent) DelegatePromptWithOptions(ctx context.Context, sessionID string,
 	if strings.TrimSpace(prompt) == "/new" {
 		slog.Info("Session renewal triggered", "session_id", sessionID)
 		if a.Eng != nil {
+			a.Eng.CompactMemory(ctx, sessionID)
 			a.Eng.ClearHistory(sessionID)
-			a.Eng.CompactMemory(ctx)
 		}
 		session.Clear()
 		return "Session renewed. Current history cleared.", nil
@@ -106,7 +97,7 @@ func (a *Agent) DelegatePromptWithOptions(ctx context.Context, sessionID string,
 	if opts.Model != "" {
 		provider, model := a.splitModel(a.PrimaryModel())
 		provider, model = a.splitModel(opts.Model)
-		eino, err := engine.NewEinoEngine(a.Config, a.Storage, provider, model)
+		eino, err := engine.NewEinoEngine(a.Config, a.Storage, provider, model, nil)
 		if err == nil {
 			eng = eino
 		} else {
@@ -139,6 +130,7 @@ func (a *Agent) DelegatePromptStreamWithOptions(ctx context.Context, sessionID s
 	if strings.TrimSpace(prompt) == "/new" {
 		slog.Info("Session renewal triggered (stream)", "session_id", sessionID)
 		if a.Eng != nil {
+			a.Eng.CompactMemory(ctx, sessionID)
 			a.Eng.ClearHistory(sessionID)
 		}
 		session.Clear()
@@ -156,7 +148,7 @@ func (a *Agent) DelegatePromptStreamWithOptions(ctx context.Context, sessionID s
 	if opts.Model != "" {
 		provider, model := a.splitModel(a.PrimaryModel())
 		provider, model = a.splitModel(opts.Model)
-		eino, err := engine.NewEinoEngine(a.Config, a.Storage, provider, model)
+		eino, err := engine.NewEinoEngine(a.Config, a.Storage, provider, model, nil)
 		if err == nil {
 			eng = eino
 		} else {
@@ -208,7 +200,7 @@ func (a *Agent) DelegatePromptStreamWithOptions(ctx context.Context, sessionID s
 	return proxy, nil
 }
 
-func (a *Agent) ListSkills() []any {
+func (a *Agent) ListSkills() []*skills.Skill {
 	return a.Eng.ListSkills()
 }
 
@@ -216,7 +208,7 @@ func (a *Agent) ListSkillCommands(ctx context.Context) ([]engine.SkillCommand, e
 	return a.Eng.ListSkillCommands(ctx)
 }
 
-func (a *Agent) ListRemoteSkills(ctx context.Context) (any, error) {
+func (a *Agent) ListRemoteSkills(ctx context.Context) ([]string, error) {
 	return a.Eng.ListRemoteSkills(ctx)
 }
 
@@ -228,7 +220,7 @@ func (a *Agent) RemoveSkill(name string) error {
 	return a.Eng.RemoveSkill(name)
 }
 
-func (a *Agent) GetSkill(name string) (any, error) {
+func (a *Agent) GetSkill(name string) (*skills.Skill, error) {
 	return a.Eng.GetSkill(name)
 }
 
@@ -238,9 +230,9 @@ func (a *Agent) Shutdown(ctx context.Context) {
 	}
 }
 
-func (a *Agent) CompactMemory(ctx context.Context) {
+func (a *Agent) CompactMemory(ctx context.Context, sessionID string) {
 	if a.Eng != nil {
-		a.Eng.CompactMemory(ctx)
+		a.Eng.CompactMemory(ctx, sessionID)
 	}
 }
 

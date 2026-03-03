@@ -139,17 +139,43 @@ func parseFrontmatter(content string) (string, string, error) {
 		}
 	}
 
-	if first == -1 {
-		return "", "", fmt.Errorf("missing frontmatter (no '---')")
-	}
-	if second == -1 {
-		return "", "", fmt.Errorf("incomplete frontmatter (missing closing '---')")
+	// Case 1: Proper YAML frontmatter found
+	if first != -1 && second != -1 {
+		yamlPart := strings.Join(lines[first+1:second], "\n")
+		bodyPart := strings.Join(lines[second+1:], "\n")
+		return yamlPart, bodyPart, nil
 	}
 
-	yamlPart := strings.Join(lines[first+1:second], "\n")
-	bodyPart := strings.Join(lines[second+1:], "\n")
+	// Case 2: Try to handle agentskill.sh comment-style header
+	start := -1
+	end := -1
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "# --- agentskill.sh ---" {
+			start = i
+			continue
+		}
+		if start != -1 && trimmed == "# ---" {
+			end = i
+			break
+		}
+	}
+	if start != -1 && end != -1 && end > start {
+		// Extract frontmatter lines between markers and remove comment prefix
+		var fmLines []string
+		for i := start + 1; i < end; i++ {
+			line := lines[i]
+			line = strings.TrimPrefix(line, "# ")
+			line = strings.TrimPrefix(line, "#")
+			fmLines = append(fmLines, line)
+		}
+		yamlPart := strings.Join(fmLines, "\n")
+		bodyPart := strings.Join(lines[end+1:], "\n")
+		return yamlPart, bodyPart, nil
+	}
 
-	return yamlPart, bodyPart, nil
+	// Case 3: No recognizable frontmatter; accept whole file as body for robustness
+	return "", content, nil
 }
 
 func (l *SkillLoader) parseSkillFile(filePath string) (*Skill, error) {
@@ -346,13 +372,15 @@ func (s *scriptTool) InvokableRun(ctx context.Context, argumentsInJSON string, _
 	}
 
 	stdout, stderr, exitCode, err := cmd.Execute(ctx, command, s.storageDir)
-	res := map[string]any{
-		"stdout":    stdout,
-		"stderr":    stderr,
-		"exit_code": exitCode,
+	type result struct {
+		Stdout   string `json:"stdout"`
+		Stderr   string `json:"stderr"`
+		ExitCode int    `json:"exit_code"`
+		Error    string `json:"error,omitempty"`
 	}
+	res := result{Stdout: stdout, Stderr: stderr, ExitCode: exitCode}
 	if err != nil {
-		res["error"] = err.Error()
+		res.Error = err.Error()
 	}
 	b, _ := json.Marshal(res)
 	return string(b), nil
@@ -391,8 +419,14 @@ func (t *SearchTool) InvokableRun(ctx context.Context, argumentsInJSON string, _
 	}
 	_ = json.Unmarshal([]byte(argumentsInJSON), &args)
 
+	type skillMatch struct {
+		Name        string   `json:"name"`
+		Description string   `json:"description"`
+		Version     string   `json:"version"`
+		Tags        []string `json:"tags"`
+	}
 	query := strings.ToLower(args.Query)
-	var matches []map[string]any
+	var matches []skillMatch
 
 	for _, s := range t.loader.skills {
 		match := false
@@ -430,11 +464,11 @@ func (t *SearchTool) InvokableRun(ctx context.Context, argumentsInJSON string, _
 		}
 
 		if match {
-			matches = append(matches, map[string]any{
-				"name":        s.Name,
-				"description": s.Description,
-				"version":     s.Version,
-				"tags":        s.Tags,
+			matches = append(matches, skillMatch{
+				Name:        s.Name,
+				Description: s.Description,
+				Version:     s.Version,
+				Tags:        s.Tags,
 			})
 		}
 	}

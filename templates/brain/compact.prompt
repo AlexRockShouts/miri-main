@@ -1,22 +1,23 @@
-You are an expert conversation summarizer for agent memory.
+You are an expert conversation analyst focusing on user intent and factual information.
 
-Summarize the following conversation in 100–250 words maximum.
-Focus on:
-- Main topics discussed
-- Key decisions or plans made
-- Important user requests / questions / preferences revealed
-- Outcomes or next steps
-- Any open questions or unresolved items
+Summarize the user's inputs and requests from the following conversation segment.
+Focus exclusively on:
+- What the user requested or asked
+- Decisions or preferences the user expressed
+- New factual information provided by the user
+- Outcomes the user expects
+
+Do NOT summarize the agent's responses. Focus only on the user's side of the interaction.
 
 Structure the summary like this:
-- Overview (1 sentence)
-- Key points / decisions (bullet list)
-- User preferences or new facts learned
-- Open items or follow-ups
+- User Intent (1 sentence)
+- Key Requests / Decisions (bullet list)
+- New User Facts or Preferences
+- Expected Outcomes / Unresolved User Needs
 
 Be objective, concise, and factual. Avoid filler language.
 
-Conversation:
+User Inputs:
 {full_or_recent_conversation_text}
 
 Summary:

@@ -4,6 +4,9 @@ All URIs are relative to *http://localhost:8080*
 
 |Method | HTTP request | Description|
 |------------- | ------------- | -------------|
+|[**apiAdminV1BrainFactsGet**](#apiadminv1brainfactsget) | **GET** /api/admin/v1/brain/facts | Get all factual memories|
+|[**apiAdminV1BrainSummariesGet**](#apiadminv1brainsummariesget) | **GET** /api/admin/v1/brain/summaries | Get all summary memories|
+|[**apiAdminV1BrainTopologyGet**](#apiadminv1braintopologyget) | **GET** /api/admin/v1/brain/topology | Get Mole-Syn reasoning topology|
 |[**apiAdminV1ChannelsPost**](#apiadminv1channelspost) | **POST** /api/admin/v1/channels | Perform actions on communication channels|
 |[**apiAdminV1ConfigGet**](#apiadminv1configget) | **GET** /api/admin/v1/config | Get current configuration|
 |[**apiAdminV1ConfigPost**](#apiadminv1configpost) | **POST** /api/admin/v1/config | Update configuration|
@@ -26,7 +29,164 @@ All URIs are relative to *http://localhost:8080*
 |[**apiV1InteractionPost**](#apiv1interactionpost) | **POST** /api/v1/interaction | Manage sessions or check global status|
 |[**apiV1PromptPost**](#apiv1promptpost) | **POST** /api/v1/prompt | Send a prompt to the agent|
 |[**apiV1PromptStreamGet**](#apiv1promptstreamget) | **GET** /api/v1/prompt/stream | Stream a prompt response via SSE|
+|[**metricsGet**](#metricsget) | **GET** /metrics | Prometheus metrics endpoint|
 |[**wsGet**](#wsget) | **GET** /ws | WebSocket for interactive streaming|
+
+# **apiAdminV1BrainFactsGet**
+> PaginatedSearchResults apiAdminV1BrainFactsGet()
+
+
+### Example
+
+```typescript
+import {
+    DefaultApi,
+    Configuration
+} from './api';
+
+const configuration = new Configuration();
+const apiInstance = new DefaultApi(configuration);
+
+let limit: number; //Maximum number of results to return (optional) (default to undefined)
+let offset: number; //Number of results to skip (optional) (default to undefined)
+
+const { status, data } = await apiInstance.apiAdminV1BrainFactsGet(
+    limit,
+    offset
+);
+```
+
+### Parameters
+
+|Name | Type | Description  | Notes|
+|------------- | ------------- | ------------- | -------------|
+| **limit** | [**number**] | Maximum number of results to return | (optional) defaults to undefined|
+| **offset** | [**number**] | Number of results to skip | (optional) defaults to undefined|
+
+
+### Return type
+
+**PaginatedSearchResults**
+
+### Authorization
+
+[BasicAuth](../README.md#BasicAuth)
+
+### HTTP request headers
+
+ - **Content-Type**: Not defined
+ - **Accept**: application/json
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+|**200** | List of facts |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
+# **apiAdminV1BrainSummariesGet**
+> PaginatedSearchResults apiAdminV1BrainSummariesGet()
+
+
+### Example
+
+```typescript
+import {
+    DefaultApi,
+    Configuration
+} from './api';
+
+const configuration = new Configuration();
+const apiInstance = new DefaultApi(configuration);
+
+let limit: number; //Maximum number of results to return (optional) (default to undefined)
+let offset: number; //Number of results to skip (optional) (default to undefined)
+
+const { status, data } = await apiInstance.apiAdminV1BrainSummariesGet(
+    limit,
+    offset
+);
+```
+
+### Parameters
+
+|Name | Type | Description  | Notes|
+|------------- | ------------- | ------------- | -------------|
+| **limit** | [**number**] | Maximum number of results to return | (optional) defaults to undefined|
+| **offset** | [**number**] | Number of results to skip | (optional) defaults to undefined|
+
+
+### Return type
+
+**PaginatedSearchResults**
+
+### Authorization
+
+[BasicAuth](../README.md#BasicAuth)
+
+### HTTP request headers
+
+ - **Content-Type**: Not defined
+ - **Accept**: application/json
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+|**200** | List of summaries |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
+# **apiAdminV1BrainTopologyGet**
+> TopologyData apiAdminV1BrainTopologyGet()
+
+
+### Example
+
+```typescript
+import {
+    DefaultApi,
+    Configuration
+} from './api';
+
+const configuration = new Configuration();
+const apiInstance = new DefaultApi(configuration);
+
+let sessionId: string; //Filter topology by session ID (optional) (default to undefined)
+
+const { status, data } = await apiInstance.apiAdminV1BrainTopologyGet(
+    sessionId
+);
+```
+
+### Parameters
+
+|Name | Type | Description  | Notes|
+|------------- | ------------- | ------------- | -------------|
+| **sessionId** | [**string**] | Filter topology by session ID | (optional) defaults to undefined|
+
+
+### Return type
+
+**TopologyData**
+
+### Authorization
+
+[BasicAuth](../README.md#BasicAuth)
+
+### HTTP request headers
+
+ - **Content-Type**: Not defined
+ - **Accept**: application/json
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+|**200** | Reasoning topology (nodes and edges) |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
 
 # **apiAdminV1ChannelsPost**
 > apiAdminV1ChannelsPost(apiAdminV1ChannelsPostRequest)
@@ -311,7 +471,7 @@ void (empty response body)
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
 
 # **apiAdminV1SessionsGet**
-> Array<string> apiAdminV1SessionsGet()
+> PaginatedSessions apiAdminV1SessionsGet()
 
 
 ### Example
@@ -325,16 +485,26 @@ import {
 const configuration = new Configuration();
 const apiInstance = new DefaultApi(configuration);
 
-const { status, data } = await apiInstance.apiAdminV1SessionsGet();
+let limit: number; //Maximum number of results to return (optional) (default to undefined)
+let offset: number; //Number of results to skip (optional) (default to undefined)
+
+const { status, data } = await apiInstance.apiAdminV1SessionsGet(
+    limit,
+    offset
+);
 ```
 
 ### Parameters
-This endpoint does not have any parameters.
+
+|Name | Type | Description  | Notes|
+|------------- | ------------- | ------------- | -------------|
+| **limit** | [**number**] | Maximum number of results to return | (optional) defaults to undefined|
+| **offset** | [**number**] | Number of results to skip | (optional) defaults to undefined|
 
 
 ### Return type
 
-**Array<string>**
+**PaginatedSessions**
 
 ### Authorization
 
@@ -404,7 +574,7 @@ const { status, data } = await apiInstance.apiAdminV1SessionsIdGet(
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
 
 # **apiAdminV1SessionsIdHistoryGet**
-> ApiAdminV1SessionsIdHistoryGet200Response apiAdminV1SessionsIdHistoryGet()
+> PaginatedHistory apiAdminV1SessionsIdHistoryGet()
 
 
 ### Example
@@ -419,9 +589,13 @@ const configuration = new Configuration();
 const apiInstance = new DefaultApi(configuration);
 
 let id: string; // (default to undefined)
+let limit: number; //Maximum number of results to return (optional) (default to undefined)
+let offset: number; //Number of results to skip (optional) (default to undefined)
 
 const { status, data } = await apiInstance.apiAdminV1SessionsIdHistoryGet(
-    id
+    id,
+    limit,
+    offset
 );
 ```
 
@@ -430,11 +604,13 @@ const { status, data } = await apiInstance.apiAdminV1SessionsIdHistoryGet(
 |Name | Type | Description  | Notes|
 |------------- | ------------- | ------------- | -------------|
 | **id** | [**string**] |  | defaults to undefined|
+| **limit** | [**number**] | Maximum number of results to return | (optional) defaults to undefined|
+| **offset** | [**number**] | Number of results to skip | (optional) defaults to undefined|
 
 
 ### Return type
 
-**ApiAdminV1SessionsIdHistoryGet200Response**
+**PaginatedHistory**
 
 ### Authorization
 
@@ -597,7 +773,7 @@ This endpoint does not have any parameters.
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
 
 # **apiAdminV1SkillsGet**
-> Array<Skill> apiAdminV1SkillsGet()
+> PaginatedSkills apiAdminV1SkillsGet()
 
 
 ### Example
@@ -611,16 +787,26 @@ import {
 const configuration = new Configuration();
 const apiInstance = new DefaultApi(configuration);
 
-const { status, data } = await apiInstance.apiAdminV1SkillsGet();
+let limit: number; //Maximum number of results to return (optional) (default to undefined)
+let offset: number; //Number of results to skip (optional) (default to undefined)
+
+const { status, data } = await apiInstance.apiAdminV1SkillsGet(
+    limit,
+    offset
+);
 ```
 
 ### Parameters
-This endpoint does not have any parameters.
+
+|Name | Type | Description  | Notes|
+|------------- | ------------- | ------------- | -------------|
+| **limit** | [**number**] | Maximum number of results to return | (optional) defaults to undefined|
+| **offset** | [**number**] | Number of results to skip | (optional) defaults to undefined|
 
 
 ### Return type
 
-**Array<Skill>**
+**PaginatedSkills**
 
 ### Authorization
 
@@ -740,7 +926,7 @@ const { status, data } = await apiInstance.apiAdminV1SkillsNameGet(
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
 
 # **apiAdminV1TasksGet**
-> Array<Task> apiAdminV1TasksGet()
+> PaginatedTasks apiAdminV1TasksGet()
 
 
 ### Example
@@ -754,16 +940,26 @@ import {
 const configuration = new Configuration();
 const apiInstance = new DefaultApi(configuration);
 
-const { status, data } = await apiInstance.apiAdminV1TasksGet();
+let limit: number; //Maximum number of results to return (optional) (default to undefined)
+let offset: number; //Number of results to skip (optional) (default to undefined)
+
+const { status, data } = await apiInstance.apiAdminV1TasksGet(
+    limit,
+    offset
+);
 ```
 
 ### Parameters
-This endpoint does not have any parameters.
+
+|Name | Type | Description  | Notes|
+|------------- | ------------- | ------------- | -------------|
+| **limit** | [**number**] | Maximum number of results to return | (optional) defaults to undefined|
+| **offset** | [**number**] | Number of results to skip | (optional) defaults to undefined|
 
 
 ### Return type
 
-**Array<Task>**
+**PaginatedTasks**
 
 ### Authorization
 
@@ -1088,6 +1284,49 @@ const { status, data } = await apiInstance.apiV1PromptStreamGet(
 | Status code | Description | Response headers |
 |-------------|-------------|------------------|
 |**200** | SSE stream of response chunks |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
+# **metricsGet**
+> string metricsGet()
+
+
+### Example
+
+```typescript
+import {
+    DefaultApi,
+    Configuration
+} from './api';
+
+const configuration = new Configuration();
+const apiInstance = new DefaultApi(configuration);
+
+const { status, data } = await apiInstance.metricsGet();
+```
+
+### Parameters
+This endpoint does not have any parameters.
+
+
+### Return type
+
+**string**
+
+### Authorization
+
+No authorization required
+
+### HTTP request headers
+
+ - **Content-Type**: Not defined
+ - **Accept**: text/plain
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+|**200** | Prometheus formatted metrics |  -  |
 
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
 

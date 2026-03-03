@@ -97,18 +97,21 @@ func TestAPI_PromptStream(t *testing.T) {
 	}
 }
 
-func TestAPI_AdminHealth(t *testing.T) {
+func TestAPI_BrainEndpoints(t *testing.T) {
 	s, tmpDir := setupTestServer(t)
 	defer os.RemoveAll(tmpDir)
 
-	req := httptest.NewRequest("GET", "/api/admin/v1/health", nil)
-	req.Header.Set("Authorization", adminAuth("admin", "admin-password"))
-	resp := httptest.NewRecorder()
+	endpoints := []string{"/api/admin/v1/brain/facts", "/api/admin/v1/brain/summaries", "/api/admin/v1/brain/topology"}
+	for _, ep := range endpoints {
+		req := httptest.NewRequest("GET", ep, nil)
+		req.Header.Set("Authorization", adminAuth("admin", "admin-password"))
+		resp := httptest.NewRecorder()
 
-	s.Engine.ServeHTTP(resp, req)
+		s.Engine.ServeHTTP(resp, req)
 
-	if resp.Code != http.StatusOK {
-		t.Errorf("expected 200, got %d", resp.Code)
+		if resp.Code != http.StatusOK {
+			t.Errorf("expected 200 for %s, got %d. Body: %s", ep, resp.Code, resp.Body.String())
+		}
 	}
 }
 

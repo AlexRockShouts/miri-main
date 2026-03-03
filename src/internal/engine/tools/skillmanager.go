@@ -156,53 +156,19 @@ func (s *SkillRemoteListToolWrapper) InvokableRun(ctx context.Context, arguments
 		return string(b), nil
 	}
 
-	query := strings.ToLower(args.Query)
-	var matches []any
-
-	// allSkills is 'any' because it's decoded from JSON.
-	// Based on previous observation, it's a map with "data" key which is a list of skill objects.
-	data, ok := allSkills.(map[string]any)
-	if !ok {
-		// Try if it's directly a list
-		list, ok := allSkills.([]any)
-		if ok {
-			matches = s.filterSkills(list, query)
-		} else {
-			// Fallback to returning all if format is unknown
-			b, _ := json.Marshal(allSkills)
-			return string(b), nil
-		}
-	} else {
-		list, ok := data["data"].([]any)
-		if ok {
-			matches = s.filterSkills(list, query)
-		} else {
-			b, _ := json.Marshal(allSkills)
-			return string(b), nil
-		}
-	}
-
+	matches := s.filterSkills(allSkills, strings.ToLower(args.Query))
 	b, _ := json.Marshal(matches)
 	return string(b), nil
 }
 
-func (s *SkillRemoteListToolWrapper) filterSkills(list []any, query string) []any {
-	var matches []any
+func (s *SkillRemoteListToolWrapper) filterSkills(list []skillmanager.RemoteSkill, query string) []skillmanager.RemoteSkill {
+	var matches []skillmanager.RemoteSkill
 	isWildcard := strings.Contains(query, "*") || strings.Contains(query, "?")
 
-	for _, item := range list {
-		skill, ok := item.(map[string]any)
-		if !ok {
-			continue
-		}
-
-		name, _ := skill["name"].(string)
-		slug, _ := skill["slug"].(string)
-		desc, _ := skill["description"].(string)
-
-		name = strings.ToLower(name)
-		slug = strings.ToLower(slug)
-		desc = strings.ToLower(desc)
+	for _, skill := range list {
+		name := strings.ToLower(skill.Name)
+		slug := strings.ToLower(skill.Slug)
+		desc := strings.ToLower(skill.Description)
 
 		match := false
 		if isWildcard {
@@ -214,9 +180,7 @@ func (s *SkillRemoteListToolWrapper) filterSkills(list []any, query string) []an
 				match, _ = path.Match(query, desc)
 			}
 		} else {
-			if strings.Contains(name, query) || strings.Contains(slug, query) || strings.Contains(desc, query) {
-				match = true
-			}
+			match = strings.Contains(name, query) || strings.Contains(slug, query) || strings.Contains(desc, query)
 		}
 
 		if match {

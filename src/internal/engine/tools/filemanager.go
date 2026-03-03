@@ -64,7 +64,15 @@ func (f *FileManagerToolWrapper) Info(_ context.Context) (*schema.ToolInfo, erro
 	return f.GetInfo(), nil
 }
 
-func (f *FileManagerToolWrapper) InvokableRun(ctx context.Context, argumentsInJSON string, _ ...tool.Option) (string, error) {
+func (f *FileManagerToolWrapper) InvokableRun(ctx context.Context, argumentsInJSON string, _ ...tool.Option) (resStr string, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			slog.Error("panic in file manager tool", "recover", r)
+			resStr = fmt.Sprintf("internal error: tool panicked: %v", r)
+			err = nil
+		}
+	}()
+
 	var args struct {
 		Action  string `json:"action"`
 		Path    string `json:"path"`

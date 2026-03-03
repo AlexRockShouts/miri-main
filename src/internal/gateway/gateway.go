@@ -9,6 +9,7 @@ import (
 	"miri-main/src/internal/config"
 	"miri-main/src/internal/cron"
 	"miri-main/src/internal/engine"
+	"miri-main/src/internal/engine/skills"
 	"miri-main/src/internal/session"
 	"miri-main/src/internal/storage"
 	"miri-main/src/internal/tasks"
@@ -39,12 +40,11 @@ func New(cfg *config.Config, st *storage.Storage) *Gateway {
 		SessionMgr: session.NewSessionManager(),
 		Channels:   make(map[string]channels.Channel),
 	}
-	gw.PrimaryAgent = agent.NewAgent(cfg, gw.SessionMgr, gw.Storage)
-
+	gw.PrimaryAgent = agent.NewAgent(cfg, gw.SessionMgr, gw.Storage, gw)
 	numSub := gw.Config.Agents.SubAgents
 	gw.SubAgents = make([]*agent.Agent, numSub)
 	for i := range gw.SubAgents {
-		gw.SubAgents[i] = agent.NewAgent(gw.Config, gw.SessionMgr, gw.Storage)
+		gw.SubAgents[i] = agent.NewAgent(gw.Config, gw.SessionMgr, gw.Storage, gw)
 	}
 	for i := range gw.SubAgents {
 		gw.SubAgents[i].Parent = gw.PrimaryAgent
@@ -94,11 +94,6 @@ func New(cfg *config.Config, st *storage.Storage) *Gateway {
 		gw.PrimaryAgent.TriggerMaintenance(context.Background())
 	}); err != nil {
 		slog.Error("Failed to schedule brain maintenance", "error", err)
-	}
-
-	gw.PrimaryAgent.SetTaskGateway(gw)
-	for _, sub := range gw.SubAgents {
-		sub.SetTaskGateway(gw)
 	}
 
 	if gw.Config.Channels.Whatsapp.Enabled {
@@ -210,10 +205,10 @@ func (gw *Gateway) ChannelChat(channel, device, prompt string) (string, error) {
 func (gw *Gateway) CreateNewSession() string {
 	sessionID := gw.SessionMgr.CreateNewSession()
 	if gw.PrimaryAgent != nil {
+		gw.PrimaryAgent.CompactMemory(context.Background(), sessionID)
 		if gw.PrimaryAgent.Eng != nil {
 			gw.PrimaryAgent.Eng.ClearHistory(sessionID)
 		}
-		gw.PrimaryAgent.CompactMemory(context.Background())
 	}
 	return sessionID
 }
@@ -229,12 +224,10 @@ func (gw *Gateway) NumSubAgents() int {
 func (gw *Gateway) UpdateConfig(newCfg *config.Config) {
 	gw.Config = newCfg
 	gw.PrimaryAgent.Config = newCfg
-	gw.PrimaryAgent.InitEngine()
-	gw.PrimaryAgent.SetTaskGateway(gw)
+	gw.PrimaryAgent.InitEngine(gw)
 	for _, sub := range gw.SubAgents {
 		sub.Config = newCfg
-		sub.InitEngine()
-		sub.SetTaskGateway(gw)
+		sub.InitEngine(gw)
 	}
 }
 
@@ -265,7 +258,7 @@ func (gw *Gateway) AddTokens(id string, prompt, output uint64, cost float64) {
 	gw.SessionMgr.AddTokens(id, prompt, output, cost)
 }
 
-func (gw *Gateway) ListSkills() []any {
+func (gw *Gateway) ListSkills() []*skills.Skill {
 	return gw.PrimaryAgent.ListSkills()
 }
 
@@ -273,7 +266,7 @@ func (gw *Gateway) ListSkillCommands(ctx context.Context) ([]engine.SkillCommand
 	return gw.PrimaryAgent.ListSkillCommands(ctx)
 }
 
-func (gw *Gateway) ListRemoteSkills(ctx context.Context) (any, error) {
+func (gw *Gateway) ListRemoteSkills(ctx context.Context) ([]string, error) {
 	return gw.PrimaryAgent.ListRemoteSkills(ctx)
 }
 
@@ -285,7 +278,7 @@ func (gw *Gateway) RemoveSkill(name string) error {
 	return gw.PrimaryAgent.RemoveSkill(name)
 }
 
-func (gw *Gateway) GetSkill(name string) (any, error) {
+func (gw *Gateway) GetSkill(name string) (*skills.Skill, error) {
 	return gw.PrimaryAgent.GetSkill(name)
 }
 

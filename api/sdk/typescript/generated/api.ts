@@ -23,6 +23,10 @@ import type { RequestArgs } from './base';
 // @ts-ignore
 import { BASE_PATH, COLLECTION_FORMATS, BaseAPI, RequiredError, operationServerMap } from './base';
 
+export interface APIError {
+    'code'?: number;
+    'message'?: string;
+}
 export interface ApiAdminV1ChannelsPostRequest {
     'channel'?: string;
     'action'?: ApiAdminV1ChannelsPostRequestActionEnum;
@@ -44,10 +48,6 @@ export type ApiAdminV1ChannelsPostRequestActionEnum = typeof ApiAdminV1ChannelsP
 export interface ApiAdminV1HealthGet200Response {
     'status'?: string;
     'message'?: string;
-}
-export interface ApiAdminV1SessionsIdHistoryGet200Response {
-    'messages'?: Array<Message>;
-    'total_tokens'?: number;
 }
 export interface ApiAdminV1SessionsIdStatsGet200Response {
     'session_id'?: string;
@@ -170,11 +170,53 @@ export interface ModelConfigCost {
     'cacheRead'?: number;
     'cacheWrite'?: number;
 }
+export interface PaginatedHistory {
+    'messages'?: Array<Message>;
+    'total_messages'?: number;
+    'total_tokens'?: number;
+    'limit'?: number;
+    'offset'?: number;
+}
+export interface PaginatedSearchResults {
+    'data'?: Array<SearchResult>;
+    'total'?: number;
+    'limit'?: number;
+    'offset'?: number;
+}
+export interface PaginatedSessions {
+    'data'?: Array<Session>;
+    'total'?: number;
+    'limit'?: number;
+    'offset'?: number;
+}
+export interface PaginatedSkillCommands {
+    'data'?: Array<SkillCommand>;
+    'total'?: number;
+    'limit'?: number;
+    'offset'?: number;
+}
+export interface PaginatedSkills {
+    'data'?: Array<Skill>;
+    'total'?: number;
+    'limit'?: number;
+    'offset'?: number;
+}
+export interface PaginatedTasks {
+    'data'?: Array<Task>;
+    'total'?: number;
+    'limit'?: number;
+    'offset'?: number;
+}
 export interface ProviderConfig {
     'baseUrl'?: string;
     'apiKey'?: string;
     'api'?: string;
     'models'?: Array<ModelConfig>;
+}
+export interface SearchResult {
+    'content'?: string;
+    'metadata'?: { [key: string]: string; };
+    'distance'?: number;
 }
 export interface Session {
     'id'?: string;
@@ -209,6 +251,29 @@ export interface Task {
     'report_session'?: string;
     'report_channels'?: Array<string>;
 }
+export interface TopologyData {
+    'nodes'?: Array<TopologyNode>;
+    'edges'?: Array<TopologyEdge>;
+}
+export interface TopologyEdge {
+    'from'?: string;
+    'to'?: string;
+    'bond'?: TopologyEdgeBondEnum;
+}
+
+export const TopologyEdgeBondEnum = {
+    D: 'D',
+    R: 'R',
+    E: 'E'
+} as const;
+
+export type TopologyEdgeBondEnum = typeof TopologyEdgeBondEnum[keyof typeof TopologyEdgeBondEnum];
+
+export interface TopologyNode {
+    'id'?: string;
+    'content'?: string;
+    'meta'?: { [key: string]: object; };
+}
 export interface UploadResponse {
     'status'?: string;
     'filename'?: string;
@@ -227,6 +292,133 @@ export interface Usage {
  */
 export const DefaultApiAxiosParamCreator = function (configuration?: Configuration) {
     return {
+        /**
+         * 
+         * @summary Get all factual memories
+         * @param {number} [limit] Maximum number of results to return
+         * @param {number} [offset] Number of results to skip
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        apiAdminV1BrainFactsGet: async (limit?: number, offset?: number, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            const localVarPath = `/api/admin/v1/brain/facts`;
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'GET', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication BasicAuth required
+            // http basic authentication required
+            setBasicAuthToObject(localVarRequestOptions, configuration)
+
+            if (limit !== undefined) {
+                localVarQueryParameter['limit'] = limit;
+            }
+
+            if (offset !== undefined) {
+                localVarQueryParameter['offset'] = offset;
+            }
+
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * 
+         * @summary Get all summary memories
+         * @param {number} [limit] Maximum number of results to return
+         * @param {number} [offset] Number of results to skip
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        apiAdminV1BrainSummariesGet: async (limit?: number, offset?: number, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            const localVarPath = `/api/admin/v1/brain/summaries`;
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'GET', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication BasicAuth required
+            // http basic authentication required
+            setBasicAuthToObject(localVarRequestOptions, configuration)
+
+            if (limit !== undefined) {
+                localVarQueryParameter['limit'] = limit;
+            }
+
+            if (offset !== undefined) {
+                localVarQueryParameter['offset'] = offset;
+            }
+
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * 
+         * @summary Get Mole-Syn reasoning topology
+         * @param {string} [sessionId] Filter topology by session ID
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        apiAdminV1BrainTopologyGet: async (sessionId?: string, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            const localVarPath = `/api/admin/v1/brain/topology`;
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'GET', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication BasicAuth required
+            // http basic authentication required
+            setBasicAuthToObject(localVarRequestOptions, configuration)
+
+            if (sessionId !== undefined) {
+                localVarQueryParameter['session_id'] = sessionId;
+            }
+
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
         /**
          * 
          * @summary Perform actions on communication channels
@@ -446,10 +638,12 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
         /**
          * 
          * @summary List active session IDs
+         * @param {number} [limit] Maximum number of results to return
+         * @param {number} [offset] Number of results to skip
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        apiAdminV1SessionsGet: async (options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+        apiAdminV1SessionsGet: async (limit?: number, offset?: number, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
             const localVarPath = `/api/admin/v1/sessions`;
             // use dummy base URL string because the URL constructor only accepts absolute URLs.
             const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
@@ -465,6 +659,14 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
             // authentication BasicAuth required
             // http basic authentication required
             setBasicAuthToObject(localVarRequestOptions, configuration)
+
+            if (limit !== undefined) {
+                localVarQueryParameter['limit'] = limit;
+            }
+
+            if (offset !== undefined) {
+                localVarQueryParameter['offset'] = offset;
+            }
 
             localVarHeaderParameter['Accept'] = 'application/json';
 
@@ -519,10 +721,12 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
          * 
          * @summary Get session message history
          * @param {string} id 
+         * @param {number} [limit] Maximum number of results to return
+         * @param {number} [offset] Number of results to skip
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        apiAdminV1SessionsIdHistoryGet: async (id: string, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+        apiAdminV1SessionsIdHistoryGet: async (id: string, limit?: number, offset?: number, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
             // verify required parameter 'id' is not null or undefined
             assertParamExists('apiAdminV1SessionsIdHistoryGet', 'id', id)
             const localVarPath = `/api/admin/v1/sessions/{id}/history`
@@ -541,6 +745,14 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
             // authentication BasicAuth required
             // http basic authentication required
             setBasicAuthToObject(localVarRequestOptions, configuration)
+
+            if (limit !== undefined) {
+                localVarQueryParameter['limit'] = limit;
+            }
+
+            if (offset !== undefined) {
+                localVarQueryParameter['offset'] = offset;
+            }
 
             localVarHeaderParameter['Accept'] = 'application/json';
 
@@ -666,10 +878,12 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
         /**
          * 
          * @summary List all installed skills
+         * @param {number} [limit] Maximum number of results to return
+         * @param {number} [offset] Number of results to skip
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        apiAdminV1SkillsGet: async (options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+        apiAdminV1SkillsGet: async (limit?: number, offset?: number, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
             const localVarPath = `/api/admin/v1/skills`;
             // use dummy base URL string because the URL constructor only accepts absolute URLs.
             const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
@@ -685,6 +899,14 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
             // authentication BasicAuth required
             // http basic authentication required
             setBasicAuthToObject(localVarRequestOptions, configuration)
+
+            if (limit !== undefined) {
+                localVarQueryParameter['limit'] = limit;
+            }
+
+            if (offset !== undefined) {
+                localVarQueryParameter['offset'] = offset;
+            }
 
             localVarHeaderParameter['Accept'] = 'application/json';
 
@@ -775,10 +997,12 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
         /**
          * 
          * @summary List all recurring tasks
+         * @param {number} [limit] Maximum number of results to return
+         * @param {number} [offset] Number of results to skip
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        apiAdminV1TasksGet: async (options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+        apiAdminV1TasksGet: async (limit?: number, offset?: number, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
             const localVarPath = `/api/admin/v1/tasks`;
             // use dummy base URL string because the URL constructor only accepts absolute URLs.
             const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
@@ -794,6 +1018,14 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
             // authentication BasicAuth required
             // http basic authentication required
             setBasicAuthToObject(localVarRequestOptions, configuration)
+
+            if (limit !== undefined) {
+                localVarQueryParameter['limit'] = limit;
+            }
+
+            if (offset !== undefined) {
+                localVarQueryParameter['offset'] = offset;
+            }
 
             localVarHeaderParameter['Accept'] = 'application/json';
 
@@ -1043,6 +1275,36 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
             };
         },
         /**
+         * 
+         * @summary Prometheus metrics endpoint
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        metricsGet: async (options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            const localVarPath = `/metrics`;
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'GET', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            localVarHeaderParameter['Accept'] = 'text/plain';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
          * WebSocket endpoint for real-time interaction and background task notifications. When a background task completes, a message is sent in the following format: ```json {   \"type\": \"task_complete\",   \"task_id\": \"uuid\",   \"task_name\": \"task name\",   \"response\": \"result string\" } ``` 
          * @summary WebSocket for interactive streaming
          * @param {string} [channel] 
@@ -1093,6 +1355,47 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
 export const DefaultApiFp = function(configuration?: Configuration) {
     const localVarAxiosParamCreator = DefaultApiAxiosParamCreator(configuration)
     return {
+        /**
+         * 
+         * @summary Get all factual memories
+         * @param {number} [limit] Maximum number of results to return
+         * @param {number} [offset] Number of results to skip
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async apiAdminV1BrainFactsGet(limit?: number, offset?: number, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<PaginatedSearchResults>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.apiAdminV1BrainFactsGet(limit, offset, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.apiAdminV1BrainFactsGet']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * 
+         * @summary Get all summary memories
+         * @param {number} [limit] Maximum number of results to return
+         * @param {number} [offset] Number of results to skip
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async apiAdminV1BrainSummariesGet(limit?: number, offset?: number, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<PaginatedSearchResults>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.apiAdminV1BrainSummariesGet(limit, offset, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.apiAdminV1BrainSummariesGet']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * 
+         * @summary Get Mole-Syn reasoning topology
+         * @param {string} [sessionId] Filter topology by session ID
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async apiAdminV1BrainTopologyGet(sessionId?: string, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<TopologyData>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.apiAdminV1BrainTopologyGet(sessionId, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.apiAdminV1BrainTopologyGet']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
         /**
          * 
          * @summary Perform actions on communication channels
@@ -1171,11 +1474,13 @@ export const DefaultApiFp = function(configuration?: Configuration) {
         /**
          * 
          * @summary List active session IDs
+         * @param {number} [limit] Maximum number of results to return
+         * @param {number} [offset] Number of results to skip
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        async apiAdminV1SessionsGet(options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<Array<string>>> {
-            const localVarAxiosArgs = await localVarAxiosParamCreator.apiAdminV1SessionsGet(options);
+        async apiAdminV1SessionsGet(limit?: number, offset?: number, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<PaginatedSessions>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.apiAdminV1SessionsGet(limit, offset, options);
             const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
             const localVarOperationServerBasePath = operationServerMap['DefaultApi.apiAdminV1SessionsGet']?.[localVarOperationServerIndex]?.url;
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
@@ -1197,11 +1502,13 @@ export const DefaultApiFp = function(configuration?: Configuration) {
          * 
          * @summary Get session message history
          * @param {string} id 
+         * @param {number} [limit] Maximum number of results to return
+         * @param {number} [offset] Number of results to skip
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        async apiAdminV1SessionsIdHistoryGet(id: string, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<ApiAdminV1SessionsIdHistoryGet200Response>> {
-            const localVarAxiosArgs = await localVarAxiosParamCreator.apiAdminV1SessionsIdHistoryGet(id, options);
+        async apiAdminV1SessionsIdHistoryGet(id: string, limit?: number, offset?: number, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<PaginatedHistory>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.apiAdminV1SessionsIdHistoryGet(id, limit, offset, options);
             const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
             const localVarOperationServerBasePath = operationServerMap['DefaultApi.apiAdminV1SessionsIdHistoryGet']?.[localVarOperationServerIndex]?.url;
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
@@ -1247,11 +1554,13 @@ export const DefaultApiFp = function(configuration?: Configuration) {
         /**
          * 
          * @summary List all installed skills
+         * @param {number} [limit] Maximum number of results to return
+         * @param {number} [offset] Number of results to skip
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        async apiAdminV1SkillsGet(options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<Array<Skill>>> {
-            const localVarAxiosArgs = await localVarAxiosParamCreator.apiAdminV1SkillsGet(options);
+        async apiAdminV1SkillsGet(limit?: number, offset?: number, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<PaginatedSkills>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.apiAdminV1SkillsGet(limit, offset, options);
             const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
             const localVarOperationServerBasePath = operationServerMap['DefaultApi.apiAdminV1SkillsGet']?.[localVarOperationServerIndex]?.url;
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
@@ -1285,11 +1594,13 @@ export const DefaultApiFp = function(configuration?: Configuration) {
         /**
          * 
          * @summary List all recurring tasks
+         * @param {number} [limit] Maximum number of results to return
+         * @param {number} [offset] Number of results to skip
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        async apiAdminV1TasksGet(options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<Array<Task>>> {
-            const localVarAxiosArgs = await localVarAxiosParamCreator.apiAdminV1TasksGet(options);
+        async apiAdminV1TasksGet(limit?: number, offset?: number, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<PaginatedTasks>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.apiAdminV1TasksGet(limit, offset, options);
             const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
             const localVarOperationServerBasePath = operationServerMap['DefaultApi.apiAdminV1TasksGet']?.[localVarOperationServerIndex]?.url;
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
@@ -1374,6 +1685,18 @@ export const DefaultApiFp = function(configuration?: Configuration) {
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
         },
         /**
+         * 
+         * @summary Prometheus metrics endpoint
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async metricsGet(options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<string>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.metricsGet(options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.metricsGet']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
          * WebSocket endpoint for real-time interaction and background task notifications. When a background task completes, a message is sent in the following format: ```json {   \"type\": \"task_complete\",   \"task_id\": \"uuid\",   \"task_name\": \"task name\",   \"response\": \"result string\" } ``` 
          * @summary WebSocket for interactive streaming
          * @param {string} [channel] 
@@ -1396,6 +1719,38 @@ export const DefaultApiFp = function(configuration?: Configuration) {
 export const DefaultApiFactory = function (configuration?: Configuration, basePath?: string, axios?: AxiosInstance) {
     const localVarFp = DefaultApiFp(configuration)
     return {
+        /**
+         * 
+         * @summary Get all factual memories
+         * @param {number} [limit] Maximum number of results to return
+         * @param {number} [offset] Number of results to skip
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        apiAdminV1BrainFactsGet(limit?: number, offset?: number, options?: RawAxiosRequestConfig): AxiosPromise<PaginatedSearchResults> {
+            return localVarFp.apiAdminV1BrainFactsGet(limit, offset, options).then((request) => request(axios, basePath));
+        },
+        /**
+         * 
+         * @summary Get all summary memories
+         * @param {number} [limit] Maximum number of results to return
+         * @param {number} [offset] Number of results to skip
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        apiAdminV1BrainSummariesGet(limit?: number, offset?: number, options?: RawAxiosRequestConfig): AxiosPromise<PaginatedSearchResults> {
+            return localVarFp.apiAdminV1BrainSummariesGet(limit, offset, options).then((request) => request(axios, basePath));
+        },
+        /**
+         * 
+         * @summary Get Mole-Syn reasoning topology
+         * @param {string} [sessionId] Filter topology by session ID
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        apiAdminV1BrainTopologyGet(sessionId?: string, options?: RawAxiosRequestConfig): AxiosPromise<TopologyData> {
+            return localVarFp.apiAdminV1BrainTopologyGet(sessionId, options).then((request) => request(axios, basePath));
+        },
         /**
          * 
          * @summary Perform actions on communication channels
@@ -1456,11 +1811,13 @@ export const DefaultApiFactory = function (configuration?: Configuration, basePa
         /**
          * 
          * @summary List active session IDs
+         * @param {number} [limit] Maximum number of results to return
+         * @param {number} [offset] Number of results to skip
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        apiAdminV1SessionsGet(options?: RawAxiosRequestConfig): AxiosPromise<Array<string>> {
-            return localVarFp.apiAdminV1SessionsGet(options).then((request) => request(axios, basePath));
+        apiAdminV1SessionsGet(limit?: number, offset?: number, options?: RawAxiosRequestConfig): AxiosPromise<PaginatedSessions> {
+            return localVarFp.apiAdminV1SessionsGet(limit, offset, options).then((request) => request(axios, basePath));
         },
         /**
          * 
@@ -1476,11 +1833,13 @@ export const DefaultApiFactory = function (configuration?: Configuration, basePa
          * 
          * @summary Get session message history
          * @param {string} id 
+         * @param {number} [limit] Maximum number of results to return
+         * @param {number} [offset] Number of results to skip
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        apiAdminV1SessionsIdHistoryGet(id: string, options?: RawAxiosRequestConfig): AxiosPromise<ApiAdminV1SessionsIdHistoryGet200Response> {
-            return localVarFp.apiAdminV1SessionsIdHistoryGet(id, options).then((request) => request(axios, basePath));
+        apiAdminV1SessionsIdHistoryGet(id: string, limit?: number, offset?: number, options?: RawAxiosRequestConfig): AxiosPromise<PaginatedHistory> {
+            return localVarFp.apiAdminV1SessionsIdHistoryGet(id, limit, offset, options).then((request) => request(axios, basePath));
         },
         /**
          * 
@@ -1514,11 +1873,13 @@ export const DefaultApiFactory = function (configuration?: Configuration, basePa
         /**
          * 
          * @summary List all installed skills
+         * @param {number} [limit] Maximum number of results to return
+         * @param {number} [offset] Number of results to skip
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        apiAdminV1SkillsGet(options?: RawAxiosRequestConfig): AxiosPromise<Array<Skill>> {
-            return localVarFp.apiAdminV1SkillsGet(options).then((request) => request(axios, basePath));
+        apiAdminV1SkillsGet(limit?: number, offset?: number, options?: RawAxiosRequestConfig): AxiosPromise<PaginatedSkills> {
+            return localVarFp.apiAdminV1SkillsGet(limit, offset, options).then((request) => request(axios, basePath));
         },
         /**
          * 
@@ -1543,11 +1904,13 @@ export const DefaultApiFactory = function (configuration?: Configuration, basePa
         /**
          * 
          * @summary List all recurring tasks
+         * @param {number} [limit] Maximum number of results to return
+         * @param {number} [offset] Number of results to skip
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        apiAdminV1TasksGet(options?: RawAxiosRequestConfig): AxiosPromise<Array<Task>> {
-            return localVarFp.apiAdminV1TasksGet(options).then((request) => request(axios, basePath));
+        apiAdminV1TasksGet(limit?: number, offset?: number, options?: RawAxiosRequestConfig): AxiosPromise<PaginatedTasks> {
+            return localVarFp.apiAdminV1TasksGet(limit, offset, options).then((request) => request(axios, basePath));
         },
         /**
          * 
@@ -1611,6 +1974,15 @@ export const DefaultApiFactory = function (configuration?: Configuration, basePa
             return localVarFp.apiV1PromptStreamGet(prompt, model, options).then((request) => request(axios, basePath));
         },
         /**
+         * 
+         * @summary Prometheus metrics endpoint
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        metricsGet(options?: RawAxiosRequestConfig): AxiosPromise<string> {
+            return localVarFp.metricsGet(options).then((request) => request(axios, basePath));
+        },
+        /**
          * WebSocket endpoint for real-time interaction and background task notifications. When a background task completes, a message is sent in the following format: ```json {   \"type\": \"task_complete\",   \"task_id\": \"uuid\",   \"task_name\": \"task name\",   \"response\": \"result string\" } ``` 
          * @summary WebSocket for interactive streaming
          * @param {string} [channel] 
@@ -1628,6 +2000,41 @@ export const DefaultApiFactory = function (configuration?: Configuration, basePa
  * DefaultApi - object-oriented interface
  */
 export class DefaultApi extends BaseAPI {
+    /**
+     * 
+     * @summary Get all factual memories
+     * @param {number} [limit] Maximum number of results to return
+     * @param {number} [offset] Number of results to skip
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public apiAdminV1BrainFactsGet(limit?: number, offset?: number, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).apiAdminV1BrainFactsGet(limit, offset, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * 
+     * @summary Get all summary memories
+     * @param {number} [limit] Maximum number of results to return
+     * @param {number} [offset] Number of results to skip
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public apiAdminV1BrainSummariesGet(limit?: number, offset?: number, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).apiAdminV1BrainSummariesGet(limit, offset, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * 
+     * @summary Get Mole-Syn reasoning topology
+     * @param {string} [sessionId] Filter topology by session ID
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public apiAdminV1BrainTopologyGet(sessionId?: string, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).apiAdminV1BrainTopologyGet(sessionId, options).then((request) => request(this.axios, this.basePath));
+    }
+
     /**
      * 
      * @summary Perform actions on communication channels
@@ -1694,11 +2101,13 @@ export class DefaultApi extends BaseAPI {
     /**
      * 
      * @summary List active session IDs
+     * @param {number} [limit] Maximum number of results to return
+     * @param {number} [offset] Number of results to skip
      * @param {*} [options] Override http request option.
      * @throws {RequiredError}
      */
-    public apiAdminV1SessionsGet(options?: RawAxiosRequestConfig) {
-        return DefaultApiFp(this.configuration).apiAdminV1SessionsGet(options).then((request) => request(this.axios, this.basePath));
+    public apiAdminV1SessionsGet(limit?: number, offset?: number, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).apiAdminV1SessionsGet(limit, offset, options).then((request) => request(this.axios, this.basePath));
     }
 
     /**
@@ -1716,11 +2125,13 @@ export class DefaultApi extends BaseAPI {
      * 
      * @summary Get session message history
      * @param {string} id 
+     * @param {number} [limit] Maximum number of results to return
+     * @param {number} [offset] Number of results to skip
      * @param {*} [options] Override http request option.
      * @throws {RequiredError}
      */
-    public apiAdminV1SessionsIdHistoryGet(id: string, options?: RawAxiosRequestConfig) {
-        return DefaultApiFp(this.configuration).apiAdminV1SessionsIdHistoryGet(id, options).then((request) => request(this.axios, this.basePath));
+    public apiAdminV1SessionsIdHistoryGet(id: string, limit?: number, offset?: number, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).apiAdminV1SessionsIdHistoryGet(id, limit, offset, options).then((request) => request(this.axios, this.basePath));
     }
 
     /**
@@ -1758,11 +2169,13 @@ export class DefaultApi extends BaseAPI {
     /**
      * 
      * @summary List all installed skills
+     * @param {number} [limit] Maximum number of results to return
+     * @param {number} [offset] Number of results to skip
      * @param {*} [options] Override http request option.
      * @throws {RequiredError}
      */
-    public apiAdminV1SkillsGet(options?: RawAxiosRequestConfig) {
-        return DefaultApiFp(this.configuration).apiAdminV1SkillsGet(options).then((request) => request(this.axios, this.basePath));
+    public apiAdminV1SkillsGet(limit?: number, offset?: number, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).apiAdminV1SkillsGet(limit, offset, options).then((request) => request(this.axios, this.basePath));
     }
 
     /**
@@ -1790,11 +2203,13 @@ export class DefaultApi extends BaseAPI {
     /**
      * 
      * @summary List all recurring tasks
+     * @param {number} [limit] Maximum number of results to return
+     * @param {number} [offset] Number of results to skip
      * @param {*} [options] Override http request option.
      * @throws {RequiredError}
      */
-    public apiAdminV1TasksGet(options?: RawAxiosRequestConfig) {
-        return DefaultApiFp(this.configuration).apiAdminV1TasksGet(options).then((request) => request(this.axios, this.basePath));
+    public apiAdminV1TasksGet(limit?: number, offset?: number, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).apiAdminV1TasksGet(limit, offset, options).then((request) => request(this.axios, this.basePath));
     }
 
     /**
@@ -1862,6 +2277,16 @@ export class DefaultApi extends BaseAPI {
      */
     public apiV1PromptStreamGet(prompt: string, model?: string, options?: RawAxiosRequestConfig) {
         return DefaultApiFp(this.configuration).apiV1PromptStreamGet(prompt, model, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * 
+     * @summary Prometheus metrics endpoint
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public metricsGet(options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).metricsGet(options).then((request) => request(this.axios, this.basePath));
     }
 
     /**

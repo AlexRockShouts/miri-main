@@ -8,6 +8,7 @@ import (
 	"miri-main/src/internal/session"
 	"net/http"
 	"strings"
+	"time"
 
 	"slices"
 
@@ -16,22 +17,22 @@ import (
 )
 
 func (s *Server) handlePromptStream(c *gin.Context) {
-	prompt := c.Query("prompt")
-	modelReq := c.Query("model")
-
-	if prompt == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "prompt query param required"})
+	var q PromptQuery
+	if err := c.ShouldBindQuery(&q); err != nil {
+		s.sendError(c, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	opts := engine.Options{
-		Model: modelReq,
+		Model: q.Model,
 	}
 
+	promptsTotal.Inc()
+
 	gw := c.MustGet("gateway").(*gateway.Gateway)
-	stream, err := gw.PrimaryAgent.DelegatePromptStreamWithOptions(c.Request.Context(), session.DefaultSessionID, prompt, opts)
+	stream, err := gw.PrimaryAgent.DelegatePromptStreamWithOptions(c.Request.Context(), session.DefaultSessionID, q.Prompt, opts)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		s.sendError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
 
@@ -46,6 +47,13 @@ func (s *Server) handlePromptStream(c *gin.Context) {
 }
 
 func (s *Server) handleWebsocket(c *gin.Context) {
+	const (
+		writeWait      = 10 * time.Second
+		pongWait       = 60 * time.Second
+		pingPeriod     = (pongWait * 9) / 10
+		maxMessageSize = 524288
+	)
+
 	gw := c.MustGet("gateway").(*gateway.Gateway)
 
 	channel := c.Query("channel")
@@ -80,18 +88,31 @@ func (s *Server) handleWebsocket(c *gin.Context) {
 		}
 		defer ws.Close()
 
+		ws.SetReadLimit(int64(maxMessageSize))
+		pingTicker := time.NewTicker(pingPeriod)
+		defer pingTicker.Stop()
+		ws.SetReadDeadline(time.Now().Add(pongWait))
+		ws.SetPongHandler(func(appData string) error {
+			ws.SetReadDeadline(time.Now().Add(pongWait))
+			return nil
+		})
+
 		for {
+			ws.SetReadDeadline(time.Now().Add(pongWait))
 			var msg struct {
 				Prompt string `json:"prompt"`
 			}
 			if err := ws.ReadJSON(&msg); err != nil {
+				if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseNormalClosure) {
+					slog.Warn("channel WS unexpected close", "err", err)
+				}
 				break
 			}
 
 			if streamReq {
 				stream, err := gw.PrimaryAgent.DelegatePromptStream(device, msg.Prompt)
 				if err != nil {
-					ws.WriteJSON(gin.H{"error": err.Error()})
+					s.sendWSError(ws, http.StatusInternalServerError, err.Error())
 					continue
 				}
 				for chunk := range stream {
@@ -103,13 +124,24 @@ func (s *Server) handleWebsocket(c *gin.Context) {
 			} else {
 				resp, err := gw.ChannelChat(channel, device, msg.Prompt)
 				if err != nil {
-					ws.WriteJSON(gin.H{"error": err.Error()})
+					s.sendWSError(ws, http.StatusInternalServerError, err.Error())
 					continue
 				}
 
 				if err := ws.WriteJSON(gin.H{"response": resp}); err != nil {
 					break
 				}
+			}
+
+			// Send ping if ticker fired during processing
+			select {
+			case <-pingTicker.C:
+				ws.SetWriteDeadline(time.Now().Add(writeWait))
+				if err := ws.WriteMessage(websocket.PingMessage, nil); err != nil {
+					slog.Error("channel WS ping failed", "err", err)
+					return
+				}
+			default:
 			}
 		}
 		return
@@ -144,6 +176,15 @@ func (s *Server) handleWebsocket(c *gin.Context) {
 	}
 	defer ws.Close()
 
+	ws.SetReadLimit(int64(maxMessageSize))
+	pingTicker := time.NewTicker(pingPeriod)
+	defer pingTicker.Stop()
+	ws.SetReadDeadline(time.Now().Add(pongWait))
+	ws.SetPongHandler(func(appData string) error {
+		ws.SetReadDeadline(time.Now().Add(pongWait))
+		return nil
+	})
+
 	s.wsMu.Lock()
 	s.wsSessions[sessionID] = append(s.wsSessions[sessionID], ws)
 	s.wsMu.Unlock()
@@ -161,12 +202,16 @@ func (s *Server) handleWebsocket(c *gin.Context) {
 	}()
 
 	for {
+		ws.SetReadDeadline(time.Now().Add(pongWait))
 		var msg struct {
 			Prompt  string          `json:"prompt"`
 			Options *engine.Options `json:"options,omitempty"`
 			Stream  *bool           `json:"stream,omitempty"`
 		}
 		if err := ws.ReadJSON(&msg); err != nil {
+			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseNormalClosure) {
+				slog.Warn("default session WS unexpected close", "session", sessionID, "err", err)
+			}
 			break
 		}
 
@@ -183,7 +228,7 @@ func (s *Server) handleWebsocket(c *gin.Context) {
 		if isStreaming {
 			stream, err := gw.PrimaryAgent.DelegatePromptStreamWithOptions(c.Request.Context(), sessionID, msg.Prompt, opts)
 			if err != nil {
-				ws.WriteJSON(gin.H{"error": err.Error()})
+				s.sendWSError(ws, http.StatusInternalServerError, err.Error())
 				continue
 			}
 			for chunk := range stream {
@@ -195,13 +240,24 @@ func (s *Server) handleWebsocket(c *gin.Context) {
 		} else {
 			response, err := gw.PrimaryAgent.DelegatePromptWithOptions(c.Request.Context(), sessionID, msg.Prompt, opts)
 			if err != nil {
-				ws.WriteJSON(gin.H{"error": err.Error()})
+				s.sendWSError(ws, http.StatusInternalServerError, err.Error())
 				continue
 			}
 
 			if err := ws.WriteJSON(gin.H{"response": response}); err != nil {
 				break
 			}
+		}
+
+		// Send ping if ticker fired during processing
+		select {
+		case <-pingTicker.C:
+			ws.SetWriteDeadline(time.Now().Add(writeWait))
+			if err := ws.WriteMessage(websocket.PingMessage, nil); err != nil {
+				slog.Error("default session WS ping failed", "session", sessionID, "err", err)
+				return
+			}
+		default:
 		}
 	}
 }

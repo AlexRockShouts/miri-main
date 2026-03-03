@@ -41,6 +41,11 @@ flowchart TD
 ```
 
 ## Features
+- **Modular Engine**: `Engine` split into focused interfaces (`Responder`, `SkillManager`, `MemoryManager`, `Lifecycle`); all `any` returns → concrete types (`[]*skills.Skill`, `RemoteSkill`, etc.).
+- **Optimized Tools**: Duplicate layers collapsed; `websearch`/`fetch`/`grokipedia` inlined in `engine/tools/`.
+- **Advanced Retrieval**: Hybrid (Mole-Syn graph + vector + `deep_bond_uses` boost); configurable (`miri.brain.retrieval` weights/topK).
+- **Robust Memory**: Batched dedup (facts/summaries), per-op timeouts, graph pruning (`max_nodes_per_session:500`), recent summaries promotion.
+- **Mole-Syn Enhanced**: Unique timestamps, O(V+E) pathfinding, `topology_injection.prompt` active for structured reasoning.
 - **Unified Session**: Miri primarily uses a single default session (`miri:main:agent`) for all chat interactions, ensuring a continuous conversation history.
 - **Eino Engine**: A powerful ReAct agent powered by [Eino](https://github.com/cloudwego/eino), supporting tool-augmented generation and autonomous reasoning loops.
 - **Graph Orchestration**: Core logic is modeled as an Eino Graph with specialized nodes:
@@ -107,16 +112,21 @@ The Brain performs continuous self-optimization to maintain high memory quality 
     - Prunes low-confidence memories or old, unused entries to minimize noise.
 4.  **Auto-Triggering**: Maintenance runs based on interaction counts (every 100 turns), context usage (at 60% window), and system lifecycle events (startup, shutdown, session reset).
 
-### 🔍 Retrieval Strategy
-The `retriever` node proactively queries the Brain during every interaction:
-- **Fact Retrieval**: Top 5 most relevant facts are injected into the system prompt.
-- **Context Retrieval**: Top 3 relevant summaries are added to provide historical background.
-- This ensures the agent is always aware of the user's preferences and past context without overwhelming the model's window.
+### 🔍 Retrieval Strategy (Hybrid)
+The `retriever` node (`engine/eino_graph.go`) prepends context:
+
+- **Graph Backbone**: Mole-Syn `GetStrongPath(sessionID)` — recent reasoning steps (Deep > Reflect > Explore bonds).
+- **Vector Facts**: Top `facts_top_k` (default 5), hybrid-ranked.
+- **Summaries**: Top `summaries_top_k` (default 3).
+- **Ranking**: `distance * boost` where `boost = 1 - min(deep_bond_uses*0.05, 0.5)`; `topology_score` tie-breaker.
+- **Config**: `miri.brain.retrieval.graph_steps`, `graph_weight` (default 0.6), etc.
+
+Ensures continuity + relevance without context overflow.
 
 ## Prerequisites
 
-- Go 1.25+
-- xAI API key (set via env `XAI_API_KEY` or `config.yaml`)
+- Go 1.25 (modern idioms enforced: slices/maps, errors.Is/Join, atomic.Bool, context.WithCancelCause, etc.)
+- xAI API key (`XAI_API_KEY` or `config.yaml`)
 
 ## Build & Run
 
@@ -260,18 +270,25 @@ On startup, warns if non-loopback bind (default `0.0.0.0`) without key.
 Response includes xAI completion (soul + human context prepended).
 
 ## Project Structure
-
 ```
 .
-├── src/          # Go source
-│   ├── cmd/main.go
+├── Makefile
+├── README.md
+├── api/                 # OpenAPI + SDKs (typescript/generated)
+├── bin/                 # Binaries (miri-server)
+├── config.yaml          # Sample config
+├── src/                 # Go source (Go 1.25 modern idioms)
+│   ├── cmd/server/      # main.go entrypoint
 │   └── internal/
-├── scripts/      # Automated tool scripts (.sh, .py, .js)
-├── skills/       # Skill definitions (.md files and optional folders)
-├── templates/    # soul.md and system templates
-├── go.mod
-├── .gitignore
-└── README.md
+│       ├── agent/
+│       ├── api/
+│       ├── config/
+│       ├── engine/      # eino_engine.go, eino_graph.go, eino_agent_loop.go, eino_skills.go, eino_memory.go
+│       ├── gateway/
+│       └── storage/
+├── templates/           # Prompts (brain/), soul.md, skills/, launchd/systemd/
+├── go.mod / go.sum
+└── vendor/
 ```
 
 ## Skills & Scripts
@@ -544,43 +561,6 @@ PID file: `%USERPROFILE%\\.miri\\miri.pid`
 Built with modern Go idioms.
 
 
----
-
-## Architecture Overview
-
-```mermaid
-flowchart TD
-  subgraph Client
-    UI[Webapp / CLI]
-    SDK[TypeScript SDK]
-  end
-
-  UI -->|"HTTP / WS"| REST["HTTP Server (Gin)"]
-  SDK -->|HTTP| REST
-
-  REST -->|"/api/v1, /ws"| GW[Gateway]
-  REST -->|/api/admin/v1| GW
-
-  GW --> AG[Agent]
-  GW --> CH["Channels (WhatsApp, IRC)"]
-  CH -->|incoming/outgoing| GW
-
-  AG --> EN["Engine (Eino Graph)"]
-  EN --> TL[Tools]
-  EN --> SL[SkillLoader]
-  EN --> CR[CronManager]
-  EN --> BR[Brain]
-
-  SL --> SK["Skills (~/.miri/skills)"]
-  TL --> FS[("Sandboxed FS: ~/.miri/generated")]
-  BR --> VM[("Vector DB (chromem-go)")]
-
-  GW --> ST[("Storage ~/.miri")]
-  EN --> ST
-  CR --> ST
-  BR --> ST
-  CR -.->|runs tasks| AG
-```
 
 ### Key Components
 - HTTP Server (Gin): REST and WebSocket endpoints.

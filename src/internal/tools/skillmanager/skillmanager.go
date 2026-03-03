@@ -53,52 +53,46 @@ func SearchAndInstall(ctx context.Context, skillName, storageDir string) (stdout
 
 	// Also try fetching the remote list to see if we can find a better name/slug
 	if remoteSkills, err := ListRemoteSkills(ctx); err == nil {
-		if data, ok := remoteSkills.(map[string]any); ok {
-			if list, ok := data["data"].([]any); ok {
-				for _, s := range list {
-					if skill, ok := s.(map[string]any); ok {
-						slug, _ := skill["slug"].(string)
-						name, _ := skill["name"].(string)
-						ghPath, _ := skill["githubPath"].(string)
-						owner, _ := skill["githubOwner"].(string)
-						repo, _ := skill["githubRepo"].(string)
-						branch, _ := skill["githubBranch"].(string)
+		for _, skill := range remoteSkills {
+			slug := skill.Slug
+			name := skill.Name
+			ghPath := skill.GithubPath
+			owner := skill.GithubOwner
+			repo := skill.GithubRepo
+			branch := skill.GithubBranch
 
-						// Match against slug, name, or slug with underscores replaced
-						if slug == skillName || name == skillName || strings.ReplaceAll(slug, "-", "_") == skillName || strings.ReplaceAll(name, "-", "_") == skillName {
-							if name != "" && name != skillName {
-								candidates = append(candidates, name)
-							}
-							if slug != "" && slug != skillName {
-								candidates = append(candidates, slug)
-							}
-							if owner != "" && repo != "" && ghPath != "" {
-								if branch == "" {
-									branch = "main"
-								}
-								ghFallback = map[string]string{
-									"owner":  owner,
-									"repo":   repo,
-									"path":   ghPath,
-									"branch": branch,
-									"name":   name,
-								}
-								if ghFallback["name"] == "" {
-									ghFallback["name"] = slug
-								}
-							}
+			// Match against slug, name, or slug with underscores replaced
+			if slug == skillName || name == skillName || strings.ReplaceAll(slug, "-", "_") == skillName || strings.ReplaceAll(name, "-", "_") == skillName {
+				if name != "" && name != skillName {
+					candidates = append(candidates, name)
+				}
+				if slug != "" && slug != skillName {
+					candidates = append(candidates, slug)
+				}
+				if owner != "" && repo != "" && ghPath != "" {
+					if branch == "" {
+						branch = "main"
+					}
+					ghFallback = map[string]string{
+						"owner":  owner,
+						"repo":   repo,
+						"path":   ghPath,
+						"branch": branch,
+						"name":   name,
+					}
+					if ghFallback["name"] == "" {
+						ghFallback["name"] = slug
+					}
+				}
 
-							if ghPath != "" {
-								ghParts := strings.Split(ghPath, "/")
-								for i := len(ghParts) - 1; i >= 0; i-- {
-									p := strings.TrimSuffix(ghParts[i], ".md")
-									p = strings.TrimSuffix(p, "SKILL")
-									if p != "" && p != "SKILL" && p != "skills" {
-										candidates = append(candidates, p)
-										break
-									}
-								}
-							}
+				if ghPath != "" {
+					ghParts := strings.Split(ghPath, "/")
+					for i := len(ghParts) - 1; i >= 0; i-- {
+						p := strings.TrimSuffix(ghParts[i], ".md")
+						p = strings.TrimSuffix(p, "SKILL")
+						if p != "" && p != "SKILL" && p != "skills" {
+							candidates = append(candidates, p)
+							break
 						}
 					}
 				}
@@ -163,6 +157,17 @@ func SearchAndInstall(ctx context.Context, skillName, storageDir string) (stdout
 				_, err = io.Copy(f, resp.Body)
 				if err != nil {
 					return "", "", 0, fmt.Errorf("failed to save skill file: %w", err)
+				}
+				f.Close()
+
+				// Ensure YAML frontmatter exists; if missing, prepend minimal frontmatter
+				b, rerr := os.ReadFile(skillFile)
+				if rerr == nil {
+					content := string(b)
+					if !strings.HasPrefix(strings.TrimSpace(content), "---") {
+						front := fmt.Sprintf("---\nname: %s\ndescription: Imported from agentskill.sh (no frontmatter at source)\n---\n\n", safeName)
+						_ = os.WriteFile(skillFile, []byte(front+content), 0644)
+					}
 				}
 
 				return fmt.Sprintf("Skill %q installed as flat file via direct GitHub download (fallback).", ghFallback["name"]), "", 0, nil
@@ -230,8 +235,19 @@ func SearchAndInstallStream(ctx context.Context, skillName, storageDir string) (
 	return pr, nil
 }
 
+// RemoteSkill represents a skill entry from the remote skill registry.
+type RemoteSkill struct {
+	Name         string `json:"name"`
+	Slug         string `json:"slug"`
+	Description  string `json:"description"`
+	GithubPath   string `json:"githubPath"`
+	GithubOwner  string `json:"githubOwner"`
+	GithubRepo   string `json:"githubRepo"`
+	GithubBranch string `json:"githubBranch"`
+}
+
 // ListRemoteSkills fetches the list of available skills from agentskill.sh
-func ListRemoteSkills(ctx context.Context) (any, error) {
+func ListRemoteSkills(ctx context.Context) ([]RemoteSkill, error) {
 	url := fmt.Sprintf("%s/api/skills", BaseURL)
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
@@ -250,12 +266,24 @@ func ListRemoteSkills(ctx context.Context) (any, error) {
 		return nil, fmt.Errorf("failed to fetch remote skills: status %d, body: %s", resp.StatusCode, string(body))
 	}
 
-	var result any
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
 		return nil, err
 	}
 
-	return result, nil
+	// Try {"data": [...]} envelope first, then fall back to a bare array.
+	var envelope struct {
+		Data []RemoteSkill `json:"data"`
+	}
+	if err := json.Unmarshal(body, &envelope); err == nil && envelope.Data != nil {
+		return envelope.Data, nil
+	}
+
+	var list []RemoteSkill
+	if err := json.Unmarshal(body, &list); err != nil {
+		return nil, fmt.Errorf("failed to decode remote skills response: %w", err)
+	}
+	return list, nil
 }
 
 // RemoveSkill deletes the specified skill from the local skills directory

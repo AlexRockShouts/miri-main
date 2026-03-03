@@ -84,7 +84,15 @@ func (t *TaskManagerToolWrapper) Info(_ context.Context) (*schema.ToolInfo, erro
 	return t.GetInfo(), nil
 }
 
-func (t *TaskManagerToolWrapper) InvokableRun(ctx context.Context, argumentsInJSON string, _ ...tool.Option) (string, error) {
+func (t *TaskManagerToolWrapper) InvokableRun(ctx context.Context, argumentsInJSON string, _ ...tool.Option) (resStr string, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			slog.Error("panic in task manager tool", "recover", r)
+			resStr = fmt.Sprintf("internal error: tool panicked: %v", r)
+			err = nil
+		}
+	}()
+
 	var args struct {
 		Action       string   `json:"action"`
 		ID           string   `json:"id"`
