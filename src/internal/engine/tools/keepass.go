@@ -113,7 +113,8 @@ func (r *RetrievePasswordTool) InvokableRun(ctx context.Context, argumentsInJSON
 		return "", fmt.Errorf("invalid arguments: %w", err)
 	}
 	if args.Title == "" {
-		return "", fmt.Errorf("title is required")
+		slog.Warn("retrieve_password: title is required")
+		return `{"title":"","password":"","message":"title is required"}`, nil
 	}
 
 	db, err := r.kt.openDB()
@@ -123,7 +124,8 @@ func (r *RetrievePasswordTool) InvokableRun(ctx context.Context, argumentsInJSON
 
 	entry := findEntry(db, args.Title)
 	if entry == nil {
-		return "", fmt.Errorf("no entry found with title matching %q", args.Title)
+		slog.Warn("retrieve_password: no entry found", "title", args.Title)
+		return fmt.Sprintf(`{"title":%q,"password":"","message":"no entry found with title matching %q"}`, args.Title, args.Title), nil
 	}
 
 	result := map[string]string{

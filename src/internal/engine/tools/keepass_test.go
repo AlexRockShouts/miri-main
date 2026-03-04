@@ -1,9 +1,9 @@
 package tools
 
 import (
-	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -152,15 +152,22 @@ func TestStorePassword_UpdateIfExists(t *testing.T) {
 func TestRetrievePassword_NotFound(t *testing.T) {
 	dir := t.TempDir()
 	dbPath := filepath.Join(dir, "test.kdbx")
+	kt := NewKeePassTool(dbPath, "pass")
+	if err := kt.EnsureDB(); err != nil {
+		t.Fatalf("failed to ensure DB: %v", err)
+	}
 	// Store one entry first so the DB exists
 	storeTool := NewStorePasswordTool(dbPath, "pass")
 	ctx := t.Context()
 	_, _ = storeTool.InvokableRun(ctx, `{"title":"SomeEntry","password":"x"}`)
 
 	retrieveTool := NewRetrievePasswordTool(dbPath, "pass")
-	_, err := retrieveTool.InvokableRun(context.Background(), `{"title":"NonExistent"}`)
-	if err == nil {
-		t.Fatal("expected error for missing entry, got nil")
+	res, err := retrieveTool.InvokableRun(ctx, `{"title":"NonExistent"}`)
+	if err != nil {
+		t.Fatalf("unexpected error for missing entry: %v", err)
+	}
+	if !strings.Contains(res, "no entry found") {
+		t.Errorf(`expected "no entry found" message in response, got %q`, res)
 	}
 }
 
