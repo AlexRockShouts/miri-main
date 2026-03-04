@@ -84,11 +84,12 @@ func (c *CmdToolWrapper) InvokableRun(ctx context.Context, argumentsInJSON strin
 	slog.Debug("cmd tool: sandboxing files", "parent_dir", parentDir)
 	if entries, err := os.ReadDir(parentDir); err == nil {
 		whitelist := map[string]bool{
-			"soul.md":    true,
-			"skills":     true,
-			"vector_db":  true,
-			"checkpoint": true, // check if it's checkpoint or checkpoints
-			"generated":  true,
+			"soul.md":        true,
+			"skills":         true,
+			"vector_db":      true,
+			"checkpoint":     true, // check if it's checkpoint or checkpoints
+			"generated":      true,
+			"passwords.kdbx": true,
 		}
 
 		for _, entry := range entries {

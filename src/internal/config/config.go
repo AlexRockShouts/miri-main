@@ -21,7 +21,13 @@ type Config struct {
 }
 
 type MiriConfig struct {
-	Brain BrainConfig `mapstructure:"brain" json:"brain"`
+	Brain   BrainConfig   `mapstructure:"brain" json:"brain"`
+	KeePass KeePassConfig `mapstructure:"keepass" json:"keepass"`
+}
+
+type KeePassConfig struct {
+	DBPath   string `mapstructure:"db_path" json:"db_path"`
+	Password string `mapstructure:"password" json:"password"`
 }
 
 type BrainConfig struct {
@@ -236,6 +242,25 @@ func Load(override string) (*Config, error) {
 		}
 	}
 	cfg.Miri.Brain.Embeddings.Model.APIKey = embKey
+
+	// Expansion for KeePass password
+	kpPass := cfg.Miri.KeePass.Password
+	if strings.HasPrefix(kpPass, "$") {
+		varName := strings.TrimPrefix(kpPass, "$")
+		if envVal := os.Getenv(varName); envVal != "" {
+			kpPass = envVal
+		} else {
+			kpPass = ""
+		}
+	}
+	cfg.Miri.KeePass.Password = kpPass
+
+	// Expansion for KeePass DB path
+	kpPath := cfg.Miri.KeePass.DBPath
+	if strings.HasPrefix(kpPath, "~/") {
+		kpPath = filepath.Join(home, kpPath[2:])
+	}
+	cfg.Miri.KeePass.DBPath = kpPath
 
 	return &cfg, nil
 }

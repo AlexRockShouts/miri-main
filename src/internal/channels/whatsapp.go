@@ -4,11 +4,12 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
-	"os/user"
 	"path/filepath"
-	"strings"
 	"sync"
+
+	"slices"
 
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/mdp/qrterminal/v3"
@@ -18,8 +19,6 @@ import (
 	"go.mau.fi/whatsmeow/types"
 	"go.mau.fi/whatsmeow/types/events"
 	"google.golang.org/protobuf/proto"
-	"net/http"
-	"slices"
 )
 
 type Whatsapp struct {
@@ -32,18 +31,7 @@ type Whatsapp struct {
 }
 
 func NewWhatsapp(storageDir string, allowlist, blocklist []string) *Whatsapp {
-	home, err := user.Current()
-	if err != nil {
-		slog.Error("failed to get user home dir", "error", err)
-		return nil
-	}
-
-	baseDir := storageDir
-	if strings.HasPrefix(storageDir, "~/") {
-		baseDir = filepath.Join(home.HomeDir, storageDir[2:])
-	}
-
-	whatsappDir := filepath.Join(baseDir, "whatsapp")
+	whatsappDir := filepath.Join(storageDir, "whatsapp")
 	if err := os.MkdirAll(whatsappDir, 0755); err != nil {
 		slog.Error("failed to create whatsapp dir", "error", err)
 		return nil
@@ -80,20 +68,26 @@ func NewWhatsapp(storageDir string, allowlist, blocklist []string) *Whatsapp {
 			if v.Info.IsGroup || v.Info.IsFromMe {
 				return
 			}
+
+			// Get message text from Conversation or ExtendedTextMessage
 			text := v.Message.GetConversation()
+			if text == "" {
+				text = v.Message.GetExtendedTextMessage().GetText()
+			}
 			if text == "" {
 				return
 			}
-			chat := v.Info.Chat.String()
-			sender := v.Info.Sender.String()
 
-			// 1) If sender/chat is in blocklist -> silently ignore
-			if slices.Contains(w.blocklist, chat) || slices.Contains(w.blocklist, sender) {
+			chat := v.Info.Chat.String()
+			sender := v.Info.MessageSource.SenderAlt.User // This is usually the phone number without any suffix
+
+			// 1) If sender is in blocklist -> silently ignore
+			if slices.Contains(w.blocklist, sender) || slices.Contains(w.blocklist, "+"+sender) {
 				return
 			}
 
-			// 2) If sender/chat is in allowlist -> deliver to agent
-			if slices.Contains(w.allowlist, chat) || slices.Contains(w.allowlist, sender) {
+			// 2) If sender is in allowlist -> deliver to agent
+			if slices.Contains(w.allowlist, sender) || slices.Contains(w.allowlist, "+"+sender) {
 				w.mu.Lock()
 				handler := w.msgHandler
 				w.mu.Unlock()

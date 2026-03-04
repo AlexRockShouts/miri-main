@@ -10,6 +10,7 @@ import (
 	"miri-main/src/internal/cron"
 	"miri-main/src/internal/engine"
 	"miri-main/src/internal/engine/skills"
+	"miri-main/src/internal/engine/tools"
 	"miri-main/src/internal/session"
 	"miri-main/src/internal/storage"
 	"miri-main/src/internal/tasks"
@@ -40,6 +41,15 @@ func New(cfg *config.Config, st *storage.Storage) *Gateway {
 		SessionMgr: session.NewSessionManager(),
 		Channels:   make(map[string]channels.Channel),
 	}
+
+	// Initialize KeePass if configured
+	if cfg.Miri.KeePass.DBPath != "" {
+		kp := tools.NewKeePassTool(cfg.Miri.KeePass.DBPath, cfg.Miri.KeePass.Password)
+		if err := kp.EnsureDB(); err != nil {
+			slog.Error("failed to initialize KeePass database", "path", cfg.Miri.KeePass.DBPath, "error", err)
+		}
+	}
+
 	gw.PrimaryAgent = agent.NewAgent(cfg, gw.SessionMgr, gw.Storage, gw)
 	numSub := gw.Config.Agents.SubAgents
 	gw.SubAgents = make([]*agent.Agent, numSub)

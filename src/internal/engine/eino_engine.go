@@ -163,6 +163,8 @@ func NewEinoEngine(cfg *config.Config, st *storage.Storage, providerName, modelN
 	generatedDir := filepath.Join(cfg.StorageDir, "generated")
 	cmdTool := tools.NewCmdTool(generatedDir)
 	fileManagerTool := tools.NewFileManagerTool(cfg.StorageDir, nil) // Will be properly set if gateway is available
+	retrievePasswordTool := tools.NewRetrievePasswordTool(cfg.Miri.KeePass.DBPath, cfg.Miri.KeePass.Password)
+	storePasswordTool := tools.NewStorePasswordTool(cfg.Miri.KeePass.DBPath, cfg.Miri.KeePass.Password)
 
 	cpStore, err := NewFileCheckPointStore(cfg.StorageDir)
 	if err != nil {
@@ -216,7 +218,7 @@ func NewEinoEngine(cfg *config.Config, st *storage.Storage, providerName, modelN
 	skillUseTool := skills.NewUseTool(ee.skillLoader)
 
 	// Update tools node with all tools
-	allTools := []tool.BaseTool{searchTool, fetchTool, grokipediaTool, cmdTool, skillRemoveTool, skillUseTool, fileManagerTool}
+	allTools := []tool.BaseTool{searchTool, fetchTool, grokipediaTool, cmdTool, skillRemoveTool, skillUseTool, fileManagerTool, retrievePasswordTool, storePasswordTool}
 	allTools = append(allTools, ee.skillLoader.GetExtraTools()...)
 
 	toolsNode, err := compose.NewToolNode(context.Background(), &compose.ToolsNodeConfig{
@@ -235,6 +237,8 @@ func NewEinoEngine(cfg *config.Config, st *storage.Storage, providerName, modelN
 		skillRemoveTool.GetInfo(),
 		grokipediaTool.GetInfo(),
 		fileManagerTool.GetInfo(),
+		retrievePasswordTool.GetInfo(),
+		storePasswordTool.GetInfo(),
 	}
 
 	if info, err := skillUseTool.Info(context.Background()); err == nil {

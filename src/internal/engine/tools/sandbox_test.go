@@ -57,6 +57,17 @@ func TestCmdTool_Sandbox(t *testing.T) {
 	if _, err := os.Stat(soulFile); err != nil {
 		t.Errorf("soul.md was moved but it is whitelisted")
 	}
+
+	// 4. Test passwords.kdbx whitelist (should NOT be moved)
+	passFile := filepath.Join(parentDir, "passwords.kdbx")
+	os.WriteFile(passFile, []byte("fake db"), 0644)
+
+	args = `{"command": "ls"}`
+	tool.InvokableRun(ctx, args)
+
+	if _, err := os.Stat(passFile); err != nil {
+		t.Errorf("passwords.kdbx was moved but it is whitelisted")
+	}
 }
 
 func TestFileManagerTool_ListDefault(t *testing.T) {
