@@ -64,6 +64,9 @@ func webSearch(ctx context.Context, query string) ([]map[string]string, error) {
 	}
 	resp, err := client.Do(httpReq)
 	if err != nil {
+		if resp != nil {
+			resp.Body.Close()
+		}
 		if shouldFallback(err) {
 			return braveSearch(ctx, query)
 		}
@@ -114,6 +117,9 @@ func braveSearch(ctx context.Context, query string) ([]map[string]string, error)
 	}
 	resp, err := client.Do(httpReq)
 	if err != nil {
+		if resp != nil {
+			resp.Body.Close()
+		}
 		return nil, err
 	}
 	defer resp.Body.Close()

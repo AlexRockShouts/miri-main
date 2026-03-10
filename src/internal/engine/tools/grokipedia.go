@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"regexp"
 	"strings"
@@ -54,7 +55,9 @@ func (g *GrokipediaToolWrapper) InvokableRun(ctx context.Context, argumentsInJSO
 func grokipediaSearch(ctx context.Context, query string) (string, error) {
 	slug := grokipediaNormalizeQuery(query)
 	articleURL := fmt.Sprintf("https://grokipedia.com/page/%s", slug)
-	client := &http.Client{Timeout: 15 * time.Second}
+	dialer := &net.Dialer{Timeout: 60 * time.Second}
+	transport := &http.Transport{DialContext: dialer.DialContext}
+	client := &http.Client{Transport: transport, Timeout: 180 * time.Second}
 	req, err := http.NewRequestWithContext(ctx, "GET", articleURL, nil)
 	if err != nil {
 		return "", err
