@@ -2,7 +2,7 @@ openapi: 3.0.3
 info:
   title: Miri Autonomous Agent API
   description: API for interacting with the Miri autonomous agent service.
-  version: 1.0.0
+  version: 1.1.0
 servers:
   - url: http://localhost:8080
     description: Local development server
@@ -58,6 +58,7 @@ components:
       properties:
         content:
           type: string
+
     Config:
       type: object
       properties:
@@ -602,6 +603,7 @@ paths:
           description: File not found
         '403':
           description: Access denied
+
 
   # --- Admin API (Basic Auth) ---
   /api/admin/v1/health:

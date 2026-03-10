@@ -17,18 +17,18 @@ from pathlib import Path
 
 SKILL_TEMPLATE = """---
 name: {skill_name}
-description: [TODO: Complete and informative explanation of what the skill does and when to use it. Include WHEN to use this skill - specific scenarios, file types, or tasks that trigger it.]
+description: "Describe what this skill does, when/how to use it (e.g., for PDFs, code reviews). Edit this."
 ---
 
 # {skill_title}
 
 ## Overview
 
-[TODO: 1-2 sentences explaining what this skill enables]
+"This skill provides automation/tools for [DOMAIN]. Edit with 1-2 sentence overview."
 
 ## Structuring This Skill
 
-[TODO: Choose the structure that best fits this skill's purpose. Common patterns:
+"Choose the best structure below. Common patterns:
 
 **1. Workflow-Based** (best for sequential processes)
 - Works well when there are clear step-by-step procedures
@@ -54,9 +54,9 @@ Patterns can be mixed and matched as needed. Most skills combine patterns (e.g.,
 
 Delete this entire "Structuring This Skill" section when done - it's just guidance.]
 
-## [TODO: Replace with the first main section based on chosen structure]
+## [EDIT: Main section 1 - e.g., "Overview", "Quick Start", "Workflow"]
 
-[TODO: Add content here. See examples in existing skills:
+Add your content here. See examples:
 - Code samples for technical skills
 - Decision trees for complex workflows
 - Concrete examples with realistic user requests
@@ -116,7 +116,7 @@ Example real scripts from other skills:
 
 def main():
     print("This is an example script for {skill_name}")
-    # TODO: Add actual script logic here
+    # Add your script logic here (file ops, API calls, data processing, etc.)
     # This could be data processing, file conversion, API calls, etc.
 
 if __name__ == "__main__":

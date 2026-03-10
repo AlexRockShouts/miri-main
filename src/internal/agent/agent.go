@@ -82,7 +82,7 @@ func (a *Agent) DelegatePromptWithOptions(ctx context.Context, sessionID string,
 	if strings.TrimSpace(prompt) == "/new" {
 		slog.Info("Session renewal triggered", "session_id", sessionID)
 		if a.Eng != nil {
-			a.Eng.CompactMemory(ctx, sessionID)
+			go a.Eng.CompactMemory(ctx, sessionID)
 			a.Eng.ClearHistory(sessionID)
 		}
 		session.Clear()
@@ -130,7 +130,7 @@ func (a *Agent) DelegatePromptStreamWithOptions(ctx context.Context, sessionID s
 	if strings.TrimSpace(prompt) == "/new" {
 		slog.Info("Session renewal triggered (stream)", "session_id", sessionID)
 		if a.Eng != nil {
-			a.Eng.CompactMemory(ctx, sessionID)
+			go a.Eng.CompactMemory(ctx, sessionID)
 			a.Eng.ClearHistory(sessionID)
 		}
 		session.Clear()

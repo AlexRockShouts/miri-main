@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"log/slog"
 	"miri-main/src/internal/config"
 	"miri-main/src/internal/engine"
@@ -10,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -619,4 +621,125 @@ func (s *Server) handleGetBrainTopology(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, topology)
+}
+
+func (s *Server) handleListHumanPending(c *gin.Context) {
+	gw := c.MustGet("gateway").(*gateway.Gateway)
+	pendingDir := filepath.Join(gw.Config.StorageDir, "human_pending")
+	sessionID := c.Query("session_id")
+
+	type HumanPending struct {
+		ID        string    `json:"id"`
+		Question  string    `json:"question"`
+		SessionID string    `json:"session_id"`
+		Created   time.Time `json:"created,omitempty"`
+	}
+
+	var pendings []HumanPending
+
+	entries, err := os.ReadDir(pendingDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			c.JSON(http.StatusOK, []HumanPending{})
+			return
+		}
+		s.sendError(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
+			continue
+		}
+
+		id := strings.TrimSuffix(entry.Name(), ".json")
+		filePath := filepath.Join(pendingDir, entry.Name())
+
+		data, err := os.ReadFile(filePath)
+		if err != nil {
+			continue
+		}
+
+		type pendingInfo struct {
+			Status    string    `json:"status"`
+			Question  string    `json:"question"`
+			SessionID string    `json:"session_id"`
+			Created   time.Time `json:"created"`
+		}
+		var h pendingInfo
+		if err := json.Unmarshal(data, &h); err != nil {
+			continue
+		}
+
+		if h.Status != "pending" {
+			continue
+		}
+
+		if sessionID != "" && h.SessionID != sessionID {
+			continue
+		}
+
+		pendings = append(pendings, HumanPending{
+			ID:        id,
+			Question:  h.Question,
+			SessionID: h.SessionID,
+			Created:   h.Created,
+		})
+	}
+
+	c.JSON(http.StatusOK, pendings)
+}
+
+func (s *Server) handleHumanResponse(c *gin.Context) {
+	id := c.Param("id")
+	if id == "" {
+		s.sendError(c, http.StatusBadRequest, "id required")
+		return
+	}
+
+	gw := c.MustGet("gateway").(*gateway.Gateway)
+	pendingDir := filepath.Join(gw.Config.StorageDir, "human_pending")
+	filePath := filepath.Join(pendingDir, id+".json")
+
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		s.sendError(c, http.StatusNotFound, "human pending not found")
+		return
+	}
+
+	var h map[string]any
+	if err := json.Unmarshal(data, &h); err != nil {
+		s.sendError(c, http.StatusInternalServerError, "invalid pending JSON")
+		return
+	}
+
+	if h["status"] != "pending" {
+		s.sendError(c, http.StatusBadRequest, "not pending")
+		return
+	}
+
+	type req struct {
+		Response string `json:"response" binding:"required"`
+	}
+	var r req
+	if err := c.ShouldBindJSON(&r); err != nil {
+		s.sendError(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	h["status"] = "answered"
+	h["response"] = r.Response
+
+	newData, err := json.MarshalIndent(h, "", "  ")
+	if err != nil {
+		s.sendError(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	if err := os.WriteFile(filePath, newData, 0644); err != nil {
+		s.sendError(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": "responded", "id": id})
 }

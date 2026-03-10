@@ -4,6 +4,8 @@ miri.exe
 miri.test
 miri-server
 
+tmp_pinch
+
 # Test output
 *.out
 output.test

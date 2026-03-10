@@ -215,7 +215,7 @@ func (gw *Gateway) ChannelChat(channel, device, prompt string) (string, error) {
 func (gw *Gateway) CreateNewSession() string {
 	sessionID := gw.SessionMgr.CreateNewSession()
 	if gw.PrimaryAgent != nil {
-		gw.PrimaryAgent.CompactMemory(context.Background(), sessionID)
+		go gw.PrimaryAgent.CompactMemory(context.Background(), sessionID)
 		if gw.PrimaryAgent.Eng != nil {
 			gw.PrimaryAgent.Eng.ClearHistory(sessionID)
 		}
