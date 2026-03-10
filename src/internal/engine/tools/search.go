@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -54,7 +55,59 @@ func (s *SearchToolWrapper) InvokableRun(ctx context.Context, argumentsInJSON st
 
 func webSearch(ctx context.Context, query string) ([]map[string]string, error) {
 	u := "https://duckduckgo.com/html/?q=" + url.QueryEscape(query)
-	client := &http.Client{Timeout: 30 * time.Second}
+	dialer := &net.Dialer{Timeout: 10 * time.Second}
+	transport := &http.Transport{DialContext: dialer.DialContext}
+	client := &http.Client{Transport: transport, Timeout: 30 * time.Second}
+	httpReq, err := http.NewRequestWithContext(ctx, "GET", u, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := client.Do(httpReq)
+	if err != nil {
+		if shouldFallback(err) {
+			return braveSearch(ctx, query)
+		}
+		return nil, err
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	re := regexp.MustCompile(`<a class="result__a" href="([^"]+)"[^>]*>([^<]+)</a>`)
+	matches := re.FindAllStringSubmatch(string(body), -1)
+	var results []map[string]string
+	for _, m := range matches {
+		if len(m) < 3 {
+			continue
+		}
+		results = append(results, map[string]string{
+			"url":   m[1],
+			"title": strings.TrimSpace(m[2]),
+		})
+		if len(results) == 5 {
+			break
+		}
+	}
+	return results, nil
+}
+
+func shouldFallback(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "timeout") ||
+		strings.Contains(msg, "connection reset by peer") ||
+		strings.Contains(msg, "dial tcp") ||
+		strings.Contains(msg, "i/o timeout")
+}
+
+func braveSearch(ctx context.Context, query string) ([]map[string]string, error) {
+	u := "https://search.brave.com/search?q=" + url.QueryEscape(query)
+	dialer := &net.Dialer{Timeout: 10 * time.Second}
+	transport := &http.Transport{DialContext: dialer.DialContext}
+	client := &http.Client{Transport: transport, Timeout: 30 * time.Second}
 	httpReq, err := http.NewRequestWithContext(ctx, "GET", u, nil)
 	if err != nil {
 		return nil, err
@@ -68,7 +121,7 @@ func webSearch(ctx context.Context, query string) ([]map[string]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	re := regexp.MustCompile(`<a class="result__a" href="([^"]+)"[^>]*>([^<]+)</a>`)
+	re := regexp.MustCompile(`<h3 class="title"><a href="([^"]+)"[^>]*>([^<]+)</a>`)
 	matches := re.FindAllStringSubmatch(string(body), -1)
 	var results []map[string]string
 	for _, m := range matches {

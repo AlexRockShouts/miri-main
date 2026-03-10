@@ -13,6 +13,7 @@ import (
 	"miri-main/src/internal/engine/tools"
 	"miri-main/src/internal/session"
 	"miri-main/src/internal/storage"
+	"miri-main/src/internal/subagent"
 	"miri-main/src/internal/tasks"
 	"strings"
 	"sync"
@@ -26,6 +27,7 @@ type Gateway struct {
 	SessionMgr   *session.SessionManager
 	PrimaryAgent *agent.Agent
 	SubAgents    []*agent.Agent
+	DynamicPool  *subagent.Pool
 	Channels     map[string]channels.Channel
 	cronMgr      *cron.CronManager
 	engine       *engine.Loop
@@ -59,6 +61,25 @@ func New(cfg *config.Config, st *storage.Storage) *Gateway {
 	for i := range gw.SubAgents {
 		gw.SubAgents[i].Parent = gw.PrimaryAgent
 	}
+
+	// Initialize the dynamic sub-agent pool
+	gw.DynamicPool = subagent.NewPool(
+		func(model string) (subagent.EngineResponder, error) {
+			primary := gw.PrimaryAgent.PrimaryModel()
+			if model == "" {
+				model = primary
+			}
+			parts := strings.SplitN(model, "/", 2)
+			if len(parts) != 2 {
+				parts = strings.SplitN(primary, "/", 2)
+			}
+			provider, modelName := parts[0], parts[1]
+			return engine.NewEinoEngine(cfg, st, provider, modelName, nil)
+		},
+		gw.SessionMgr,
+		gw.Storage,
+		gw.PrimaryAgent.Eng,
+	)
 
 	gw.cronMgr = cron.NewCronManager(gw.Storage, func(ctx context.Context, sessionID, prompt string, opts engine.Options) (string, error) {
 		return gw.PrimaryAgent.DelegatePromptWithOptions(ctx, sessionID, prompt, opts)
@@ -316,6 +337,28 @@ func (gw *Gateway) ListTasks() ([]*tasks.Task, error) {
 
 func (gw *Gateway) GetTask(id string) (*tasks.Task, error) {
 	return gw.Storage.LoadTask(id)
+}
+
+// SpawnSubAgent creates and starts a new dynamic sub-agent run.
+// Returns the run ID on success.
+func (gw *Gateway) SpawnSubAgent(ctx context.Context, role, goal, model, parentSession string) (string, error) {
+	id := uuid.New().String()
+	run := &storage.SubAgentRun{
+		ID:            id,
+		ParentSession: parentSession,
+		Role:          role,
+		Goal:          goal,
+		Model:         model,
+	}
+	if err := gw.DynamicPool.Spawn(ctx, run); err != nil {
+		return "", err
+	}
+	return id, nil
+}
+
+// CancelSubAgent cancels a running sub-agent by ID.
+func (gw *Gateway) CancelSubAgent(id string) error {
+	return gw.DynamicPool.Cancel(id)
 }
 
 func (gw *Gateway) SetTaskReportHandler(h func(sessionID, taskName, taskID, message string)) {

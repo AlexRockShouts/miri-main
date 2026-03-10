@@ -12,6 +12,7 @@ import (
 	"github.com/cloudwego/eino/components/model"
 	"github.com/cloudwego/eino/compose"
 	"github.com/cloudwego/eino/schema"
+	"time"
 
 	"miri-main/src/internal/engine/memory"
 	"miri-main/src/internal/engine/memory/mole_syn"
@@ -22,6 +23,9 @@ import (
 // Respond builds a conversation including system prompt, history and current user prompt.
 func (e *EinoEngine) Respond(ctx context.Context, sess *session.Session, promptStr string, humanContext string) (string, *llm.Usage, error) {
 	slog.Info("EinoEngine Respond", "session_id", sess.ID, "prompt_len", len(promptStr))
+
+	type sessionIDKey struct{}
+	ctx = context.WithValue(ctx, sessionIDKey{}, sess.ID)
 
 	// Sanitize prompt to remove potentially sensitive data before adding to buffer
 	promptStr = e.sanitizeString(promptStr)
@@ -83,7 +87,10 @@ func (e *EinoEngine) Respond(ctx context.Context, sess *session.Session, promptS
 		CallOpts:  callOpts,
 	}
 
-	output, err := e.compiledGraph.Invoke(ctx, input, compose.WithCheckPointID(sess.ID))
+	subctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+	defer cancel()
+
+	output, err := e.compiledGraph.Invoke(subctx, input, compose.WithCheckPointID(sess.ID))
 	if err != nil {
 		// Check for persistent 503 error
 		if strings.Contains(err.Error(), "503") || strings.Contains(err.Error(), "Service Unavailable") {
@@ -187,7 +194,10 @@ func (e *EinoEngine) StreamRespond(ctx context.Context, sess *session.Session, p
 			VerboseCh: verboseCh,
 		}
 
-		stream, err := e.compiledGraph.Stream(ctx, input, compose.WithCheckPointID(sess.ID))
+		subctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+		defer cancel()
+
+		stream, err := e.compiledGraph.Stream(subctx, input, compose.WithCheckPointID(sess.ID))
 		if err != nil {
 			close(verboseCh)
 			callbacks.OnError(ctx, err)
@@ -273,6 +283,13 @@ func (e *EinoEngine) GetBrainSummaries(ctx context.Context) ([]memory.SearchResu
 		return nil, nil
 	}
 	return e.brain.GetSummaries(ctx)
+}
+
+func (e *EinoEngine) InjectFact(ctx context.Context, content string, metadata map[string]string) error {
+	if e.brain == nil {
+		return nil
+	}
+	return e.brain.StoreFact(ctx, content, metadata)
 }
 
 func (e *EinoEngine) GetBrainTopology(ctx context.Context, sessionID string) (*mole_syn.TopologyData, error) {

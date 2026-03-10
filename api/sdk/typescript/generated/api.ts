@@ -75,6 +75,10 @@ export interface ApiV1PromptPostRequest {
     'temperature'?: number;
     'max_tokens'?: number;
 }
+export interface ApiV1SubagentsIdTranscriptGet200ResponseInner {
+    'role'?: string;
+    'content'?: string;
+}
 export interface BrainConfig {
     'embeddings'?: EmbeddingConfig;
 }
@@ -238,6 +242,100 @@ export interface SkillCommand {
     'name'?: string;
     'description'?: string;
 }
+export interface SpawnSubAgentRequest {
+    /**
+     * Specialist role for the sub-agent
+     */
+    'role': SpawnSubAgentRequestRoleEnum;
+    /**
+     * Self-contained task description for the sub-agent
+     */
+    'goal': string;
+    /**
+     * Optional model override (e.g. \"xai/grok-3-mini\")
+     */
+    'model'?: string;
+    /**
+     * Parent session ID (defaults to main session)
+     */
+    'parent_session'?: string;
+}
+
+export const SpawnSubAgentRequestRoleEnum = {
+    Researcher: 'researcher',
+    Coder: 'coder',
+    Reviewer: 'reviewer',
+    Generic: 'generic'
+} as const;
+
+export type SpawnSubAgentRequestRoleEnum = typeof SpawnSubAgentRequestRoleEnum[keyof typeof SpawnSubAgentRequestRoleEnum];
+
+export interface SpawnSubAgentResponse {
+    /**
+     * The new sub-agent run ID
+     */
+    'id'?: string;
+    'status'?: string;
+}
+export interface SubAgentRun {
+    /**
+     * Unique run ID
+     */
+    'id'?: string;
+    /**
+     * Session ID of the orchestrator that spawned this sub-agent
+     */
+    'parent_session'?: string;
+    /**
+     * Sub-agent role (researcher, coder, reviewer, generic)
+     */
+    'role'?: SubAgentRunRoleEnum;
+    /**
+     * The task/prompt given to the sub-agent
+     */
+    'goal'?: string;
+    /**
+     * Model override used for this run
+     */
+    'model'?: string;
+    /**
+     * Current run status
+     */
+    'status'?: SubAgentRunStatusEnum;
+    /**
+     * Final output produced by the sub-agent
+     */
+    'output'?: string;
+    /**
+     * Error message if the run failed
+     */
+    'error'?: string;
+    'prompt_tokens'?: number;
+    'output_tokens'?: number;
+    'total_cost'?: number;
+    'created_at'?: string;
+    'started_at'?: string;
+    'finished_at'?: string;
+}
+
+export const SubAgentRunRoleEnum = {
+    Researcher: 'researcher',
+    Coder: 'coder',
+    Reviewer: 'reviewer',
+    Generic: 'generic'
+} as const;
+
+export type SubAgentRunRoleEnum = typeof SubAgentRunRoleEnum[keyof typeof SubAgentRunRoleEnum];
+export const SubAgentRunStatusEnum = {
+    Pending: 'pending',
+    Running: 'running',
+    Done: 'done',
+    Failed: 'failed',
+    Canceled: 'canceled'
+} as const;
+
+export type SubAgentRunStatusEnum = typeof SubAgentRunStatusEnum[keyof typeof SubAgentRunStatusEnum];
+
 export interface Task {
     'id'?: string;
     'name'?: string;
@@ -996,6 +1094,158 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
         },
         /**
          * 
+         * @summary List all sub-agent runs
+         * @param {string} [session] Filter by parent session ID
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        apiAdminV1SubagentsGet: async (session?: string, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            const localVarPath = `/api/admin/v1/subagents`;
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'GET', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication BasicAuth required
+            // http basic authentication required
+            setBasicAuthToObject(localVarRequestOptions, configuration)
+
+            if (session !== undefined) {
+                localVarQueryParameter['session'] = session;
+            }
+
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * 
+         * @summary Cancel a running sub-agent
+         * @param {string} id 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        apiAdminV1SubagentsIdDelete: async (id: string, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'id' is not null or undefined
+            assertParamExists('apiAdminV1SubagentsIdDelete', 'id', id)
+            const localVarPath = `/api/admin/v1/subagents/{id}`
+                .replace(`{${"id"}}`, encodeURIComponent(String(id)));
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'DELETE', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication BasicAuth required
+            // http basic authentication required
+            setBasicAuthToObject(localVarRequestOptions, configuration)
+
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * 
+         * @summary Get sub-agent run details (admin)
+         * @param {string} id 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        apiAdminV1SubagentsIdGet: async (id: string, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'id' is not null or undefined
+            assertParamExists('apiAdminV1SubagentsIdGet', 'id', id)
+            const localVarPath = `/api/admin/v1/subagents/{id}`
+                .replace(`{${"id"}}`, encodeURIComponent(String(id)));
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'GET', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication BasicAuth required
+            // http basic authentication required
+            setBasicAuthToObject(localVarRequestOptions, configuration)
+
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * 
+         * @summary Get full message transcript of a sub-agent run (admin)
+         * @param {string} id 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        apiAdminV1SubagentsIdTranscriptGet: async (id: string, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'id' is not null or undefined
+            assertParamExists('apiAdminV1SubagentsIdTranscriptGet', 'id', id)
+            const localVarPath = `/api/admin/v1/subagents/{id}/transcript`
+                .replace(`{${"id"}}`, encodeURIComponent(String(id)));
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'GET', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication BasicAuth required
+            // http basic authentication required
+            setBasicAuthToObject(localVarRequestOptions, configuration)
+
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * 
          * @summary List all recurring tasks
          * @param {number} [limit] Maximum number of results to return
          * @param {number} [offset] Number of results to skip
@@ -1268,6 +1518,118 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
             setSearchParams(localVarUrlObj, localVarQueryParameter);
             let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
             localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * 
+         * @summary Get sub-agent run status and result
+         * @param {string} id 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        apiV1SubagentsIdGet: async (id: string, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'id' is not null or undefined
+            assertParamExists('apiV1SubagentsIdGet', 'id', id)
+            const localVarPath = `/api/v1/subagents/{id}`
+                .replace(`{${"id"}}`, encodeURIComponent(String(id)));
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'GET', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication ServerKey required
+            await setApiKeyToObject(localVarHeaderParameter, "X-Server-Key", configuration)
+
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * 
+         * @summary Get full message transcript of a sub-agent run
+         * @param {string} id 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        apiV1SubagentsIdTranscriptGet: async (id: string, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'id' is not null or undefined
+            assertParamExists('apiV1SubagentsIdTranscriptGet', 'id', id)
+            const localVarPath = `/api/v1/subagents/{id}/transcript`
+                .replace(`{${"id"}}`, encodeURIComponent(String(id)));
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'GET', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication ServerKey required
+            await setApiKeyToObject(localVarHeaderParameter, "X-Server-Key", configuration)
+
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * Manually spawn a specialized sub-agent with a given role and goal. The sub-agent runs autonomously and its result can be polled via GET /api/v1/subagents/{id}. The orchestrator LLM can also spawn sub-agents automatically via the Researcher/Coder/Reviewer tools. 
+         * @summary Spawn a new sub-agent run
+         * @param {SpawnSubAgentRequest} spawnSubAgentRequest 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        apiV1SubagentsPost: async (spawnSubAgentRequest: SpawnSubAgentRequest, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'spawnSubAgentRequest' is not null or undefined
+            assertParamExists('apiV1SubagentsPost', 'spawnSubAgentRequest', spawnSubAgentRequest)
+            const localVarPath = `/api/v1/subagents`;
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'POST', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication ServerKey required
+            await setApiKeyToObject(localVarHeaderParameter, "X-Server-Key", configuration)
+
+            localVarHeaderParameter['Content-Type'] = 'application/json';
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+            localVarRequestOptions.data = serializeDataIfNeeded(spawnSubAgentRequest, localVarRequestOptions, configuration)
 
             return {
                 url: toPathString(localVarUrlObj),
@@ -1593,6 +1955,58 @@ export const DefaultApiFp = function(configuration?: Configuration) {
         },
         /**
          * 
+         * @summary List all sub-agent runs
+         * @param {string} [session] Filter by parent session ID
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async apiAdminV1SubagentsGet(session?: string, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<Array<SubAgentRun>>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.apiAdminV1SubagentsGet(session, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.apiAdminV1SubagentsGet']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * 
+         * @summary Cancel a running sub-agent
+         * @param {string} id 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async apiAdminV1SubagentsIdDelete(id: string, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<void>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.apiAdminV1SubagentsIdDelete(id, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.apiAdminV1SubagentsIdDelete']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * 
+         * @summary Get sub-agent run details (admin)
+         * @param {string} id 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async apiAdminV1SubagentsIdGet(id: string, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<SubAgentRun>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.apiAdminV1SubagentsIdGet(id, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.apiAdminV1SubagentsIdGet']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * 
+         * @summary Get full message transcript of a sub-agent run (admin)
+         * @param {string} id 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async apiAdminV1SubagentsIdTranscriptGet(id: string, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<Array<ApiV1SubagentsIdTranscriptGet200ResponseInner>>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.apiAdminV1SubagentsIdTranscriptGet(id, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.apiAdminV1SubagentsIdTranscriptGet']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * 
          * @summary List all recurring tasks
          * @param {number} [limit] Maximum number of results to return
          * @param {number} [offset] Number of results to skip
@@ -1682,6 +2096,45 @@ export const DefaultApiFp = function(configuration?: Configuration) {
             const localVarAxiosArgs = await localVarAxiosParamCreator.apiV1PromptStreamGet(prompt, model, options);
             const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
             const localVarOperationServerBasePath = operationServerMap['DefaultApi.apiV1PromptStreamGet']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * 
+         * @summary Get sub-agent run status and result
+         * @param {string} id 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async apiV1SubagentsIdGet(id: string, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<SubAgentRun>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.apiV1SubagentsIdGet(id, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.apiV1SubagentsIdGet']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * 
+         * @summary Get full message transcript of a sub-agent run
+         * @param {string} id 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async apiV1SubagentsIdTranscriptGet(id: string, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<Array<ApiV1SubagentsIdTranscriptGet200ResponseInner>>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.apiV1SubagentsIdTranscriptGet(id, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.apiV1SubagentsIdTranscriptGet']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * Manually spawn a specialized sub-agent with a given role and goal. The sub-agent runs autonomously and its result can be polled via GET /api/v1/subagents/{id}. The orchestrator LLM can also spawn sub-agents automatically via the Researcher/Coder/Reviewer tools. 
+         * @summary Spawn a new sub-agent run
+         * @param {SpawnSubAgentRequest} spawnSubAgentRequest 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async apiV1SubagentsPost(spawnSubAgentRequest: SpawnSubAgentRequest, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<SpawnSubAgentResponse>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.apiV1SubagentsPost(spawnSubAgentRequest, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.apiV1SubagentsPost']?.[localVarOperationServerIndex]?.url;
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
         },
         /**
@@ -1903,6 +2356,46 @@ export const DefaultApiFactory = function (configuration?: Configuration, basePa
         },
         /**
          * 
+         * @summary List all sub-agent runs
+         * @param {string} [session] Filter by parent session ID
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        apiAdminV1SubagentsGet(session?: string, options?: RawAxiosRequestConfig): AxiosPromise<Array<SubAgentRun>> {
+            return localVarFp.apiAdminV1SubagentsGet(session, options).then((request) => request(axios, basePath));
+        },
+        /**
+         * 
+         * @summary Cancel a running sub-agent
+         * @param {string} id 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        apiAdminV1SubagentsIdDelete(id: string, options?: RawAxiosRequestConfig): AxiosPromise<void> {
+            return localVarFp.apiAdminV1SubagentsIdDelete(id, options).then((request) => request(axios, basePath));
+        },
+        /**
+         * 
+         * @summary Get sub-agent run details (admin)
+         * @param {string} id 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        apiAdminV1SubagentsIdGet(id: string, options?: RawAxiosRequestConfig): AxiosPromise<SubAgentRun> {
+            return localVarFp.apiAdminV1SubagentsIdGet(id, options).then((request) => request(axios, basePath));
+        },
+        /**
+         * 
+         * @summary Get full message transcript of a sub-agent run (admin)
+         * @param {string} id 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        apiAdminV1SubagentsIdTranscriptGet(id: string, options?: RawAxiosRequestConfig): AxiosPromise<Array<ApiV1SubagentsIdTranscriptGet200ResponseInner>> {
+            return localVarFp.apiAdminV1SubagentsIdTranscriptGet(id, options).then((request) => request(axios, basePath));
+        },
+        /**
+         * 
          * @summary List all recurring tasks
          * @param {number} [limit] Maximum number of results to return
          * @param {number} [offset] Number of results to skip
@@ -1972,6 +2465,36 @@ export const DefaultApiFactory = function (configuration?: Configuration, basePa
          */
         apiV1PromptStreamGet(prompt: string, model?: string, options?: RawAxiosRequestConfig): AxiosPromise<string> {
             return localVarFp.apiV1PromptStreamGet(prompt, model, options).then((request) => request(axios, basePath));
+        },
+        /**
+         * 
+         * @summary Get sub-agent run status and result
+         * @param {string} id 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        apiV1SubagentsIdGet(id: string, options?: RawAxiosRequestConfig): AxiosPromise<SubAgentRun> {
+            return localVarFp.apiV1SubagentsIdGet(id, options).then((request) => request(axios, basePath));
+        },
+        /**
+         * 
+         * @summary Get full message transcript of a sub-agent run
+         * @param {string} id 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        apiV1SubagentsIdTranscriptGet(id: string, options?: RawAxiosRequestConfig): AxiosPromise<Array<ApiV1SubagentsIdTranscriptGet200ResponseInner>> {
+            return localVarFp.apiV1SubagentsIdTranscriptGet(id, options).then((request) => request(axios, basePath));
+        },
+        /**
+         * Manually spawn a specialized sub-agent with a given role and goal. The sub-agent runs autonomously and its result can be polled via GET /api/v1/subagents/{id}. The orchestrator LLM can also spawn sub-agents automatically via the Researcher/Coder/Reviewer tools. 
+         * @summary Spawn a new sub-agent run
+         * @param {SpawnSubAgentRequest} spawnSubAgentRequest 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        apiV1SubagentsPost(spawnSubAgentRequest: SpawnSubAgentRequest, options?: RawAxiosRequestConfig): AxiosPromise<SpawnSubAgentResponse> {
+            return localVarFp.apiV1SubagentsPost(spawnSubAgentRequest, options).then((request) => request(axios, basePath));
         },
         /**
          * 
@@ -2202,6 +2725,50 @@ export class DefaultApi extends BaseAPI {
 
     /**
      * 
+     * @summary List all sub-agent runs
+     * @param {string} [session] Filter by parent session ID
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public apiAdminV1SubagentsGet(session?: string, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).apiAdminV1SubagentsGet(session, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * 
+     * @summary Cancel a running sub-agent
+     * @param {string} id 
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public apiAdminV1SubagentsIdDelete(id: string, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).apiAdminV1SubagentsIdDelete(id, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * 
+     * @summary Get sub-agent run details (admin)
+     * @param {string} id 
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public apiAdminV1SubagentsIdGet(id: string, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).apiAdminV1SubagentsIdGet(id, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * 
+     * @summary Get full message transcript of a sub-agent run (admin)
+     * @param {string} id 
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public apiAdminV1SubagentsIdTranscriptGet(id: string, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).apiAdminV1SubagentsIdTranscriptGet(id, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * 
      * @summary List all recurring tasks
      * @param {number} [limit] Maximum number of results to return
      * @param {number} [offset] Number of results to skip
@@ -2277,6 +2844,39 @@ export class DefaultApi extends BaseAPI {
      */
     public apiV1PromptStreamGet(prompt: string, model?: string, options?: RawAxiosRequestConfig) {
         return DefaultApiFp(this.configuration).apiV1PromptStreamGet(prompt, model, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * 
+     * @summary Get sub-agent run status and result
+     * @param {string} id 
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public apiV1SubagentsIdGet(id: string, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).apiV1SubagentsIdGet(id, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * 
+     * @summary Get full message transcript of a sub-agent run
+     * @param {string} id 
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public apiV1SubagentsIdTranscriptGet(id: string, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).apiV1SubagentsIdTranscriptGet(id, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * Manually spawn a specialized sub-agent with a given role and goal. The sub-agent runs autonomously and its result can be polled via GET /api/v1/subagents/{id}. The orchestrator LLM can also spawn sub-agents automatically via the Researcher/Coder/Reviewer tools. 
+     * @summary Spawn a new sub-agent run
+     * @param {SpawnSubAgentRequest} spawnSubAgentRequest 
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public apiV1SubagentsPost(spawnSubAgentRequest: SpawnSubAgentRequest, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).apiV1SubagentsPost(spawnSubAgentRequest, options).then((request) => request(this.axios, this.basePath));
     }
 
     /**

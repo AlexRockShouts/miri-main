@@ -165,6 +165,11 @@ func (s *Server) setupRoutesAdmin() {
 		admin.GET("/brain/facts", s.handleGetBrainFacts)
 		admin.GET("/brain/summaries", s.handleGetBrainSummaries)
 		admin.GET("/brain/topology", s.handleGetBrainTopology)
+		// Sub-agent management
+		admin.GET("/subagents", s.handleListSubAgentRuns)
+		admin.GET("/subagents/:id", s.handleGetSubAgentRun)
+		admin.GET("/subagents/:id/transcript", s.handleGetSubAgentTranscript)
+		admin.DELETE("/subagents/:id", s.handleCancelSubAgentRun)
 	}
 }
 
@@ -181,6 +186,10 @@ func (s *Server) setupRoutesRest() {
 		v1.GET("/files/*filepath", s.handleGetFile)
 		v1.POST("/files/upload", s.handleUploadFile)
 		v1.GET("/sessions/:id/cost", s.handleGetSessionCost)
+		// Sub-agent spawn (user-facing)
+		v1.POST("/subagents", s.handleSpawnSubAgent)
+		v1.GET("/subagents/:id", s.handleGetSubAgentRun)
+		v1.GET("/subagents/:id/transcript", s.handleGetSubAgentTranscript)
 	}
 }
 

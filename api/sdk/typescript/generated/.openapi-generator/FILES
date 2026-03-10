@@ -11,6 +11,7 @@ docs/ApiAdminV1SessionsIdStatsGet200Response.md
 docs/ApiV1InteractionPostRequest.md
 docs/ApiV1PromptPost200Response.md
 docs/ApiV1PromptPostRequest.md
+docs/ApiV1SubagentsIdTranscriptGet200ResponseInner.md
 docs/BrainConfig.md
 docs/Config.md
 docs/ConfigAgents.md
@@ -41,6 +42,9 @@ docs/SearchResult.md
 docs/Session.md
 docs/Skill.md
 docs/SkillCommand.md
+docs/SpawnSubAgentRequest.md
+docs/SpawnSubAgentResponse.md
+docs/SubAgentRun.md
 docs/Task.md
 docs/TopologyData.md
 docs/TopologyEdge.md

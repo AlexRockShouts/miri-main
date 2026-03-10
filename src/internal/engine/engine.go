@@ -51,6 +51,7 @@ type MemoryManager interface {
 	GetBrainFacts(ctx context.Context) ([]memory.SearchResult, error)
 	GetBrainSummaries(ctx context.Context) ([]memory.SearchResult, error)
 	GetBrainTopology(ctx context.Context, sessionID string) (*mole_syn.TopologyData, error)
+	InjectFact(ctx context.Context, content string, metadata map[string]string) error
 }
 
 // Lifecycle manages engine startup and shutdown.

@@ -11,6 +11,25 @@ import (
 	"sync"
 )
 
+// SubAgentRun is the persisted record of a sub-agent execution.
+// Defined here (not in the subagent package) to avoid import cycles.
+type SubAgentRun struct {
+	ID            string  `json:"id"`
+	ParentSession string  `json:"parent_session"`
+	Role          string  `json:"role"`
+	Goal          string  `json:"goal"`
+	Model         string  `json:"model,omitempty"`
+	Status        string  `json:"status"`
+	Output        string  `json:"output,omitempty"`
+	Error         string  `json:"error,omitempty"`
+	PromptTokens  uint64  `json:"prompt_tokens"`
+	OutputTokens  uint64  `json:"output_tokens"`
+	TotalCost     float64 `json:"total_cost"`
+	CreatedAt     string  `json:"created_at"`
+	StartedAt     string  `json:"started_at,omitempty"`
+	FinishedAt    string  `json:"finished_at,omitempty"`
+}
+
 type Storage struct {
 	baseDir string
 	mu      sync.RWMutex
@@ -355,6 +374,120 @@ func (s *Storage) SyncBrainPrompts(srcDir string) error {
 		}
 	}
 	return nil
+}
+
+func (s *Storage) subAgentRunsDir() string {
+	return filepath.Join(s.baseDir, "subagent_runs")
+}
+
+// SaveSubAgentRun persists a sub-agent run record as JSON.
+func (s *Storage) SaveSubAgentRun(run *SubAgentRun) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	dir := s.subAgentRunsDir()
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return err
+	}
+	data, err := json.MarshalIndent(run, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(dir, run.ID+".json"), data, 0644)
+}
+
+// LoadSubAgentRun loads a single run record by ID.
+func (s *Storage) LoadSubAgentRun(id string) (*SubAgentRun, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	data, err := os.ReadFile(filepath.Join(s.subAgentRunsDir(), id+".json"))
+	if err != nil {
+		return nil, err
+	}
+	var run SubAgentRun
+	if err := json.Unmarshal(data, &run); err != nil {
+		return nil, err
+	}
+	return &run, nil
+}
+
+// ListSubAgentRuns returns all persisted runs. If parentSession is non-empty,
+// only runs belonging to that session are returned.
+func (s *Storage) ListSubAgentRuns(parentSession string) ([]*SubAgentRun, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	dir := s.subAgentRunsDir()
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	var runs []*SubAgentRun
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(dir, e.Name()))
+		if err != nil {
+			continue
+		}
+		var r SubAgentRun
+		if err := json.Unmarshal(data, &r); err != nil {
+			continue
+		}
+		if parentSession == "" || r.ParentSession == parentSession {
+			runs = append(runs, &r)
+		}
+	}
+	return runs, nil
+}
+
+// AppendSubAgentTranscript appends a single JSON-encoded message line to the
+// run's transcript file (JSONL format).
+func (s *Storage) AppendSubAgentTranscript(runID string, role, content string) error {
+	dir := s.subAgentRunsDir()
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return err
+	}
+	path := filepath.Join(dir, runID+".transcript")
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	line, _ := json.Marshal(map[string]string{"role": role, "content": content})
+	_, err = fmt.Fprintf(f, "%s\n", line)
+	return err
+}
+
+// LoadSubAgentTranscript reads all transcript lines for a run.
+func (s *Storage) LoadSubAgentTranscript(runID string) ([]map[string]string, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	data, err := os.ReadFile(filepath.Join(s.subAgentRunsDir(), runID+".transcript"))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	var msgs []map[string]string
+	for line := range strings.SplitSeq(string(data), "\n") {
+		if line == "" {
+			continue
+		}
+		var m map[string]string
+		if err := json.Unmarshal([]byte(line), &m); err == nil {
+			msgs = append(msgs, m)
+		}
+	}
+	return msgs, nil
 }
 
 func (s *Storage) GetBrainPrompt(name string) (string, error) {

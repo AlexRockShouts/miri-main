@@ -38,6 +38,12 @@ flowchart TD
   CR --> ST
   BR --> ST
   CR -.->|runs tasks| AG
+  GW --> DP["SubAgentPool (Eino ADK)"]
+  DP --> SA1["Researcher SubAgent"]
+  DP --> SA2["Coder SubAgent"]
+  DP --> SA3["Reviewer SubAgent"]
+  SA1 & SA2 & SA3 --> EN
+  DP --> ST
 ```
 
 ## Features
@@ -52,6 +58,18 @@ flowchart TD
 - **Unified Session**: All chat interactions use a single persistent session (`miri:main:agent`) for continuous conversation history.
 - **Checkpointing**: Eino-native graph state persistence via `FileCheckPointStore` — long-running tasks resume from the last successful tool execution.
 - **System Awareness**: LLM is automatically provided with OS, architecture, shell, and package manager context for accurate command generation.
+
+### 🤝 Sub-Agents (Eino ADK)
+- **Eino ADK Integration**: Uses [`github.com/cloudwego/eino/adk`](https://www.cloudwego.io/docs/eino/core_modules/eino_adk/agent_collaboration/) — the orchestrator LLM autonomously delegates complex sub-tasks to specialized agents as native tool calls.
+- **Built-in Specialist Roles**:
+  - `Researcher` — web search, page fetching, and structured summarization.
+  - `Coder` — code generation, execution, and debugging via sandboxed shell.
+  - `Reviewer` — critique, quality-checking, and review of any artifact.
+- **AgentAsTool Pattern**: Each sub-agent is wrapped via `adk.NewAgentTool()` and registered as a regular Eino tool. The orchestrator passes a self-contained goal; the sub-agent runs its own full ReAct loop autonomously and returns the result.
+- **Fresh Task Description**: Sub-agents receive only the delegated goal — not the parent's conversation history — forcing the orchestrator to write complete, unambiguous task descriptions.
+- **Persistent Run History**: Every sub-agent run is persisted under `~/.miri/subagent_runs/` as a JSON record + JSONL transcript. Results are injected as facts into the parent session's Brain.
+- **Dynamic Pool**: Sub-agents can also be spawned programmatically via `POST /api/v1/subagents` with full lifecycle management (status polling, transcript retrieval, cancellation).
+- **Recursive Delegation**: Sub-agents can themselves spawn further sub-agents — e.g. a Coder sub-agent can delegate testing to a Reviewer.
 
 ### 🧠 Memory & Cognition
 - **Long-term Memory**: Dual-layer persistent vector store ([chromem-go](https://github.com/philippgille/chromem-go)) with **Facts** (atomic knowledge) and **Summaries** (narrative continuity). See [The Brain](#the-brain-cognitive-architecture).
@@ -80,6 +98,12 @@ flowchart TD
 
 ### 🌐 REST API & WebSocket
 - `POST /api/v1/prompt` — blocking prompt execution.
+- **Sub-Agent Endpoints**:
+  - `POST /api/v1/subagents` — spawn a sub-agent run (role + goal + optional model override).
+  - `GET /api/v1/subagents/{id}` — poll run status and output.
+  - `GET /api/v1/subagents/{id}/transcript` — retrieve full message transcript.
+  - `GET /api/admin/v1/subagents` — list all runs (filter by `?session=`).
+  - `DELETE /api/admin/v1/subagents/{id}` — cancel a running sub-agent.
 - `GET /api/v1/prompt/stream` — SSE streaming for real-time output.
 - `GET /ws` — full-duplex WebSocket with auth (`Sec-WebSocket-Protocol: miri-key, <key>` or `?token=`), ping/pong heartbeats (54 s interval), and graceful close.
 - **Verbose Streaming**: WebSocket emits `[Thought: ...]`, `[Tool: name(args)]`, and `[ToolResult: ...]` events inline before the final answer — detect these prefixes to render a verbose chat view.

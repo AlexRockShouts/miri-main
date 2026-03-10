@@ -164,6 +164,15 @@ func (b *Brain) RetrieveDocuments(ctx context.Context, sessionID, query string) 
 	return finalDocs, nil
 }
 
+// StoreFact directly adds a fact into the fact memory store with the given metadata.
+// This is used to inject sub-agent results into the parent session's long-term memory.
+func (b *Brain) StoreFact(ctx context.Context, content string, metadata map[string]string) error {
+	if b.factMemory == nil {
+		return nil
+	}
+	return b.factMemory.Add(ctx, content, metadata)
+}
+
 func (b *Brain) GetFacts(ctx context.Context) ([]SearchResult, error) {
 	if b.factMemory == nil {
 		return nil, nil

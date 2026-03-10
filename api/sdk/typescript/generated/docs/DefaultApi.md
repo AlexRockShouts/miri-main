@@ -22,6 +22,10 @@ All URIs are relative to *http://localhost:8080*
 |[**apiAdminV1SkillsGet**](#apiadminv1skillsget) | **GET** /api/admin/v1/skills | List all installed skills|
 |[**apiAdminV1SkillsNameDelete**](#apiadminv1skillsnamedelete) | **DELETE** /api/admin/v1/skills/{name} | Remove a skill|
 |[**apiAdminV1SkillsNameGet**](#apiadminv1skillsnameget) | **GET** /api/admin/v1/skills/{name} | Get skill details|
+|[**apiAdminV1SubagentsGet**](#apiadminv1subagentsget) | **GET** /api/admin/v1/subagents | List all sub-agent runs|
+|[**apiAdminV1SubagentsIdDelete**](#apiadminv1subagentsiddelete) | **DELETE** /api/admin/v1/subagents/{id} | Cancel a running sub-agent|
+|[**apiAdminV1SubagentsIdGet**](#apiadminv1subagentsidget) | **GET** /api/admin/v1/subagents/{id} | Get sub-agent run details (admin)|
+|[**apiAdminV1SubagentsIdTranscriptGet**](#apiadminv1subagentsidtranscriptget) | **GET** /api/admin/v1/subagents/{id}/transcript | Get full message transcript of a sub-agent run (admin)|
 |[**apiAdminV1TasksGet**](#apiadminv1tasksget) | **GET** /api/admin/v1/tasks | List all recurring tasks|
 |[**apiAdminV1TasksIdGet**](#apiadminv1tasksidget) | **GET** /api/admin/v1/tasks/{id} | Get task details|
 |[**apiV1FilesFilepathGet**](#apiv1filesfilepathget) | **GET** /api/v1/files/{filepath} | Download a file from the local storage|
@@ -29,6 +33,9 @@ All URIs are relative to *http://localhost:8080*
 |[**apiV1InteractionPost**](#apiv1interactionpost) | **POST** /api/v1/interaction | Manage sessions or check global status|
 |[**apiV1PromptPost**](#apiv1promptpost) | **POST** /api/v1/prompt | Send a prompt to the agent|
 |[**apiV1PromptStreamGet**](#apiv1promptstreamget) | **GET** /api/v1/prompt/stream | Stream a prompt response via SSE|
+|[**apiV1SubagentsIdGet**](#apiv1subagentsidget) | **GET** /api/v1/subagents/{id} | Get sub-agent run status and result|
+|[**apiV1SubagentsIdTranscriptGet**](#apiv1subagentsidtranscriptget) | **GET** /api/v1/subagents/{id}/transcript | Get full message transcript of a sub-agent run|
+|[**apiV1SubagentsPost**](#apiv1subagentspost) | **POST** /api/v1/subagents | Spawn a new sub-agent run|
 |[**metricsGet**](#metricsget) | **GET** /metrics | Prometheus metrics endpoint|
 |[**wsGet**](#wsget) | **GET** /ws | WebSocket for interactive streaming|
 
@@ -925,6 +932,208 @@ const { status, data } = await apiInstance.apiAdminV1SkillsNameGet(
 
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
 
+# **apiAdminV1SubagentsGet**
+> Array<SubAgentRun> apiAdminV1SubagentsGet()
+
+
+### Example
+
+```typescript
+import {
+    DefaultApi,
+    Configuration
+} from './api';
+
+const configuration = new Configuration();
+const apiInstance = new DefaultApi(configuration);
+
+let session: string; //Filter by parent session ID (optional) (default to undefined)
+
+const { status, data } = await apiInstance.apiAdminV1SubagentsGet(
+    session
+);
+```
+
+### Parameters
+
+|Name | Type | Description  | Notes|
+|------------- | ------------- | ------------- | -------------|
+| **session** | [**string**] | Filter by parent session ID | (optional) defaults to undefined|
+
+
+### Return type
+
+**Array<SubAgentRun>**
+
+### Authorization
+
+[BasicAuth](../README.md#BasicAuth)
+
+### HTTP request headers
+
+ - **Content-Type**: Not defined
+ - **Accept**: application/json
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+|**200** | List of sub-agent runs |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
+# **apiAdminV1SubagentsIdDelete**
+> apiAdminV1SubagentsIdDelete()
+
+
+### Example
+
+```typescript
+import {
+    DefaultApi,
+    Configuration
+} from './api';
+
+const configuration = new Configuration();
+const apiInstance = new DefaultApi(configuration);
+
+let id: string; // (default to undefined)
+
+const { status, data } = await apiInstance.apiAdminV1SubagentsIdDelete(
+    id
+);
+```
+
+### Parameters
+
+|Name | Type | Description  | Notes|
+|------------- | ------------- | ------------- | -------------|
+| **id** | [**string**] |  | defaults to undefined|
+
+
+### Return type
+
+void (empty response body)
+
+### Authorization
+
+[BasicAuth](../README.md#BasicAuth)
+
+### HTTP request headers
+
+ - **Content-Type**: Not defined
+ - **Accept**: Not defined
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+|**200** | Sub-agent canceled |  -  |
+|**400** | Run not found or already finished |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
+# **apiAdminV1SubagentsIdGet**
+> SubAgentRun apiAdminV1SubagentsIdGet()
+
+
+### Example
+
+```typescript
+import {
+    DefaultApi,
+    Configuration
+} from './api';
+
+const configuration = new Configuration();
+const apiInstance = new DefaultApi(configuration);
+
+let id: string; // (default to undefined)
+
+const { status, data } = await apiInstance.apiAdminV1SubagentsIdGet(
+    id
+);
+```
+
+### Parameters
+
+|Name | Type | Description  | Notes|
+|------------- | ------------- | ------------- | -------------|
+| **id** | [**string**] |  | defaults to undefined|
+
+
+### Return type
+
+**SubAgentRun**
+
+### Authorization
+
+[BasicAuth](../README.md#BasicAuth)
+
+### HTTP request headers
+
+ - **Content-Type**: Not defined
+ - **Accept**: application/json
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+|**200** | Sub-agent run record |  -  |
+|**404** | Run not found |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
+# **apiAdminV1SubagentsIdTranscriptGet**
+> Array<ApiV1SubagentsIdTranscriptGet200ResponseInner> apiAdminV1SubagentsIdTranscriptGet()
+
+
+### Example
+
+```typescript
+import {
+    DefaultApi,
+    Configuration
+} from './api';
+
+const configuration = new Configuration();
+const apiInstance = new DefaultApi(configuration);
+
+let id: string; // (default to undefined)
+
+const { status, data } = await apiInstance.apiAdminV1SubagentsIdTranscriptGet(
+    id
+);
+```
+
+### Parameters
+
+|Name | Type | Description  | Notes|
+|------------- | ------------- | ------------- | -------------|
+| **id** | [**string**] |  | defaults to undefined|
+
+
+### Return type
+
+**Array<ApiV1SubagentsIdTranscriptGet200ResponseInner>**
+
+### Authorization
+
+[BasicAuth](../README.md#BasicAuth)
+
+### HTTP request headers
+
+ - **Content-Type**: Not defined
+ - **Accept**: application/json
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+|**200** | JSONL transcript as array of role/content objects |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
 # **apiAdminV1TasksGet**
 > PaginatedTasks apiAdminV1TasksGet()
 
@@ -1284,6 +1493,162 @@ const { status, data } = await apiInstance.apiV1PromptStreamGet(
 | Status code | Description | Response headers |
 |-------------|-------------|------------------|
 |**200** | SSE stream of response chunks |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
+# **apiV1SubagentsIdGet**
+> SubAgentRun apiV1SubagentsIdGet()
+
+
+### Example
+
+```typescript
+import {
+    DefaultApi,
+    Configuration
+} from './api';
+
+const configuration = new Configuration();
+const apiInstance = new DefaultApi(configuration);
+
+let id: string; // (default to undefined)
+
+const { status, data } = await apiInstance.apiV1SubagentsIdGet(
+    id
+);
+```
+
+### Parameters
+
+|Name | Type | Description  | Notes|
+|------------- | ------------- | ------------- | -------------|
+| **id** | [**string**] |  | defaults to undefined|
+
+
+### Return type
+
+**SubAgentRun**
+
+### Authorization
+
+[ServerKey](../README.md#ServerKey)
+
+### HTTP request headers
+
+ - **Content-Type**: Not defined
+ - **Accept**: application/json
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+|**200** | Sub-agent run record |  -  |
+|**404** | Run not found |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
+# **apiV1SubagentsIdTranscriptGet**
+> Array<ApiV1SubagentsIdTranscriptGet200ResponseInner> apiV1SubagentsIdTranscriptGet()
+
+
+### Example
+
+```typescript
+import {
+    DefaultApi,
+    Configuration
+} from './api';
+
+const configuration = new Configuration();
+const apiInstance = new DefaultApi(configuration);
+
+let id: string; // (default to undefined)
+
+const { status, data } = await apiInstance.apiV1SubagentsIdTranscriptGet(
+    id
+);
+```
+
+### Parameters
+
+|Name | Type | Description  | Notes|
+|------------- | ------------- | ------------- | -------------|
+| **id** | [**string**] |  | defaults to undefined|
+
+
+### Return type
+
+**Array<ApiV1SubagentsIdTranscriptGet200ResponseInner>**
+
+### Authorization
+
+[ServerKey](../README.md#ServerKey)
+
+### HTTP request headers
+
+ - **Content-Type**: Not defined
+ - **Accept**: application/json
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+|**200** | JSONL transcript as array of role/content objects |  -  |
+|**404** | Transcript not found |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
+# **apiV1SubagentsPost**
+> SpawnSubAgentResponse apiV1SubagentsPost(spawnSubAgentRequest)
+
+Manually spawn a specialized sub-agent with a given role and goal. The sub-agent runs autonomously and its result can be polled via GET /api/v1/subagents/{id}. The orchestrator LLM can also spawn sub-agents automatically via the Researcher/Coder/Reviewer tools. 
+
+### Example
+
+```typescript
+import {
+    DefaultApi,
+    Configuration,
+    SpawnSubAgentRequest
+} from './api';
+
+const configuration = new Configuration();
+const apiInstance = new DefaultApi(configuration);
+
+let spawnSubAgentRequest: SpawnSubAgentRequest; //
+
+const { status, data } = await apiInstance.apiV1SubagentsPost(
+    spawnSubAgentRequest
+);
+```
+
+### Parameters
+
+|Name | Type | Description  | Notes|
+|------------- | ------------- | ------------- | -------------|
+| **spawnSubAgentRequest** | **SpawnSubAgentRequest**|  | |
+
+
+### Return type
+
+**SpawnSubAgentResponse**
+
+### Authorization
+
+[ServerKey](../README.md#ServerKey)
+
+### HTTP request headers
+
+ - **Content-Type**: application/json
+ - **Accept**: application/json
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+|**202** | Sub-agent run accepted and started |  -  |
+|**400** | Invalid request |  -  |
+|**500** | Internal error |  -  |
 
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
 

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"time"
 
@@ -56,7 +57,9 @@ func fetchURL(ctx context.Context, urlStr string, maxBytes int) (statusCode int,
 	if maxBytes == 0 {
 		maxBytes = 1024 * 1024 // 1MB default
 	}
-	client := &http.Client{Timeout: 30 * time.Second}
+	dialer := &net.Dialer{Timeout: 60 * time.Second}
+	transport := &http.Transport{DialContext: dialer.DialContext}
+	client := &http.Client{Transport: transport, Timeout: 180 * time.Second}
 	req, err := http.NewRequestWithContext(ctx, "GET", urlStr, nil)
 	if err != nil {
 		return 0, nil, "", err

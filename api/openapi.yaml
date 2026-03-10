@@ -449,6 +449,77 @@ components:
         offset:
           type: integer
 
+    SubAgentRun:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Unique run ID
+        parent_session:
+          type: string
+          description: Session ID of the orchestrator that spawned this sub-agent
+        role:
+          type: string
+          description: Sub-agent role (researcher, coder, reviewer, generic)
+          enum: [researcher, coder, reviewer, generic]
+        goal:
+          type: string
+          description: The task/prompt given to the sub-agent
+        model:
+          type: string
+          description: Model override used for this run
+        status:
+          type: string
+          description: Current run status
+          enum: [pending, running, done, failed, canceled]
+        output:
+          type: string
+          description: Final output produced by the sub-agent
+        error:
+          type: string
+          description: Error message if the run failed
+        prompt_tokens:
+          type: integer
+        output_tokens:
+          type: integer
+        total_cost:
+          type: number
+          format: float
+        created_at:
+          type: string
+          format: date-time
+        started_at:
+          type: string
+          format: date-time
+        finished_at:
+          type: string
+          format: date-time
+    SpawnSubAgentRequest:
+      type: object
+      required: [role, goal]
+      properties:
+        role:
+          type: string
+          enum: [researcher, coder, reviewer, generic]
+          description: Specialist role for the sub-agent
+        goal:
+          type: string
+          description: Self-contained task description for the sub-agent
+        model:
+          type: string
+          description: Optional model override (e.g. "xai/grok-3-mini")
+        parent_session:
+          type: string
+          description: Parent session ID (defaults to main session)
+    SpawnSubAgentResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          description: The new sub-agent run ID
+        status:
+          type: string
+          example: pending
 paths:
   # --- Standard API (X-Server-Key) ---
   /api/v1/prompt:
@@ -1022,6 +1093,161 @@ paths:
               schema:
                 $ref: '#/components/schemas/Task'
 
+  # --- Sub-Agent API ---
+  /api/v1/subagents:
+    post:
+      summary: Spawn a new sub-agent run
+      description: |
+        Manually spawn a specialized sub-agent with a given role and goal.
+        The sub-agent runs autonomously and its result can be polled via GET /api/v1/subagents/{id}.
+        The orchestrator LLM can also spawn sub-agents automatically via the Researcher/Coder/Reviewer tools.
+      security:
+        - ServerKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SpawnSubAgentRequest'
+      responses:
+        '202':
+          description: Sub-agent run accepted and started
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SpawnSubAgentResponse'
+        '400':
+          description: Invalid request
+        '500':
+          description: Internal error
+  /api/v1/subagents/{id}:
+    get:
+      summary: Get sub-agent run status and result
+      security:
+        - ServerKey: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Sub-agent run record
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubAgentRun'
+        '404':
+          description: Run not found
+  /api/v1/subagents/{id}/transcript:
+    get:
+      summary: Get full message transcript of a sub-agent run
+      security:
+        - ServerKey: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: JSONL transcript as array of role/content objects
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    role:
+                      type: string
+                    content:
+                      type: string
+        '404':
+          description: Transcript not found
+  /api/admin/v1/subagents:
+    get:
+      summary: List all sub-agent runs
+      security:
+        - BasicAuth: []
+      parameters:
+        - name: session
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Filter by parent session ID
+      responses:
+        '200':
+          description: List of sub-agent runs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SubAgentRun'
+  /api/admin/v1/subagents/{id}:
+    get:
+      summary: Get sub-agent run details (admin)
+      security:
+        - BasicAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Sub-agent run record
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubAgentRun'
+        '404':
+          description: Run not found
+    delete:
+      summary: Cancel a running sub-agent
+      security:
+        - BasicAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Sub-agent canceled
+        '400':
+          description: Run not found or already finished
+  /api/admin/v1/subagents/{id}/transcript:
+    get:
+      summary: Get full message transcript of a sub-agent run (admin)
+      security:
+        - BasicAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: JSONL transcript as array of role/content objects
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    role:
+                      type: string
+                    content:
+                      type: string
   /metrics:
     get:
       summary: Prometheus metrics endpoint

@@ -7,6 +7,7 @@ import (
 	"miri-main/src/internal/engine"
 	"miri-main/src/internal/gateway"
 	"miri-main/src/internal/session"
+	"miri-main/src/internal/storage"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -742,4 +743,78 @@ func (s *Server) handleHumanResponse(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"status": "responded", "id": id})
+}
+
+// handleSpawnSubAgent POST /api/v1/subagents
+func (s *Server) handleSpawnSubAgent(c *gin.Context) {
+	gw := c.MustGet("gateway").(*gateway.Gateway)
+	var req struct {
+		Role          string `json:"role" binding:"required"`
+		Goal          string `json:"goal" binding:"required"`
+		Model         string `json:"model"`
+		ParentSession string `json:"parent_session"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		s.sendError(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	if req.ParentSession == "" {
+		req.ParentSession = session.DefaultSessionID
+	}
+	id, err := gw.SpawnSubAgent(c.Request.Context(), req.Role, req.Goal, req.Model, req.ParentSession)
+	if err != nil {
+		s.sendError(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	c.JSON(http.StatusAccepted, gin.H{"id": id, "status": "pending"})
+}
+
+// handleListSubAgentRuns GET /api/admin/v1/subagents
+func (s *Server) handleListSubAgentRuns(c *gin.Context) {
+	gw := c.MustGet("gateway").(*gateway.Gateway)
+	parentSession := c.Query("session")
+	runs, err := gw.Storage.ListSubAgentRuns(parentSession)
+	if err != nil {
+		s.sendError(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if runs == nil {
+		runs = []*storage.SubAgentRun{}
+	}
+	c.JSON(http.StatusOK, runs)
+}
+
+// handleGetSubAgentRun GET /api/admin/v1/subagents/:id
+func (s *Server) handleGetSubAgentRun(c *gin.Context) {
+	gw := c.MustGet("gateway").(*gateway.Gateway)
+	run, err := gw.Storage.LoadSubAgentRun(c.Param("id"))
+	if err != nil {
+		s.sendError(c, http.StatusNotFound, "sub-agent run not found")
+		return
+	}
+	c.JSON(http.StatusOK, run)
+}
+
+// handleGetSubAgentTranscript GET /api/admin/v1/subagents/:id/transcript
+func (s *Server) handleGetSubAgentTranscript(c *gin.Context) {
+	gw := c.MustGet("gateway").(*gateway.Gateway)
+	msgs, err := gw.Storage.LoadSubAgentTranscript(c.Param("id"))
+	if err != nil {
+		s.sendError(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if msgs == nil {
+		msgs = []map[string]string{}
+	}
+	c.JSON(http.StatusOK, msgs)
+}
+
+// handleCancelSubAgentRun DELETE /api/admin/v1/subagents/:id
+func (s *Server) handleCancelSubAgentRun(c *gin.Context) {
+	gw := c.MustGet("gateway").(*gateway.Gateway)
+	if err := gw.CancelSubAgent(c.Param("id")); err != nil {
+		s.sendError(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"status": "canceled"})
 }

@@ -7,6 +7,7 @@ import (
 	"miri-main/src/internal/config"
 	"miri-main/src/internal/engine/memory"
 	"miri-main/src/internal/engine/skills"
+	"miri-main/src/internal/engine/subagents"
 	"miri-main/src/internal/engine/tools"
 	"miri-main/src/internal/llm"
 	"miri-main/src/internal/storage"
@@ -118,7 +119,7 @@ func NewEinoEngine(cfg *config.Config, st *storage.Storage, providerName, modelN
 		BaseURL: prov.BaseURL,
 		APIKey:  prov.APIKey,
 		Model:   modelName,
-		Timeout: 300 * time.Second,
+		Timeout: 30 * time.Minute,
 	})
 	if err != nil {
 		return nil, err
@@ -222,6 +223,11 @@ func NewEinoEngine(cfg *config.Config, st *storage.Storage, providerName, modelN
 	allTools := []tool.BaseTool{searchTool, fetchTool, grokipediaTool, cmdTool, skillRemoveTool, skillUseTool, fileManagerTool, retrievePasswordTool, storePasswordTool, pinchTabTool}
 	allTools = append(allTools, ee.skillLoader.GetExtraTools()...)
 
+	// Add Eino ADK sub-agent tools (Researcher, Coder, Reviewer)
+	if adkTools := subagents.BuildSubAgentTools(context.Background(), chatModel, cfg.StorageDir, ee.storage); len(adkTools) > 0 {
+		allTools = append(allTools, adkTools...)
+	}
+
 	toolsNode, err := compose.NewToolNode(context.Background(), &compose.ToolsNodeConfig{
 		Tools: allTools,
 	})
@@ -250,6 +256,23 @@ func NewEinoEngine(cfg *config.Config, st *storage.Storage, providerName, modelN
 	// Task Manager Tool Info
 	taskMgrTool := tools.NewTaskManagerTool(nil, "")
 	toolInfos = append(toolInfos, taskMgrTool.GetInfo())
+
+	// ADK sub-agent tool infos
+	for _, t := range allTools {
+		if info, err2 := t.Info(context.Background()); err2 == nil {
+			// avoid duplicates already added above
+			var already bool
+			for _, existing := range toolInfos {
+				if existing.Name == info.Name {
+					already = true
+					break
+				}
+			}
+			if !already {
+				toolInfos = append(toolInfos, info)
+			}
+		}
+	}
 
 	for _, t := range ee.skillLoader.GetExtraTools() {
 		info, _ := t.Info(context.Background())

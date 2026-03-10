@@ -3,7 +3,7 @@ module miri-main
 go 1.25.4
 
 require (
-	github.com/cloudwego/eino v0.7.36
+	github.com/cloudwego/eino v0.8.1-0.20260310071622-b391df80ed2b
 	github.com/cloudwego/eino-ext/components/model/openai v0.1.8
 	github.com/dominikbraun/graph v0.23.0
 	github.com/gin-gonic/gin v1.11.0
