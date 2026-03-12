@@ -14,6 +14,11 @@ import (
 	"strings"
 	"time"
 
+	"archive/zip"
+	"fmt"
+	"io"
+	"io/fs"
+
 	"github.com/gin-gonic/gin"
 )
 
@@ -495,14 +500,14 @@ func (s *Server) handleGetFile(c *gin.Context) {
 
 	// Limit access to the storage directory
 	subPath := c.Param("filepath")
-	cleanSubPath := filepath.Clean("/" + subPath)
-	fullPath := filepath.Join(storageDir, cleanSubPath)
+	cleanSubPath := filepath.Clean(subPath)
+	fullPath := filepath.Join(storageDir, "uploads", cleanSubPath)
 
-	// Security check: ensure the file is within the storage directory
-	absStorage, _ := filepath.Abs(storageDir)
+	// Security: ensure within uploads directory
+	absUploadDir, _ := filepath.Abs(filepath.Join(storageDir, "uploads"))
 	absFile, err := filepath.Abs(fullPath)
-	if err != nil || !strings.HasPrefix(absFile, absStorage) {
-		c.JSON(http.StatusForbidden, gin.H{"error": "access denied"})
+	if err != nil || !strings.HasPrefix(absFile, absUploadDir) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "access denied outside uploads directory"})
 		return
 	}
 
@@ -517,10 +522,104 @@ func (s *Server) handleGetFile(c *gin.Context) {
 		return
 	}
 	if info.IsDir() {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "cannot download directory"})
+		if zipQuery := c.Query("zip"); zipQuery == "true" {
+			tmpZip, err := os.CreateTemp("", "uploads-zip-*.zip")
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create temp zip: " + err.Error()})
+				return
+			}
+			defer tmpZip.Close()
+			defer os.Remove(tmpZip.Name())
+
+			zw := zip.NewWriter(tmpZip)
+
+			err = filepath.WalkDir(absFile, func(path string, d fs.DirEntry, err error) error {
+				if err != nil {
+					return err
+				}
+				relPath, err := filepath.Rel(absFile, path)
+				if err != nil {
+					return err
+				}
+				if d.IsDir() {
+					_, err := zw.Create(relPath + "/")
+					return err
+				}
+				f, err := os.Open(path)
+				if err != nil {
+					return err
+				}
+				defer f.Close()
+
+				w, err := zw.Create(relPath)
+				if err != nil {
+					return err
+				}
+
+				_, err = io.Copy(w, f)
+				return err
+			})
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create zip: " + err.Error()})
+				return
+			}
+
+			if err := zw.Close(); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to finalize zip: " + err.Error()})
+				return
+			}
+
+			zipFilename := filepath.Base(cleanSubPath) + ".zip"
+			c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, zipFilename))
+			c.File(tmpZip.Name())
+			return
+		}
+
+		entries, err := os.ReadDir(absFile)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+
+		type FileInfo struct {
+			Name     string `json:"name"`
+			Size     int64  `json:"size,omitempty"`
+			Modified string `json:"modified,omitempty"`
+			IsDir    bool   `json:"isDir"`
+		}
+
+		var files []FileInfo
+		for _, entry := range entries {
+			einfo, err := entry.Info()
+			if err != nil {
+				continue
+			}
+			files = append(files, FileInfo{
+				Name:     entry.Name(),
+				Size:     einfo.Size(),
+				Modified: einfo.ModTime().Format(time.RFC3339),
+				IsDir:    entry.IsDir(),
+			})
+		}
+		c.JSON(http.StatusOK, files)
 		return
 	}
 
+	viewMode := c.Query("view") == "true"
+	if viewMode {
+		data, err := os.ReadFile(absFile)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		if len(data) > 1024*1024 {
+			c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": "file too large for preview (1MB limit)"})
+			return
+		}
+		c.Data(http.StatusOK, "text/plain; charset=utf-8", data)
+		return
+	}
+	c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filepath.Base(absFile)))
 	c.File(absFile)
 }
 
@@ -763,6 +862,7 @@ func (s *Server) handleSpawnSubAgent(c *gin.Context) {
 	}
 	id, err := gw.SpawnSubAgent(c.Request.Context(), req.Role, req.Goal, req.Model, req.ParentSession)
 	if err != nil {
+		slog.Error("failed to spawn subagent", "role", req.Role, "goal", req.Goal, "parent_session", req.ParentSession, "error", err)
 		s.sendError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -817,4 +917,124 @@ func (s *Server) handleCancelSubAgentRun(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"status": "canceled"})
+}
+
+func (s *Server) handleListFiles(c *gin.Context) {
+	gw := c.MustGet("gateway").(*gateway.Gateway)
+	storageDir := gw.Config.StorageDir
+
+	// Resolve ~
+	if strings.HasPrefix(storageDir, "~") {
+		home, _ := os.UserHomeDir()
+		storageDir = filepath.Join(home, storageDir[1:])
+	}
+
+	path := c.DefaultQuery("path", "")
+	cleanPath := filepath.Clean(path)
+	fullPath := filepath.Join(storageDir, "uploads", cleanPath)
+
+	// Security: ensure within uploads directory
+	absUploadDir, _ := filepath.Abs(filepath.Join(storageDir, "uploads"))
+	absPath, err := filepath.Abs(fullPath)
+	if err != nil || !strings.HasPrefix(absPath, absUploadDir) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "access denied outside uploads directory"})
+		return
+	}
+
+	info, err := os.Stat(fullPath)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "path not found"})
+		return
+	}
+	if !info.IsDir() {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "not a directory"})
+		return
+	}
+
+	entries, err := os.ReadDir(fullPath)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	type FileInfo struct {
+		Name     string `json:"name"`
+		Size     int64  `json:"size,omitempty"`
+		Modified string `json:"modified,omitempty"`
+		IsDir    bool   `json:"isDir"`
+	}
+
+	var files []FileInfo
+	for _, entry := range entries {
+		info, err := entry.Info()
+		if err != nil {
+			continue // skip broken entries
+		}
+		files = append(files, FileInfo{
+			Name:     entry.Name(),
+			Size:     info.Size(),
+			Modified: info.ModTime().Format(time.RFC3339),
+			IsDir:    entry.IsDir(),
+		})
+	}
+
+	c.JSON(http.StatusOK, files)
+}
+
+type DeleteReq struct {
+	Path      string `json:"path" binding:"required"`
+	Recursive bool   `json:"recursive,omitempty"`
+}
+
+func (s *Server) handleDeleteFile(c *gin.Context) {
+	var req DeleteReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request: " + err.Error()})
+		return
+	}
+
+	gw := c.MustGet("gateway").(*gateway.Gateway)
+	storageDir := gw.Config.StorageDir
+
+	// Resolve ~
+	if strings.HasPrefix(storageDir, "~") {
+		home, _ := os.UserHomeDir()
+		storageDir = filepath.Join(home, storageDir[1:])
+	}
+
+	cleanPath := filepath.Clean(req.Path)
+	fullPath := filepath.Join(storageDir, "uploads", cleanPath)
+
+	// Security: ensure within uploads directory
+	absUploadDir, _ := filepath.Abs(filepath.Join(storageDir, "uploads"))
+	absPath, err := filepath.Abs(fullPath)
+	if err != nil || !strings.HasPrefix(absPath, absUploadDir) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "access denied outside uploads directory"})
+		return
+	}
+
+	info, err := os.Stat(fullPath)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "path not found"})
+		return
+	}
+
+	if info.IsDir() && !req.Recursive {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "directory deletion requires recursive: true"})
+		return
+	}
+
+	var delErr error
+	if req.Recursive || info.IsDir() {
+		delErr = os.RemoveAll(fullPath)
+	} else {
+		delErr = os.Remove(fullPath)
+	}
+
+	if delErr != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": delErr.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"deleted": true, "path": req.Path})
 }

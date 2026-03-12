@@ -10,11 +10,12 @@ import (
 	"sync"
 	"time"
 
+	"strconv"
+
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"strconv"
 )
 
 type Server struct {
@@ -111,7 +112,7 @@ func (s *Server) corsMiddleware() gin.HandlerFunc {
 		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
 		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
 		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With, X-Server-Key")
-		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS, GET, PUT")
+		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS, GET, PUT, DELETE")
 
 		if c.Request.Method == "OPTIONS" {
 			c.AbortWithStatus(204)
@@ -185,6 +186,8 @@ func (s *Server) setupRoutesRest() {
 		v1.POST("/interaction", s.handleInteraction)
 		v1.GET("/files/*filepath", s.handleGetFile)
 		v1.POST("/files/upload", s.handleUploadFile)
+		v1.GET("/files", s.handleListFiles)
+		v1.DELETE("/files", s.handleDeleteFile)
 		v1.GET("/sessions/:id/cost", s.handleGetSessionCost)
 		// Sub-agent spawn (user-facing)
 		v1.POST("/subagents", s.handleSpawnSubAgent)

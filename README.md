@@ -63,7 +63,7 @@ flowchart TD
 - **Eino ADK Integration**: Uses [`github.com/cloudwego/eino/adk`](https://www.cloudwego.io/docs/eino/core_modules/eino_adk/agent_collaboration/) — the orchestrator LLM autonomously delegates complex sub-tasks to specialized agents as native tool calls.
 - **Built-in Specialist Roles**:
   - `Researcher` — web search, page fetching, and structured summarization.
-  - `Coder` — code generation, execution, and debugging via sandboxed shell.
+  - `Coder` — multi-language (Go/Python/JS/Bash) code gen/test/build via sandboxed shell. Specify lang in goal, e.g. "Write Python CLI to sum numbers, tested". Outputs JSON with results/files.
   - `Reviewer` — critique, quality-checking, and review of any artifact.
 - **AgentAsTool Pattern**: Each sub-agent is wrapped via `adk.NewAgentTool()` and registered as a regular Eino tool. The orchestrator passes a self-contained goal; the sub-agent runs its own full ReAct loop autonomously and returns the result.
 - **Fresh Task Description**: Sub-agents receive only the delegated goal — not the parent's conversation history — forcing the orchestrator to write complete, unambiguous task descriptions.
@@ -119,9 +119,24 @@ flowchart TD
 - `GET /api/admin/v1/tasks` — list all scheduled tasks.
 
 ### 📁 File Management
-- `FileManagerTool` — list and share files from agent storage.
-- `GET /api/v1/files/*filepath` — direct download of agent-generated or uploaded files.
-- **Channel Media Support**: WhatsApp and IRC can send files directly or via download links.
+- \`FileManagerTool\` — list (\`action:list\`) and share (\`action:share\`) files from storage (e.g. \`generated/\`).
+- **REST API for File Browser**:
+  - \`GET /api/v1/files?path=dir/subdir\` — JSON list: \`[{name, size, modified, isDir}]\`
+  - \`GET /api/v1/files/*filepath\` — download file (add \`?view=true\` for text preview, 1MB limit)
+  - \`GET /api/v1/files/*dir\`?zip=true — download directory as ZIP
+  - \`DELETE /api/v1/files\` — \`{"path": "foo/bar", "recursive": true}\`
+  - \`POST /api/v1/files/upload\` — upload to \`uploads/\`
+- **Channel Media Support**: WhatsApp and IRC send files/links.
+- All paths relative to \`storage_dir\` (~\`/.miri\`); traversal protected.
+
+**Examples**:
+\`\`\`bash
+curl "/api/v1/files?path=uploads" # list
+curl -X DELETE "/api/v1/files" -d '{"path":"uploads/old.txt"}'
+curl "/api/v1/files/uploads/main.go?view=true" # preview text
+curl "/api/v1/files/uploads/mydir?zip=true" -o mydir.zip # download dir as ZIP
+\`\`\`
+(Use \`X-Server-Key\` header)
 
 ## The Brain: Cognitive Architecture
 

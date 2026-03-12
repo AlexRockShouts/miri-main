@@ -68,6 +68,7 @@ type Engine interface {
 	SkillManager
 	MemoryManager
 	Lifecycle
+	SpawnSubAgent(ctx context.Context, role, query string) (string, error)
 }
 
 type SkillCommand struct {

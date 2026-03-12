@@ -8,11 +8,12 @@ import (
 	"log/slog"
 	"strings"
 
+	"time"
+
 	"github.com/cloudwego/eino/callbacks"
 	"github.com/cloudwego/eino/components/model"
 	"github.com/cloudwego/eino/compose"
 	"github.com/cloudwego/eino/schema"
-	"time"
 
 	"miri-main/src/internal/engine/memory"
 	"miri-main/src/internal/engine/memory/mole_syn"
@@ -24,8 +25,8 @@ import (
 func (e *EinoEngine) Respond(ctx context.Context, sess *session.Session, promptStr string, humanContext string) (string, *llm.Usage, error) {
 	slog.Info("EinoEngine Respond", "session_id", sess.ID, "prompt_len", len(promptStr))
 
-	type sessionIDKey struct{}
-	ctx = context.WithValue(ctx, sessionIDKey{}, sess.ID)
+	const parentSessionKey = "parent_subagent_session"
+	ctx = context.WithValue(ctx, parentSessionKey, sess.ID)
 
 	// Sanitize prompt to remove potentially sensitive data before adding to buffer
 	promptStr = e.sanitizeString(promptStr)

@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"miri-main/src/internal/config"
@@ -81,6 +82,7 @@ type EinoEngine struct {
 	taskGateway     tools.TaskGateway
 	memorySystem    memory.MemorySystem
 	brain           *memory.Brain
+	subAgentTools   map[string]tool.InvokableTool
 	modelCost       config.ModelCost
 
 	sensitiveStrings []string
@@ -161,8 +163,8 @@ func NewEinoEngine(cfg *config.Config, st *storage.Storage, providerName, modelN
 	searchTool := &tools.SearchToolWrapper{}
 	fetchTool := &tools.FetchToolWrapper{}
 	grokipediaTool := &tools.GrokipediaToolWrapper{}
-	generatedDir := filepath.Join(cfg.StorageDir, "generated")
-	cmdTool := tools.NewCmdTool(generatedDir)
+	uploadsDir := filepath.Join(cfg.StorageDir, "uploads")
+	cmdTool := tools.NewCmdTool(uploadsDir)
 	fileManagerTool := tools.NewFileManagerTool(cfg.StorageDir, nil) // Will be properly set if gateway is available
 	retrievePasswordTool := tools.NewRetrievePasswordTool(cfg.Miri.KeePass.DBPath, cfg.Miri.KeePass.Password)
 	storePasswordTool := tools.NewStorePasswordTool(cfg.Miri.KeePass.DBPath, cfg.Miri.KeePass.Password)
@@ -224,8 +226,17 @@ func NewEinoEngine(cfg *config.Config, st *storage.Storage, providerName, modelN
 	allTools = append(allTools, ee.skillLoader.GetExtraTools()...)
 
 	// Add Eino ADK sub-agent tools (Researcher, Coder, Reviewer)
-	if adkTools := subagents.BuildSubAgentTools(context.Background(), chatModel, cfg.StorageDir, ee.storage); len(adkTools) > 0 {
-		allTools = append(allTools, adkTools...)
+	adkTools := subagents.BuildSubAgentTools(context.Background(), chatModel, filepath.Join(ee.storageBaseDir, "uploads"), ee.storage)
+	allTools = append(allTools, adkTools...)
+
+	// Extract sub-agent invokers for /agent slash command
+	ee.subAgentTools = make(map[string]tool.InvokableTool)
+	for _, t := range adkTools {
+		if info, err := t.Info(context.Background()); err == nil {
+			if invoker, ok := t.(tool.InvokableTool); ok {
+				ee.subAgentTools[info.Name] = invoker
+			}
+		}
 	}
 
 	toolsNode, err := compose.NewToolNode(context.Background(), &compose.ToolsNodeConfig{
@@ -284,6 +295,22 @@ func NewEinoEngine(cfg *config.Config, st *storage.Storage, providerName, modelN
 		ee.chat = tc
 	} else if err := cm.BindTools(toolInfos); err != nil {
 		return nil, err
+	}
+
+	// Initialize sub-agent tools
+	ctx := context.Background()
+	agentTools := subagents.BuildSubAgentTools(ctx, ee.chat, filepath.Join(ee.storageBaseDir, "uploads"), ee.storage)
+	ee.subAgentTools = make(map[string]tool.InvokableTool, 3)
+	for _, baseTool := range agentTools {
+		info, err := baseTool.Info(ctx)
+		if err != nil {
+			slog.Warn("failed to get subagent tool info", "error", err)
+			continue
+		}
+		toolRole := strings.ToLower(info.Name)
+		if toolRole == "researcher" || toolRole == "coder" || toolRole == "reviewer" {
+			ee.subAgentTools[toolRole] = baseTool.(tool.InvokableTool)
+		}
 	}
 
 	if err := ee.buildGraph(); err != nil {
@@ -359,4 +386,39 @@ func (e *EinoEngine) sanitizeMessages(msgs []*schema.Message) []*schema.Message 
 		}
 	}
 	return res
+}
+
+func (e *EinoEngine) SpawnSubAgent(ctx context.Context, role, query string) (string, error) {
+	role = strings.ToLower(role)
+	switch role {
+	case "researcher", "coder", "reviewer":
+	default:
+		return "", fmt.Errorf("unsupported sub-agent role %q", role)
+	}
+	invokerI, ok := e.subAgentTools[role]
+	if !ok {
+		return "", fmt.Errorf("no tool for %q", role)
+	}
+	invoker, ok := invokerI.(tool.InvokableTool)
+	if !ok {
+		return "", fmt.Errorf("tool not invokable")
+	}
+	type toolArgs struct {
+		Query string `json:"query"`
+	}
+	args := toolArgs{Query: query}
+	js, err := json.Marshal(args)
+	if err != nil {
+		return "", fmt.Errorf("marshal: %w", err)
+	}
+	resp, err := invoker.InvokableRun(ctx, string(js))
+	if err != nil {
+		return "", fmt.Errorf("invoke: %w", err)
+	}
+	re := regexp.MustCompile(`ID:\s*(\S+)`)
+	matches := re.FindStringSubmatch(resp)
+	if len(matches) != 2 {
+		return "", fmt.Errorf("parse ID from %q", resp)
+	}
+	return matches[1], nil
 }

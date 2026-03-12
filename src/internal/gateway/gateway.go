@@ -342,18 +342,16 @@ func (gw *Gateway) GetTask(id string) (*tasks.Task, error) {
 // SpawnSubAgent creates and starts a new dynamic sub-agent run.
 // Returns the run ID on success.
 func (gw *Gateway) SpawnSubAgent(ctx context.Context, role, goal, model, parentSession string) (string, error) {
-	id := uuid.New().String()
-	run := &storage.SubAgentRun{
-		ID:            id,
-		ParentSession: parentSession,
-		Role:          role,
-		Goal:          goal,
-		Model:         model,
+	role = strings.ToLower(role)
+	switch role {
+	case "researcher", "coder", "reviewer":
+	default:
+		return "", fmt.Errorf("unsupported sub-agent role: %q", role)
 	}
-	if err := gw.DynamicPool.Spawn(ctx, run); err != nil {
-		return "", err
-	}
-	return id, nil
+
+	const parentSessionKey = "parent_subagent_session"
+	subCtx := context.WithValue(ctx, parentSessionKey, parentSession)
+	return gw.PrimaryAgent.SpawnSubAgent(subCtx, role, goal)
 }
 
 // CancelSubAgent cancels a running sub-agent by ID.

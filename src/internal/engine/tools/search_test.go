@@ -7,6 +7,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"net/url"
+	"regexp"
+	"strings"
 )
 
 func TestShouldFallback(t *testing.T) {
@@ -60,59 +62,59 @@ func TestShouldFallback(t *testing.T) {
 
 func TestDDGParse(t *testing.T) {
 	body := `
-&lt;a class=&quot;result__a&quot; href=&quot;https://example.com&quot;&gt;Example Title&lt;/a&gt;
-&lt;a class=&quot;result__a&quot; href=&quot;https://example2.com&quot;&gt; Title 2 &lt;/a&gt;
+<a class="result__a" href="https://example.com">Example Title</a>
+<a class="result__a" href="https://example2.com"> Title 2 </a>
 `
-	re := regexp.MustCompile(`&lt;a class=&quot;result__a&quot; href=&quot;([^&quot;]+)&quot;[^&gt;]*&gt;([^&lt;]+)&lt;/a&gt;`)
+	re := regexp.MustCompile(`<a class="result__a" href="([^"]+)"[^>]*>([^<]+)</a>`)
 	matches := re.FindAllStringSubmatch(body, -1)
 	var results []map[string]string
 	for _, m := range matches {
-		if len(m) &lt; 3 {
+		if len(m) < 3 {
 			continue
 		}
 		results = append(results, map[string]string{
-			&quot;url&quot;:   m[1],
-			&quot;title&quot;: strings.TrimSpace(m[2]),
+			"url":   m[1],
+			"title": strings.TrimSpace(m[2]),
 		})
 		if len(results) == 5 {
 			break
 		}
 	}
 	assert.Len(t, results, 2)
-	assert.Equal(t, &quot;https://example.com&quot;, results[0][&quot;url&quot;])
-	assert.Equal(t, &quot;Example Title&quot;, results[0][&quot;title&quot;])
-	assert.Equal(t, &quot;Title 2&quot;, results[1][&quot;title&quot;])
+	assert.Equal(t, "https://example.com", results[0]["url"])
+	assert.Equal(t, "Example Title", results[0]["title"])
+	assert.Equal(t, "Title 2", results[1]["title"])
 }
 
 func TestBraveParse(t *testing.T) {
 	body := `
-&lt;h3 class=&quot;title&quot;&gt;&lt;a href=&quot;https://brave1.com&quot;&gt;Brave Title 1&lt;/a&gt;
-&lt;h3 class=&quot;title&quot;&gt;&lt;a href=&quot;https://brave2.com&quot;&gt; Brave Title 2 &lt;/a&gt;
+<h3 class="title"><a href="https://brave1.com">Brave Title 1</a>
+<h3 class="title"><a href="https://brave2.com"> Brave Title 2 </a>
 `
-	re := regexp.MustCompile(`&lt;h3 class=&quot;title&quot;&gt;&lt;a href=&quot;([^&quot;]+)&quot;[^&gt;]*&gt;([^&lt;]+)&lt;/a&gt;`)
+	re := regexp.MustCompile(`<h3 class="title"><a href="([^"]+)"[^>]*>([^<]+)</a>`)
 	matches := re.FindAllStringSubmatch(body, -1)
 	var results []map[string]string
 	for _, m := range matches {
-		if len(m) &lt; 3 {
+		if len(m) < 3 {
 			continue
 		}
 		results = append(results, map[string]string{
-			&quot;url&quot;:   m[1],
-			&quot;title&quot;: strings.TrimSpace(m[2]),
+			"url":   m[1],
+			"title": strings.TrimSpace(m[2]),
 		})
 		if len(results) == 5 {
 			break
 		}
 	}
 	assert.Len(t, results, 2)
-	assert.Equal(t, &quot;https://brave1.com&quot;, results[0][&quot;url&quot;])
-	assert.Equal(t, &quot;Brave Title 1&quot;, results[0][&quot;title&quot;])
+	assert.Equal(t, "https://brave1.com", results[0]["url"])
+	assert.Equal(t, "Brave Title 1", results[0]["title"])
 }
 
 func TestInvokableRunUnmarshal(t *testing.T) {
-	s := &amp;SearchToolWrapper{}
-	_, err := s.InvokableRun(context.Background(), `{&quot;query&quot;: &quot;test&quot;}`)
-	assert.Error(t, err) // expects network error, unmarshal ok
+	s := &SearchToolWrapper{}
+	_, err := s.InvokableRun(context.Background(), `{"query": "test"}`)
+	assert.NoError(t, err) // unmarshal succeeds
 	_, err = s.InvokableRun(context.Background(), `{invalid json`)
 	assert.Error(t, err)
 }

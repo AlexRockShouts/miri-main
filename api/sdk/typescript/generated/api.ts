@@ -56,6 +56,10 @@ export interface ApiAdminV1SessionsIdStatsGet200Response {
     'output_tokens'?: number;
     'total_cost'?: number;
 }
+export interface ApiV1FilesDelete200Response {
+    'status'?: string;
+    'deleted'?: number;
+}
 export interface ApiV1InteractionPostRequest {
     'action'?: ApiV1InteractionPostRequestActionEnum;
 }
@@ -139,6 +143,10 @@ export interface ConfigServer {
     'admin_user'?: string;
     'admin_pass'?: string;
 }
+export interface DeleteFilesRequest {
+    'path'?: string;
+    'recursive'?: boolean;
+}
 export interface EmbeddingConfig {
     'use_native_embeddings'?: boolean;
     'model'?: EmbeddingModelConfig;
@@ -149,8 +157,17 @@ export interface EmbeddingModelConfig {
     'model'?: string;
     'url'?: string;
 }
+export interface FileInfo {
+    'name'?: string;
+    'size'?: number;
+    'modified'?: string;
+    'isDir'?: boolean;
+}
 export interface Human {
     'content'?: string;
+}
+export interface ListFilesResponse {
+    'files'?: Array<FileInfo>;
 }
 export interface Message {
     'prompt'?: string;
@@ -1328,12 +1345,52 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
         },
         /**
          * 
-         * @summary Download a file from the local storage
-         * @param {string} filepath 
+         * @summary Delete file or directory in uploads/ or generated/
+         * @param {DeleteFilesRequest} deleteFilesRequest 
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        apiV1FilesFilepathGet: async (filepath: string, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+        apiV1FilesDelete: async (deleteFilesRequest: DeleteFilesRequest, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'deleteFilesRequest' is not null or undefined
+            assertParamExists('apiV1FilesDelete', 'deleteFilesRequest', deleteFilesRequest)
+            const localVarPath = `/api/v1/files`;
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'DELETE', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication ServerKey required
+            await setApiKeyToObject(localVarHeaderParameter, "X-Server-Key", configuration)
+
+            localVarHeaderParameter['Content-Type'] = 'application/json';
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+            localVarRequestOptions.data = serializeDataIfNeeded(deleteFilesRequest, localVarRequestOptions, configuration)
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * 
+         * @summary Serve file download, text preview, or directory listing
+         * @param {string} filepath Relative path in uploads/ or generated/
+         * @param {boolean} [view] If true and filepath is a file, return text/plain preview instead of download
+         * @param {boolean} [zip] If true and filepath is a directory, download as ZIP archive instead of listing
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        apiV1FilesFilepathGet: async (filepath: string, view?: boolean, zip?: boolean, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
             // verify required parameter 'filepath' is not null or undefined
             assertParamExists('apiV1FilesFilepathGet', 'filepath', filepath)
             const localVarPath = `/api/v1/files/{filepath}`
@@ -1352,7 +1409,53 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
             // authentication ServerKey required
             await setApiKeyToObject(localVarHeaderParameter, "X-Server-Key", configuration)
 
-            localVarHeaderParameter['Accept'] = 'application/octet-stream';
+            if (view !== undefined) {
+                localVarQueryParameter['view'] = view;
+            }
+
+            if (zip !== undefined) {
+                localVarQueryParameter['zip'] = zip;
+            }
+
+            localVarHeaderParameter['Accept'] = 'application/json,text/plain,application/octet-stream';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * 
+         * @summary List files and directories in uploads/ or generated/
+         * @param {string} [path] Directory path relative to storage_dir (uploads/ or generated/)
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        apiV1FilesGet: async (path?: string, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            const localVarPath = `/api/v1/files`;
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'GET', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication ServerKey required
+            await setApiKeyToObject(localVarHeaderParameter, "X-Server-Key", configuration)
+
+            if (path !== undefined) {
+                localVarQueryParameter['path'] = path;
+            }
+
+            localVarHeaderParameter['Accept'] = 'application/json';
 
             setSearchParams(localVarUrlObj, localVarQueryParameter);
             let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
@@ -2034,15 +2137,43 @@ export const DefaultApiFp = function(configuration?: Configuration) {
         },
         /**
          * 
-         * @summary Download a file from the local storage
-         * @param {string} filepath 
+         * @summary Delete file or directory in uploads/ or generated/
+         * @param {DeleteFilesRequest} deleteFilesRequest 
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        async apiV1FilesFilepathGet(filepath: string, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<File>> {
-            const localVarAxiosArgs = await localVarAxiosParamCreator.apiV1FilesFilepathGet(filepath, options);
+        async apiV1FilesDelete(deleteFilesRequest: DeleteFilesRequest, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<ApiV1FilesDelete200Response>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.apiV1FilesDelete(deleteFilesRequest, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.apiV1FilesDelete']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * 
+         * @summary Serve file download, text preview, or directory listing
+         * @param {string} filepath Relative path in uploads/ or generated/
+         * @param {boolean} [view] If true and filepath is a file, return text/plain preview instead of download
+         * @param {boolean} [zip] If true and filepath is a directory, download as ZIP archive instead of listing
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async apiV1FilesFilepathGet(filepath: string, view?: boolean, zip?: boolean, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<ListFilesResponse>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.apiV1FilesFilepathGet(filepath, view, zip, options);
             const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
             const localVarOperationServerBasePath = operationServerMap['DefaultApi.apiV1FilesFilepathGet']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * 
+         * @summary List files and directories in uploads/ or generated/
+         * @param {string} [path] Directory path relative to storage_dir (uploads/ or generated/)
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async apiV1FilesGet(path?: string, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<ListFilesResponse>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.apiV1FilesGet(path, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.apiV1FilesGet']?.[localVarOperationServerIndex]?.url;
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
         },
         /**
@@ -2417,13 +2548,35 @@ export const DefaultApiFactory = function (configuration?: Configuration, basePa
         },
         /**
          * 
-         * @summary Download a file from the local storage
-         * @param {string} filepath 
+         * @summary Delete file or directory in uploads/ or generated/
+         * @param {DeleteFilesRequest} deleteFilesRequest 
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        apiV1FilesFilepathGet(filepath: string, options?: RawAxiosRequestConfig): AxiosPromise<File> {
-            return localVarFp.apiV1FilesFilepathGet(filepath, options).then((request) => request(axios, basePath));
+        apiV1FilesDelete(deleteFilesRequest: DeleteFilesRequest, options?: RawAxiosRequestConfig): AxiosPromise<ApiV1FilesDelete200Response> {
+            return localVarFp.apiV1FilesDelete(deleteFilesRequest, options).then((request) => request(axios, basePath));
+        },
+        /**
+         * 
+         * @summary Serve file download, text preview, or directory listing
+         * @param {string} filepath Relative path in uploads/ or generated/
+         * @param {boolean} [view] If true and filepath is a file, return text/plain preview instead of download
+         * @param {boolean} [zip] If true and filepath is a directory, download as ZIP archive instead of listing
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        apiV1FilesFilepathGet(filepath: string, view?: boolean, zip?: boolean, options?: RawAxiosRequestConfig): AxiosPromise<ListFilesResponse> {
+            return localVarFp.apiV1FilesFilepathGet(filepath, view, zip, options).then((request) => request(axios, basePath));
+        },
+        /**
+         * 
+         * @summary List files and directories in uploads/ or generated/
+         * @param {string} [path] Directory path relative to storage_dir (uploads/ or generated/)
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        apiV1FilesGet(path?: string, options?: RawAxiosRequestConfig): AxiosPromise<ListFilesResponse> {
+            return localVarFp.apiV1FilesGet(path, options).then((request) => request(axios, basePath));
         },
         /**
          * 
@@ -2792,13 +2945,37 @@ export class DefaultApi extends BaseAPI {
 
     /**
      * 
-     * @summary Download a file from the local storage
-     * @param {string} filepath 
+     * @summary Delete file or directory in uploads/ or generated/
+     * @param {DeleteFilesRequest} deleteFilesRequest 
      * @param {*} [options] Override http request option.
      * @throws {RequiredError}
      */
-    public apiV1FilesFilepathGet(filepath: string, options?: RawAxiosRequestConfig) {
-        return DefaultApiFp(this.configuration).apiV1FilesFilepathGet(filepath, options).then((request) => request(this.axios, this.basePath));
+    public apiV1FilesDelete(deleteFilesRequest: DeleteFilesRequest, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).apiV1FilesDelete(deleteFilesRequest, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * 
+     * @summary Serve file download, text preview, or directory listing
+     * @param {string} filepath Relative path in uploads/ or generated/
+     * @param {boolean} [view] If true and filepath is a file, return text/plain preview instead of download
+     * @param {boolean} [zip] If true and filepath is a directory, download as ZIP archive instead of listing
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public apiV1FilesFilepathGet(filepath: string, view?: boolean, zip?: boolean, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).apiV1FilesFilepathGet(filepath, view, zip, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * 
+     * @summary List files and directories in uploads/ or generated/
+     * @param {string} [path] Directory path relative to storage_dir (uploads/ or generated/)
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public apiV1FilesGet(path?: string, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).apiV1FilesGet(path, options).then((request) => request(this.axios, this.basePath));
     }
 
     /**

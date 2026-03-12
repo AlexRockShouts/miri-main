@@ -8,6 +8,7 @@ docs/APIError.md
 docs/ApiAdminV1ChannelsPostRequest.md
 docs/ApiAdminV1HealthGet200Response.md
 docs/ApiAdminV1SessionsIdStatsGet200Response.md
+docs/ApiV1FilesDelete200Response.md
 docs/ApiV1InteractionPostRequest.md
 docs/ApiV1PromptPost200Response.md
 docs/ApiV1PromptPostRequest.md
@@ -24,9 +25,12 @@ docs/ConfigChannelsWhatsapp.md
 docs/ConfigModels.md
 docs/ConfigServer.md
 docs/DefaultApi.md
+docs/DeleteFilesRequest.md
 docs/EmbeddingConfig.md
 docs/EmbeddingModelConfig.md
+docs/FileInfo.md
 docs/Human.md
+docs/ListFilesResponse.md
 docs/Message.md
 docs/MiriSubConfig.md
 docs/ModelConfig.md

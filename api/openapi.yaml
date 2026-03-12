@@ -307,6 +307,36 @@ components:
         download:
           type: string
 
+    FileInfo:
+      type: object
+      properties:
+        name:
+          type: string
+        size:
+          type: integer
+          format: int64
+        modified:
+          type: string
+          format: date-time
+        isDir:
+          type: boolean
+
+    ListFilesResponse:
+      type: object
+      properties:
+        files:
+          type: array
+          items:
+            $ref: '#/components/schemas/FileInfo'
+
+    DeleteFilesRequest:
+      type: object
+      properties:
+        path:
+          type: string
+        recursive:
+          type: boolean
+
     SearchResult:
       type: object
       properties:
@@ -624,6 +654,58 @@ paths:
         '101':
           description: WebSocket upgrade
 
+  /api/v1/files:
+    get:
+      summary: List files and directories in uploads/ or generated/
+      security:
+        - ServerKey: []
+      parameters:
+        - name: path
+          in: query
+          description: Directory path relative to storage_dir (uploads/ or generated/)
+          schema:
+            type: string
+            default: uploads
+      responses:
+        '200':
+          description: List of files
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListFilesResponse'
+        '400':
+          description: Invalid path
+        '403':
+          description: Access denied
+    delete:
+      summary: Delete file or directory in uploads/ or generated/
+      security:
+        - ServerKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeleteFilesRequest'
+      responses:
+        '200':
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  deleted:
+                    type: integer
+        '400':
+          description: Invalid path
+        '404':
+          description: Not found
+        '403':
+          description: Access denied
+
   /api/v1/files/upload:
     post:
       summary: Upload a file to the local storage
@@ -653,7 +735,7 @@ paths:
 
   /api/v1/files/{filepath}:
     get:
-      summary: Download a file from the local storage
+      summary: Serve file download, text preview, or directory listing
       security:
         - ServerKey: []
       parameters:
@@ -662,16 +744,39 @@ paths:
           required: true
           schema:
             type: string
+          description: Relative path in uploads/ or generated/
+        - name: view
+          in: query
+          description: If true and filepath is a file, return text/plain preview instead of download
+          schema:
+            type: boolean
+        - name: zip
+          in: query
+          description: If true and filepath is a directory, download as ZIP archive instead of listing
+          schema:
+            type: boolean
       responses:
         '200':
-          description: The file content
+          description: File content, text preview, or directory listing
           content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListFilesResponse'
+              description: Directory listing
+            text/plain:
+              schema:
+                type: string
+                format: binary
+              description: Text preview of file (view=true)
             application/octet-stream:
               schema:
                 type: string
                 format: binary
+              description: File download (default)
+        '400':
+          description: Invalid path
         '404':
-          description: File not found
+          description: File or directory not found
         '403':
           description: Access denied
 

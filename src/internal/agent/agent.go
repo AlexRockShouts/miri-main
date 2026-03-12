@@ -241,3 +241,7 @@ func (a *Agent) TriggerMaintenance(ctx context.Context) {
 		a.Eng.TriggerMaintenance(ctx)
 	}
 }
+
+func (a *Agent) SpawnSubAgent(ctx context.Context, role, query string) (string, error) {
+	return a.Eng.SpawnSubAgent(ctx, role, query)
+}

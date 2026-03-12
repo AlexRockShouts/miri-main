@@ -28,7 +28,9 @@ All URIs are relative to *http://localhost:8080*
 |[**apiAdminV1SubagentsIdTranscriptGet**](#apiadminv1subagentsidtranscriptget) | **GET** /api/admin/v1/subagents/{id}/transcript | Get full message transcript of a sub-agent run (admin)|
 |[**apiAdminV1TasksGet**](#apiadminv1tasksget) | **GET** /api/admin/v1/tasks | List all recurring tasks|
 |[**apiAdminV1TasksIdGet**](#apiadminv1tasksidget) | **GET** /api/admin/v1/tasks/{id} | Get task details|
-|[**apiV1FilesFilepathGet**](#apiv1filesfilepathget) | **GET** /api/v1/files/{filepath} | Download a file from the local storage|
+|[**apiV1FilesDelete**](#apiv1filesdelete) | **DELETE** /api/v1/files | Delete file or directory in uploads/ or generated/|
+|[**apiV1FilesFilepathGet**](#apiv1filesfilepathget) | **GET** /api/v1/files/{filepath} | Serve file download, text preview, or directory listing|
+|[**apiV1FilesGet**](#apiv1filesget) | **GET** /api/v1/files | List files and directories in uploads/ or generated/|
 |[**apiV1FilesUploadPost**](#apiv1filesuploadpost) | **POST** /api/v1/files/upload | Upload a file to the local storage|
 |[**apiV1InteractionPost**](#apiv1interactionpost) | **POST** /api/v1/interaction | Manage sessions or check global status|
 |[**apiV1PromptPost**](#apiv1promptpost) | **POST** /api/v1/prompt | Send a prompt to the agent|
@@ -1237,8 +1239,62 @@ const { status, data } = await apiInstance.apiAdminV1TasksIdGet(
 
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
 
+# **apiV1FilesDelete**
+> ApiV1FilesDelete200Response apiV1FilesDelete(deleteFilesRequest)
+
+
+### Example
+
+```typescript
+import {
+    DefaultApi,
+    Configuration,
+    DeleteFilesRequest
+} from './api';
+
+const configuration = new Configuration();
+const apiInstance = new DefaultApi(configuration);
+
+let deleteFilesRequest: DeleteFilesRequest; //
+
+const { status, data } = await apiInstance.apiV1FilesDelete(
+    deleteFilesRequest
+);
+```
+
+### Parameters
+
+|Name | Type | Description  | Notes|
+|------------- | ------------- | ------------- | -------------|
+| **deleteFilesRequest** | **DeleteFilesRequest**|  | |
+
+
+### Return type
+
+**ApiV1FilesDelete200Response**
+
+### Authorization
+
+[ServerKey](../README.md#ServerKey)
+
+### HTTP request headers
+
+ - **Content-Type**: application/json
+ - **Accept**: application/json
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+|**200** | Deleted |  -  |
+|**400** | Invalid path |  -  |
+|**404** | Not found |  -  |
+|**403** | Access denied |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
 # **apiV1FilesFilepathGet**
-> File apiV1FilesFilepathGet()
+> ListFilesResponse apiV1FilesFilepathGet()
 
 
 ### Example
@@ -1252,10 +1308,14 @@ import {
 const configuration = new Configuration();
 const apiInstance = new DefaultApi(configuration);
 
-let filepath: string; // (default to undefined)
+let filepath: string; //Relative path in uploads/ or generated/ (default to undefined)
+let view: boolean; //If true and filepath is a file, return text/plain preview instead of download (optional) (default to undefined)
+let zip: boolean; //If true and filepath is a directory, download as ZIP archive instead of listing (optional) (default to undefined)
 
 const { status, data } = await apiInstance.apiV1FilesFilepathGet(
-    filepath
+    filepath,
+    view,
+    zip
 );
 ```
 
@@ -1263,12 +1323,14 @@ const { status, data } = await apiInstance.apiV1FilesFilepathGet(
 
 |Name | Type | Description  | Notes|
 |------------- | ------------- | ------------- | -------------|
-| **filepath** | [**string**] |  | defaults to undefined|
+| **filepath** | [**string**] | Relative path in uploads/ or generated/ | defaults to undefined|
+| **view** | [**boolean**] | If true and filepath is a file, return text/plain preview instead of download | (optional) defaults to undefined|
+| **zip** | [**boolean**] | If true and filepath is a directory, download as ZIP archive instead of listing | (optional) defaults to undefined|
 
 
 ### Return type
 
-**File**
+**ListFilesResponse**
 
 ### Authorization
 
@@ -1277,14 +1339,67 @@ const { status, data } = await apiInstance.apiV1FilesFilepathGet(
 ### HTTP request headers
 
  - **Content-Type**: Not defined
- - **Accept**: application/octet-stream
+ - **Accept**: application/json, text/plain, application/octet-stream
 
 
 ### HTTP response details
 | Status code | Description | Response headers |
 |-------------|-------------|------------------|
-|**200** | The file content |  -  |
-|**404** | File not found |  -  |
+|**200** | File content, text preview, or directory listing |  -  |
+|**400** | Invalid path |  -  |
+|**404** | File or directory not found |  -  |
+|**403** | Access denied |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
+# **apiV1FilesGet**
+> ListFilesResponse apiV1FilesGet()
+
+
+### Example
+
+```typescript
+import {
+    DefaultApi,
+    Configuration
+} from './api';
+
+const configuration = new Configuration();
+const apiInstance = new DefaultApi(configuration);
+
+let path: string; //Directory path relative to storage_dir (uploads/ or generated/) (optional) (default to 'uploads')
+
+const { status, data } = await apiInstance.apiV1FilesGet(
+    path
+);
+```
+
+### Parameters
+
+|Name | Type | Description  | Notes|
+|------------- | ------------- | ------------- | -------------|
+| **path** | [**string**] | Directory path relative to storage_dir (uploads/ or generated/) | (optional) defaults to 'uploads'|
+
+
+### Return type
+
+**ListFilesResponse**
+
+### Authorization
+
+[ServerKey](../README.md#ServerKey)
+
+### HTTP request headers
+
+ - **Content-Type**: Not defined
+ - **Accept**: application/json
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+|**200** | List of files |  -  |
+|**400** | Invalid path |  -  |
 |**403** | Access denied |  -  |
 
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)

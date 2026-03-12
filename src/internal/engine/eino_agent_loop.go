@@ -90,8 +90,8 @@ func (e *EinoEngine) agentInvoke(ctx context.Context, input *graphInput) (out *g
 			return nil, err
 		}
 
-		// Ensure assistant message has non-empty content if it has no tool calls
-		if strings.TrimSpace(assistant.Content) == "" && len(assistant.ToolCalls) == 0 {
+		// Ensure assistant message has non-empty content
+		if strings.TrimSpace(assistant.Content) == "" {
 			assistant.Content = "..."
 		}
 
@@ -260,7 +260,7 @@ func (e *EinoEngine) agentInvoke(ctx context.Context, input *graphInput) (out *g
 	if err != nil {
 		return nil, err
 	}
-	if strings.TrimSpace(final.Content) == "" && len(final.ToolCalls) == 0 {
+	if strings.TrimSpace(final.Content) == "" {
 		final.Content = "..."
 	}
 	if final.ResponseMeta != nil && final.ResponseMeta.Usage != nil {

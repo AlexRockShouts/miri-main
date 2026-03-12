@@ -103,7 +103,8 @@ func shouldFallback(err error) bool {
 	return strings.Contains(msg, "timeout") ||
 		strings.Contains(msg, "connection reset by peer") ||
 		strings.Contains(msg, "dial tcp") ||
-		strings.Contains(msg, "i/o timeout")
+		strings.Contains(msg, "i/o timeout") ||
+		strings.Contains(msg, "deadline exceeded")
 }
 
 func braveSearch(ctx context.Context, query string) ([]map[string]string, error) {
