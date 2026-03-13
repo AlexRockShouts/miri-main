@@ -17,7 +17,9 @@ import (
 	"testing"
 	"time"
 
+	"context"
 	"github.com/gorilla/websocket"
+	"net"
 )
 
 func setupTestServer(t *testing.T) (*Server, string) {
@@ -408,12 +410,21 @@ func TestAPI_WebSocket(t *testing.T) {
 	s, tmpDir := setupTestServer(t)
 	defer os.RemoveAll(tmpDir)
 
-	server := httptest.NewServer(s.Engine)
-	defer server.Close()
+	// Real TCP listener for WS test
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := &http.Server{Handler: s.Engine}
+	go srv.Serve(l)
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		srv.Shutdown(ctx)
+		cancel()
+	}()
 
-	u, _ := url.Parse(server.URL)
-	u.Scheme = "ws"
-	u.Path = "/ws"
+	addr := l.Addr().String()
+	u := url.URL{Scheme: "ws", Host: addr, Path: "/ws"}
 	q := u.Query()
 	q.Set("token", "test-server-key")
 	u.RawQuery = q.Encode()
@@ -473,12 +484,21 @@ func TestAPI_TaskDefaultReporting(t *testing.T) {
 	s, tmpDir := setupTestServer(t)
 	defer os.RemoveAll(tmpDir)
 
-	server := httptest.NewServer(s.Engine)
-	defer server.Close()
+	// Real TCP listener for WS test
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := &http.Server{Handler: s.Engine}
+	go srv.Serve(l)
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		srv.Shutdown(ctx)
+		cancel()
+	}()
 
-	u, _ := url.Parse(server.URL)
-	u.Scheme = "ws"
-	u.Path = "/ws"
+	addr := l.Addr().String()
+	u := url.URL{Scheme: "ws", Host: addr, Path: "/ws"}
 	q := u.Query()
 	q.Set("token", "test-server-key")
 	u.RawQuery = q.Encode()
