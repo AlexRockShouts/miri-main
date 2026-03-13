@@ -162,7 +162,7 @@ func NewEinoEngine(cfg *config.Config, st *storage.Storage, providerName, modelN
 	// Define tools
 	searchTool := &tools.SearchToolWrapper{}
 	fetchTool := &tools.FetchToolWrapper{}
-	grokipediaTool := &tools.GrokipediaToolWrapper{}
+	grokipediaTool := tools.CreateGrokipediaTool()
 	uploadsDir := filepath.Join(cfg.StorageDir, "uploads")
 	cmdTool := tools.NewCmdTool(uploadsDir)
 	fileManagerTool := tools.NewFileManagerTool(cfg.StorageDir, nil) // Will be properly set if gateway is available
@@ -253,7 +253,10 @@ func NewEinoEngine(cfg *config.Config, st *storage.Storage, providerName, modelN
 		fetchTool.GetInfo(),
 		cmdTool.GetInfo(),
 		skillRemoveTool.GetInfo(),
-		grokipediaTool.GetInfo(),
+		func() *schema.ToolInfo {
+			info, _ := grokipediaTool.Info(context.Background())
+			return info
+		}(),
 		fileManagerTool.GetInfo(),
 		retrievePasswordTool.GetInfo(),
 		storePasswordTool.GetInfo(),

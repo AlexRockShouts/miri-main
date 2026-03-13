@@ -3,6 +3,7 @@ module miri-main
 go 1.25.4
 
 require (
+	github.com/PuerkitoBio/goquery v1.9.3
 	github.com/cloudwego/eino v0.8.1-0.20260310071622-b391df80ed2b
 	github.com/cloudwego/eino-ext/components/model/openai v0.1.8
 	github.com/dominikbraun/graph v0.23.0
@@ -26,6 +27,7 @@ require (
 
 require (
 	filippo.io/edwards25519 v1.2.0 // indirect
+	github.com/andybalholm/cascadia v1.3.2 // indirect
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
 	github.com/beeper/argo-go v1.1.2 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect

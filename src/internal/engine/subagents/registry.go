@@ -41,7 +41,7 @@ func BuildSubAgentTools(ctx context.Context, chatModel model.BaseChatModel, stor
 	researcherTools := []einotool.BaseTool{
 		&tools.SearchToolWrapper{},
 		&tools.FetchToolWrapper{},
-		&tools.GrokipediaToolWrapper{},
+		tools.CreateGrokipediaTool(),
 	}
 
 	coderTools := []einotool.BaseTool{

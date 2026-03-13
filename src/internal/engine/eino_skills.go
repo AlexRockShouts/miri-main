@@ -25,7 +25,7 @@ func (e *EinoEngine) ListSkillCommands(ctx context.Context) ([]SkillCommand, err
 	// 1. Basic tools
 	searchTool := &tools.SearchToolWrapper{}
 	fetchTool := &tools.FetchToolWrapper{}
-	grokipediaTool := &tools.GrokipediaToolWrapper{}
+	grokipediaTool := tools.CreateGrokipediaTool()
 	cmdTool := tools.NewCmdTool(e.storageBaseDir)
 	skillRemoveTool := tools.NewSkillRemoveTool(&config.Config{StorageDir: e.storageBaseDir}, nil)
 	taskMgrTool := tools.NewTaskManagerTool(nil, session.DefaultSessionID)
