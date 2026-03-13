@@ -3,6 +3,7 @@ package tools
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -18,13 +19,16 @@ func TestCreateGrokipediaTool(t *testing.T) {
 }
 
 func TestFetchGrokipediaArticle(t *testing.T) {
-	// Mock server not needed for static test, but for real URL hard.
-	// Test parsing logic by mocking doc, but func uses http.
-	// Skip full net test, assume correct.
-	t.Skip("Net dependent; manual runtime verify")
+	t.Parallel()
 
-	input := &GrokipediaInput{Topic: "Go"}
-	_, err := FetchGrokipediaArticle(context.Background(), input)
-	// Expect no panic, but real net.
-	assert.NoError(t, err) // May fail if site down
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	input := &GrokipediaInput{Topic: "Van der Waals force"}
+	output, err := FetchGrokipediaArticle(ctx, input)
+	assert.NoError(t, err)
+	assert.Empty(t, output.Error)
+	assert.Equal(t, "Van der Waals force", output.Title)
+	assert.NotEmpty(t, output.Content)
+	assert.True(t, len(output.Citations) > 0)
 }

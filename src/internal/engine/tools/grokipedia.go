@@ -27,12 +27,16 @@ type GrokipediaOutput struct {
 }
 
 func FetchGrokipediaArticle(ctx context.Context, input *GrokipediaInput) (*GrokipediaOutput, error) {
-	normalized := strings.Join(strings.Fields(strings.ToLower(input.Topic)), "_")
+	words := strings.Fields(input.Topic)
+	if len(words) > 0 {
+		words[0] = strings.Title(words[0])
+	}
+	normalized := strings.Join(words, "_")
 	pageURL := fmt.Sprintf("https://grokipedia.com/page/%s", url.QueryEscape(normalized))
 
 	req, err := http.NewRequestWithContext(ctx, "GET", pageURL, nil)
 	if err != nil {
-		return &GrokipediaOutput{Error: err.Error()}, err
+		return &GrokipediaOutput{Error: err.Error(), Citations: []string{}}, nil
 	}
 	req.Header.Set("User-Agent", "Eino-AI-Agent/1.0")
 
@@ -41,37 +45,34 @@ func FetchGrokipediaArticle(ctx context.Context, input *GrokipediaInput) (*Groki
 	client := &http.Client{Transport: transport, Timeout: 30 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
-		return &GrokipediaOutput{Error: err.Error()}, err
+		return &GrokipediaOutput{Error: err.Error(), Citations: []string{}}, nil
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return &GrokipediaOutput{Error: fmt.Sprintf("HTTP error: %d", resp.StatusCode)}, fmt.Errorf("HTTP error: %d", resp.StatusCode)
+		return &GrokipediaOutput{Error: fmt.Sprintf("No article found for topic '%s' (HTTP %d)", input.Topic, resp.StatusCode), Citations: []string{}}, nil
 	}
 
 	doc, err := goquery.NewDocumentFromReader(resp.Body)
 	if err != nil {
-		return &GrokipediaOutput{Error: err.Error()}, err
+		return &GrokipediaOutput{Error: fmt.Sprintf("Failed to parse HTML: %s", err.Error()), Citations: []string{}}, nil
 	}
 
-	title := doc.Find("h1.article-title").Text()
+	title := strings.TrimSpace(doc.Find("h1").First().Text())
 	if title == "" {
 		title = input.Topic // Fallback
 	}
 
-	var content strings.Builder
-	doc.Find("div.article-section").Each(func(i int, s *goquery.Selection) {
-		content.WriteString(s.Text() + "\n")
-	})
+	content := strings.TrimSpace(doc.Find("article").First().Text())
 
 	citations := []string{}
-	doc.Find("ol.references li").Each(func(i int, s *goquery.Selection) {
+	doc.Find("ol li[id^='ref-']").Each(func(i int, s *goquery.Selection) {
 		citations = append(citations, s.Text())
 	})
 
 	return &GrokipediaOutput{
 		Title:     strings.TrimSpace(title),
-		Content:   strings.TrimSpace(content.String()),
+		Content:   content,
 		Citations: citations,
 	}, nil
 }

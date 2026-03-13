@@ -34,7 +34,7 @@ func NewTaskManagerTool(gw TaskGateway, sessionID string) *TaskManagerToolWrappe
 func (t *TaskManagerToolWrapper) GetInfo() *schema.ToolInfo {
 	return &schema.ToolInfo{
 		Name: "task_manager",
-		Desc: "Manage recurring tasks. You can add, delete, update, and list tasks. Tasks run based on a cron expression and execute a prompt. You can take the context of the current chat for the task description.",
+		Desc: "Manage recurring tasks. You can add, delete, update, and list tasks. Tasks run based on a cron expression and execute a prompt. cron optional (defaults to hourly '0 * * * * *'). You can take the context of the current chat for the task description.",
 		ParamsOneOf: schema.NewParamsOneOfByParams(map[string]*schema.ParameterInfo{
 			"action": {
 				Type:     schema.String,
@@ -110,9 +110,13 @@ func (t *TaskManagerToolWrapper) InvokableRun(ctx context.Context, argumentsInJS
 
 	switch args.Action {
 	case "add":
-		if args.Cron == "" || args.Prompt == "" || args.Name == "" {
-			slog.Warn("missing required fields for task add", "name", args.Name, "cron", args.Cron, "prompt", args.Prompt != "")
-			return "", fmt.Errorf("name, cron, and prompt are required for add")
+		if args.Name == "" || args.Prompt == "" {
+			slog.Warn("missing required fields for task add: name or prompt")
+			return "", fmt.Errorf("name and prompt are required for add")
+		}
+		if args.Cron == "" {
+			args.Cron = "0 * * * * *"
+			slog.Info("default cron set for task", "cron", args.Cron)
 		}
 		task := &tasks.Task{
 			ID:             uuid.New().String()[:8],

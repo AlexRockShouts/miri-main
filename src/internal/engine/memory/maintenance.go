@@ -322,7 +322,9 @@ func (b *Brain) deduplicateFactsBatch(ctx context.Context, prompt string, facts 
 
 	fullPrompt := strings.Replace(prompt, "{facts_list}", sb.String(), 1)
 	sanitized := b.sanitize([]*schema.Message{schema.UserMessage(fullPrompt)})
-	resp, err := b.chat.Generate(ctx, sanitized)
+	chatCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+	defer cancel()
+	resp, err := b.chat.Generate(chatCtx, sanitized)
 	if err != nil {
 		slog.Error("Generate deduplicate facts failed", "error", err, "prompt", sanitized[0].Content)
 		return err
@@ -383,7 +385,9 @@ func (b *Brain) deduplicateSummariesBatch(ctx context.Context, prompt string, su
 
 	fullPrompt := strings.Replace(prompt, "{summaries_list}", sb.String(), 1)
 	sanitized := b.sanitize([]*schema.Message{schema.UserMessage(fullPrompt)})
-	resp, err := b.chat.Generate(ctx, sanitized)
+	chatCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+	defer cancel()
+	resp, err := b.chat.Generate(chatCtx, sanitized)
 	if err != nil {
 		slog.Error("Generate deduplicate summaries failed", "error", err, "prompt", sanitized[0].Content)
 		return err

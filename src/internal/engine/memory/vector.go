@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/google/uuid"
 	"github.com/philippgille/chromem-go"
@@ -19,6 +20,7 @@ import (
 type VectorMemory struct {
 	db         *chromem.DB
 	collection *chromem.Collection
+	mu         sync.Mutex
 }
 
 //go:embed static_qwen3_embedding_0.6b_pca384.msgpack
@@ -96,6 +98,8 @@ func NewVectorMemory(cfg *config.Config, collectionName string) (*VectorMemory, 
 }
 
 func (v *VectorMemory) Add(ctx context.Context, content string, metadata map[string]string) error {
+	v.mu.Lock()
+	defer v.mu.Unlock()
 	id := uuid.New().String()
 	// If ID is provided in metadata, use it
 	if providedID, ok := metadata["id"]; ok {
@@ -119,6 +123,9 @@ func (v *VectorMemory) Add(ctx context.Context, content string, metadata map[str
 }
 
 func (v *VectorMemory) Search(ctx context.Context, query string, limit int, filter map[string]string) ([]SearchResult, error) {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+
 	slog.Debug("searching vector memory", "query", query, "limit", limit, "filter", filter)
 
 	// chromem-go fails if limit > collection count
@@ -168,6 +175,8 @@ func (v *VectorMemory) Search(ctx context.Context, query string, limit int, filt
 }
 
 func (v *VectorMemory) ListAll(ctx context.Context) ([]SearchResult, error) {
+	v.mu.Lock()
+	defer v.mu.Unlock()
 	// chromem-go doesn't have a direct ListAll, but we can query with a dummy string or use the underlying store.
 	// Querying with a very large limit and a wildcard-like behavior.
 	// If query is empty, chromem-go currently fails.
@@ -204,6 +213,8 @@ func (v *VectorMemory) ListAll(ctx context.Context) ([]SearchResult, error) {
 }
 
 func (v *VectorMemory) GetByID(ctx context.Context, id string) (*SearchResult, error) {
+	v.mu.Lock()
+	defer v.mu.Unlock()
 	// chromem-go doesn't have a GetByID by default, but we can use Query with ID filtering if supported
 	// or ListAll and filter manually.
 	// For now, we'll list all and filter, or we can use the internal collection store if available.
@@ -222,10 +233,14 @@ func (v *VectorMemory) GetByID(ctx context.Context, id string) (*SearchResult, e
 }
 
 func (v *VectorMemory) Delete(ctx context.Context, id string) error {
+	v.mu.Lock()
+	defer v.mu.Unlock()
 	return v.collection.Delete(ctx, nil, nil, id)
 }
 
 func (v *VectorMemory) Update(ctx context.Context, id string, content string, metadata map[string]string) error {
+	v.mu.Lock()
+	defer v.mu.Unlock()
 	// If ID is in metadata, remove it so it's not stored twice (once as ID, once in metadata)
 	// but chromem-go actually stores both if we don't.
 	// Actually, let's just make sure we use the provided id.
@@ -249,6 +264,8 @@ func (v *VectorMemory) Update(ctx context.Context, id string, content string, me
 }
 
 func (v *VectorMemory) Close() error {
+	v.mu.Lock()
+	defer v.mu.Unlock()
 	// Persistent DB handles its own state
 	return nil
 }

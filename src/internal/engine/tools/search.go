@@ -62,6 +62,7 @@ func webSearch(ctx context.Context, query string) ([]map[string]string, error) {
 	if err != nil {
 		return nil, err
 	}
+	httpReq.Header.Set("User-Agent", "Miri-AI-Agent/1.0")
 	resp, err := client.Do(httpReq)
 	if err != nil {
 		if resp != nil {
@@ -116,6 +117,7 @@ func braveSearch(ctx context.Context, query string) ([]map[string]string, error)
 	if err != nil {
 		return nil, err
 	}
+	httpReq.Header.Set("User-Agent", "Miri-AI-Agent/1.0")
 	resp, err := client.Do(httpReq)
 	if err != nil {
 		if resp != nil {

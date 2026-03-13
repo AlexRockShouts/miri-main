@@ -64,6 +64,7 @@ func fetchURL(ctx context.Context, urlStr string, maxBytes int) (statusCode int,
 	if err != nil {
 		return 0, nil, "", err
 	}
+	req.Header.Set("User-Agent", "Miri-AI-Agent/1.0")
 	resp, err := client.Do(req)
 	if err != nil {
 		return 0, nil, "", err
