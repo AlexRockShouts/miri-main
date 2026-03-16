@@ -27,6 +27,7 @@ jobs:
     - name: create directory
       run: |
         mkdir -p ../miri-main/src/cmd/server/dashboard
+        touch ../miri-main/src/cmd/server/dashboard/.gitkeep
 
     - name: Build-Server
       working-directory: miri-main
