@@ -18,7 +18,7 @@ RUN sed -i 's|"@miri/sdk": "file:[^"]*"|"@miri/sdk": "file:../api/sdk/typescript
 RUN npm install && npm run build
 
 # Stage 3: Build Go Backend
-FROM golang:1.24-alpine AS builder
+FROM golang:1.25-alpine AS builder
 WORKDIR /app
 # Install build tools
 RUN apk add --no-cache make git gcc musl-dev
