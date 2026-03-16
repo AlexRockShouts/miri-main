@@ -104,12 +104,8 @@ func (b *Brain) sanitize(msgs []*schema.Message) []*schema.Message {
 func (b *Brain) syncPrompts() error {
 	templatesDir := filepath.Join(system.GetProjectRoot(), "templates", "brain")
 	if err := b.storage.SyncBrainPrompts(templatesDir); err != nil {
-		if strings.Contains(err.Error(), "failed to read source prompts") {
-			slog.Warn("Template prompts directory not found, skipping sync", "dir", templatesDir)
-			return nil
-		}
-		slog.Error("Failed to synchronize brain prompts", "error", err)
-		return err
+		slog.Warn("Failed to synchronize brain prompts from templates, falling back to storage", "error", err)
+		return nil
 	}
 
 	slog.Info("Brain prompts synchronized")

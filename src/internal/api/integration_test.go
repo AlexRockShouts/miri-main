@@ -60,6 +60,8 @@ func setupTestServer(t *testing.T) (*Server, string) {
 	}
 
 	gw := gateway.New(cfg, st)
+	// Trigger engine start which syncs prompts
+	gw.StartEngine(context.Background())
 	return NewServer(gw), tmpDir
 }
 

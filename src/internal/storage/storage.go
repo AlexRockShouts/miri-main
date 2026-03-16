@@ -346,14 +346,22 @@ func (s *Storage) DeleteTask(id string) error {
 }
 
 func (s *Storage) SyncBrainPrompts(srcDir string) error {
-	destDir := filepath.Join(s.baseDir, "brain")
+	return s.SyncPrompts(srcDir, "brain")
+}
+
+func (s *Storage) SyncSubAgentPrompts(srcDir string) error {
+	return s.SyncPrompts(srcDir, "subagents")
+}
+
+func (s *Storage) SyncPrompts(srcDir, subDir string) error {
+	destDir := filepath.Join(s.baseDir, subDir)
 	if err := os.MkdirAll(destDir, 0755); err != nil {
-		return fmt.Errorf("failed to create brain prompts directory: %w", err)
+		return fmt.Errorf("failed to create prompts directory %s: %w", subDir, err)
 	}
 
 	files, err := os.ReadDir(srcDir)
 	if err != nil {
-		return fmt.Errorf("failed to read source prompts: %w", err)
+		return fmt.Errorf("failed to read source prompts from %s: %w", srcDir, err)
 	}
 
 	for _, file := range files {

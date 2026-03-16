@@ -26,17 +26,29 @@ import (
 // BuildSubAgentTools creates Researcher, Coder, and Reviewer sub-agents using Eino ADK
 // and wraps each as a tool callable by the orchestrator LLM.
 
-func getInstruction(role string) string {
-	promptPath := filepath.Join(system.GetProjectRoot(), "templates", "subagents", role+".prompt")
+func getInstruction(st *storage.Storage, role string) string {
+	promptPath := filepath.Join(st.GetBaseDir(), "subagents", role+".prompt")
 	data, err := os.ReadFile(promptPath)
 	if err != nil {
-		slog.Warn("failed to load subagent instruction prompt", "role", role, "path", promptPath, "error", err)
-		return ""
+		slog.Warn("failed to load subagent instruction prompt from storage", "role", role, "path", promptPath, "error", err)
+		// Fallback to project root if available (useful for tests)
+		fallbackPath := filepath.Join(system.GetProjectRoot(), "templates", "subagents", role+".prompt")
+		data, err = os.ReadFile(fallbackPath)
+		if err != nil {
+			slog.Warn("failed to load subagent instruction prompt from fallback", "role", role, "path", fallbackPath, "error", err)
+			return ""
+		}
 	}
 	return strings.TrimSpace(string(data))
 }
 
 func BuildSubAgentTools(ctx context.Context, chatModel model.BaseChatModel, storageDir string, st *storage.Storage) []einotool.BaseTool {
+	// Sync subagent prompts from templates to storage
+	templateDir := filepath.Join(system.GetProjectRoot(), "templates", "subagents")
+	if err := st.SyncSubAgentPrompts(templateDir); err != nil {
+		slog.Warn("failed to sync subagent prompts", "error", err)
+	}
+
 	sandboxDir := storageDir
 
 	researcherTools := []einotool.BaseTool{
@@ -62,7 +74,7 @@ func BuildSubAgentTools(ctx context.Context, chatModel model.BaseChatModel, stor
 		description: `Searches the web, fetches pages, and produces a structured summary of findings on a given topic. Use for fact-finding, research, and summarization of external information.
 
  IMPORTANT: Only invoke the Researcher tool if the user explicitly gives a prompt to spin-off a Researcher sub-agent run, such as 'run researcher on [topic]' or 'spin up researcher for [query]'. Do not call this tool proactively or automatically.`,
-		instruction: getInstruction("researcher"),
+		instruction: getInstruction(st, "researcher"),
 		model:       chatModel,
 		tools:       researcherTools,
 	}
@@ -77,7 +89,7 @@ func BuildSubAgentTools(ctx context.Context, chatModel model.BaseChatModel, stor
 		description: `Writes, runs, and debugs code to solve programming tasks. Use for code generation, execution, and debugging.
 
  IMPORTANT: Only invoke the Coder tool if the user explicitly gives a prompt to spin-off a Coder sub-agent run, such as 'run coder on [task]' or similar. Do not call this tool proactively or automatically.`,
-		instruction: getInstruction("coder"),
+		instruction: getInstruction(st, "coder"),
 		model:       chatModel,
 		tools:       coderTools,
 	}
@@ -92,7 +104,7 @@ func BuildSubAgentTools(ctx context.Context, chatModel model.BaseChatModel, stor
 		description: `Critiques, quality-checks, and reviews work. Use for code review, fact-checking, or quality assurance of any output.
 
  IMPORTANT: Only invoke the Reviewer tool if the user explicitly gives a prompt to spin-off a Reviewer sub-agent run, such as 'run reviewer on [work]' or similar. Do not call this tool proactively or automatically.`,
-		instruction: getInstruction("reviewer"),
+		instruction: getInstruction(st, "reviewer"),
 		model:       chatModel,
 		tools:       reviewerTools,
 	}
