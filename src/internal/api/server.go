@@ -72,8 +72,6 @@ func NewServer(gw *gateway.Gateway) *Server {
 	s.Engine.Use(s.corsMiddleware())
 	s.Engine.Use(s.recoveryMiddleware())
 	s.Engine.Use(s.injectMiddleware())
-	s.Engine.Use(s.authMiddleware())
-	s.Engine.Use(metricsMiddleware())
 	s.setupRoutesRest()
 	s.setupRoutesWebSocket()
 	s.setupRoutesAdmin()
@@ -202,11 +200,11 @@ func (s *Server) setupRoutesAdmin() {
 }
 
 func (s *Server) setupRoutesWebSocket() {
-	s.Engine.GET("/ws", s.handleWebsocket)
+	s.Engine.GET("/ws", s.authMiddleware(), s.handleWebsocket)
 }
 
 func (s *Server) setupRoutesRest() {
-	v1 := s.Engine.Group("/api/v1")
+	v1 := s.Engine.Group("/api/v1", s.authMiddleware())
 	{
 		v1.POST("/prompt", s.handlePrompt)
 		v1.GET("/prompt/stream", s.handlePromptStream)
