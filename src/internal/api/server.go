@@ -191,6 +191,13 @@ func (s *Server) setupRoutesAdmin() {
 		admin.GET("/brain/facts", s.handleGetBrainFacts)
 		admin.GET("/brain/summaries", s.handleGetBrainSummaries)
 		admin.GET("/brain/topology", s.handleGetBrainTopology)
+
+		// human
+		admin.GET("/human", s.handleGetHuman)
+		admin.POST("/human", s.handleSaveHuman)
+		admin.GET("/human/pending", s.handleListHumanPending)
+		admin.POST("/human/response/:id", s.handleHumanResponse)
+
 		// Sub-agent management
 		admin.GET("/subagents", s.handleListSubAgentRuns)
 		admin.GET("/subagents/:id", s.handleGetSubAgentRun)

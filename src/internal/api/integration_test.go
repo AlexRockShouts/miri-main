@@ -344,8 +344,8 @@ func TestAPI_Files(t *testing.T) {
 	s, tmpDir := setupTestServer(t)
 	defer os.RemoveAll(tmpDir)
 
-	// Files are now accessible within storageDir
-	genDir := filepath.Join(tmpDir, "generated")
+	// Files are now accessible within storageDir/uploads
+	genDir := filepath.Join(tmpDir, "uploads", "generated")
 	os.MkdirAll(genDir, 0755)
 
 	// Test file in a subfolder
@@ -362,8 +362,9 @@ func TestAPI_Files(t *testing.T) {
 		t.Errorf("GET file in generated folder: expected 200, got %d", resp.Code)
 	}
 
-	// Test file directly in storageDir
-	rootFile := filepath.Join(tmpDir, "root.txt")
+	// Test file directly in storageDir/uploads
+	rootFile := filepath.Join(tmpDir, "uploads", "root.txt")
+	os.MkdirAll(filepath.Join(tmpDir, "uploads"), 0755)
 	os.WriteFile(rootFile, []byte("root content"), 0644)
 
 	req = httptest.NewRequest("GET", "/api/v1/files/root.txt", nil)
