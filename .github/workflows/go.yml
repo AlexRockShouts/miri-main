@@ -22,13 +22,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v4
       with:
-        go-version: '1.25.6'
-
-    - name: create directory
-      run: |
-        mkdir -p /home/runner/work/miri-main/src/cmd/server/dashboard
-        touch /home/runner/work/miri-main/src/cmd/server/dashboard/.gitkeep
-
+        go-version: '1.25.10'
 
     - name: Build-Server
       working-directory: miri-main
