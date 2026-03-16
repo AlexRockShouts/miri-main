@@ -684,6 +684,30 @@ Built with modern Go idioms.
 
 ## Quick Start (Updated)
 
+### CLI Setup Wizard
+On first startup (no `~/.miri/config.yaml`) or with `--setup` / `--reset-config`, Miri launches an interactive CLI wizard:
+
+```
+$ ./bin/miri-server
+=== Miri Setup Wizard ===
+LLM Provider (xai/openai/anthropic/groq) [xai]: 
+Enter API Key/Token: xai-...
+Default Model [grok-beta]: 
+Storage Directory [~/.miri]: 
+Server Address [:8080]: 
+Server Key [devkey123]: 
+Admin Username [admin]: 
+Admin Password [admin]: 
+Setup complete! Config saved to /Users/.../.miri/config.yaml
+```
+
+Configures provider/token/model/server basics. Edit `config.yaml` post-setup.
+
+**Flags:**
+- `--setup`: Force wizard (overwrites config).
+- `--reset-config`: Delete config + wizard.
+- `--config /path/to/custom.yaml`: Load override.
+
 Build and run the server binary:
 
 ```bash

@@ -12,6 +12,7 @@ docs/ApiV1FilesDelete200Response.md
 docs/ApiV1InteractionPostRequest.md
 docs/ApiV1PromptPost200Response.md
 docs/ApiV1PromptPostRequest.md
+docs/ApiV1SetupConfigurePost200Response.md
 docs/ApiV1SubagentsIdTranscriptGet200ResponseInner.md
 docs/BrainConfig.md
 docs/BrainConfigRetrieval.md
@@ -46,6 +47,8 @@ docs/PaginatedTasks.md
 docs/ProviderConfig.md
 docs/SearchResult.md
 docs/Session.md
+docs/SetupRequest.md
+docs/SetupStatus.md
 docs/Skill.md
 docs/SkillCommand.md
 docs/SpawnSubAgentRequest.md
