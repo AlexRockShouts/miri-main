@@ -14,6 +14,7 @@ docs/ApiV1PromptPost200Response.md
 docs/ApiV1PromptPostRequest.md
 docs/ApiV1SubagentsIdTranscriptGet200ResponseInner.md
 docs/BrainConfig.md
+docs/BrainConfigRetrieval.md
 docs/Config.md
 docs/ConfigAgents.md
 docs/ConfigAgentsDefaults.md
@@ -33,6 +34,7 @@ docs/Human.md
 docs/ListFilesResponse.md
 docs/Message.md
 docs/MiriSubConfig.md
+docs/MiriSubConfigKeepass.md
 docs/ModelConfig.md
 docs/ModelConfigCost.md
 docs/PaginatedHistory.md

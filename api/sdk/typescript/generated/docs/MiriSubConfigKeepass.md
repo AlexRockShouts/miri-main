@@ -1,21 +1,21 @@
-# MiriSubConfig
+# MiriSubConfigKeepass
 
 
 ## Properties
 
 Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
-**brain** | [**BrainConfig**](BrainConfig.md) |  | [optional] [default to undefined]
-**keepass** | [**MiriSubConfigKeepass**](MiriSubConfigKeepass.md) |  | [optional] [default to undefined]
+**db_path** | **string** |  | [optional] [default to undefined]
+**password** | **string** |  | [optional] [default to undefined]
 
 ## Example
 
 ```typescript
-import { MiriSubConfig } from './api';
+import { MiriSubConfigKeepass } from './api';
 
-const instance: MiriSubConfig = {
-    brain,
-    keepass,
+const instance: MiriSubConfigKeepass = {
+    db_path,
+    password,
 };
 ```
 

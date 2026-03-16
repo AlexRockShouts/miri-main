@@ -6,6 +6,8 @@
 Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
 **embeddings** | [**EmbeddingConfig**](EmbeddingConfig.md) |  | [optional] [default to undefined]
+**retrieval** | [**BrainConfigRetrieval**](BrainConfigRetrieval.md) |  | [optional] [default to undefined]
+**max_nodes_per_session** | **number** |  | [optional] [default to undefined]
 
 ## Example
 
@@ -14,6 +16,8 @@ import { BrainConfig } from './api';
 
 const instance: BrainConfig = {
     embeddings,
+    retrieval,
+    max_nodes_per_session,
 };
 ```
 

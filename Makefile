@@ -33,13 +33,16 @@ DASHBOARD_SRC_DIR := ../miri-dashboard
 DASHBOARD_EMBED_DIR := src/cmd/server/dashboard
 
 dashboard-build:
+	@mkdir -p $(DASHBOARD_EMBED_DIR)
 	@if [ -d "$(DASHBOARD_SRC_DIR)" ]; then \
 		echo "Building dashboard from $(DASHBOARD_SRC_DIR)..."; \
 		cd $(DASHBOARD_SRC_DIR) && npm install && npm run build; \
-		mkdir -p $(DASHBOARD_EMBED_DIR); \
 		cp -r $(DASHBOARD_SRC_DIR)/build/* $(DASHBOARD_EMBED_DIR)/; \
 	else \
-		echo "Dashboard source not found at $(DASHBOARD_SRC_DIR). Skipping embed."; \
+		echo "Dashboard source not found at $(DASHBOARD_SRC_DIR). Skipping embed. Ensuring directory exists for build."; \
+		if [ ! -f "$(DASHBOARD_EMBED_DIR)/.gitkeep" ] && [ -z "$$(ls -A $(DASHBOARD_EMBED_DIR))" ]; then \
+			touch $(DASHBOARD_EMBED_DIR)/.gitkeep; \
+		fi \
 	fi
 
 # --- TypeScript SDK tasks ---

@@ -277,3 +277,11 @@ func (w *Whatsapp) Poll() {
 		}()
 	}
 }
+
+func (w *Whatsapp) Stop() {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.client != nil {
+		w.client.Disconnect()
+	}
+}

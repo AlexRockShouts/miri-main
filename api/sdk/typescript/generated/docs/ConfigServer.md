@@ -7,6 +7,7 @@ Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
 **addr** | **string** |  | [optional] [default to undefined]
 **key** | **string** |  | [optional] [default to undefined]
+**host** | **string** |  | [optional] [default to undefined]
 **admin_user** | **string** |  | [optional] [default to 'admin']
 **admin_pass** | **string** |  | [optional] [default to 'admin-password']
 
@@ -18,6 +19,7 @@ import { ConfigServer } from './api';
 const instance: ConfigServer = {
     addr,
     key,
+    host,
     admin_user,
     admin_pass,
 };

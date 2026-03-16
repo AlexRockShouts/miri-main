@@ -96,6 +96,7 @@ type AgentConfig struct{}
 type ServerConfig struct {
 	Addr          string `mapstructure:"addr" json:"addr"`
 	Key           string `mapstructure:"key" json:"key"`
+	Host          string `mapstructure:"host" json:"host"`
 	AdminUser     string `mapstructure:"admin_user" json:"admin_user"`
 	AdminPass     string `mapstructure:"admin_pass" json:"admin_pass"`
 	EffectiveHost string `mapstructure:"-" json:"effectiveHost"`
@@ -274,35 +275,61 @@ func Save(cfg *Config) error {
 	}
 
 	// Update viper state
+	viper.Set("storage_dir", cfg.StorageDir)
+
+	// Models
 	viper.Set("models.mode", cfg.Models.Mode)
 	for p, prov := range cfg.Models.Providers {
-		viper.Set("models.providers."+p+".baseUrl", prov.BaseURL)
-		viper.Set("models.providers."+p+".apiKey", prov.APIKey)
-		viper.Set("models.providers."+p+".api", prov.API)
+		prefix := "models.providers." + p
+		viper.Set(prefix+".baseUrl", prov.BaseURL)
+		viper.Set(prefix+".apiKey", prov.APIKey)
+		viper.Set(prefix+".api", prov.API)
 		for i, m := range prov.Models {
-			viper.Set("models.providers."+p+".models."+strconv.Itoa(i)+".id", m.ID)
-			viper.Set("models.providers."+p+".models."+strconv.Itoa(i)+".name", m.Name)
-			viper.Set("models.providers."+p+".models."+strconv.Itoa(i)+".contextWindow", m.ContextWindow)
-			viper.Set("models.providers."+p+".models."+strconv.Itoa(i)+".maxTokens", m.MaxTokens)
-			viper.Set("models.providers."+p+".models."+strconv.Itoa(i)+".reasoning", m.Reasoning)
-			viper.Set("models.providers."+p+".models."+strconv.Itoa(i)+".input", m.Input)
-			viper.Set("models.providers."+p+".models."+strconv.Itoa(i)+".cost.input", m.Cost.Input)
-			viper.Set("models.providers."+p+".models."+strconv.Itoa(i)+".cost.output", m.Cost.Output)
-			viper.Set("models.providers."+p+".models."+strconv.Itoa(i)+".cost.cacheRead", m.Cost.CacheRead)
-			viper.Set("models.providers."+p+".models."+strconv.Itoa(i)+".cost.cacheWrite", m.Cost.CacheWrite)
+			mPrefix := prefix + ".models." + strconv.Itoa(i)
+			viper.Set(mPrefix+".id", m.ID)
+			viper.Set(mPrefix+".name", m.Name)
+			viper.Set(mPrefix+".contextWindow", m.ContextWindow)
+			viper.Set(mPrefix+".maxTokens", m.MaxTokens)
+			viper.Set(mPrefix+".reasoning", m.Reasoning)
+			viper.Set(mPrefix+".input", m.Input)
+			viper.Set(mPrefix+".cost.input", m.Cost.Input)
+			viper.Set(mPrefix+".cost.output", m.Cost.Output)
+			viper.Set(mPrefix+".cost.cacheRead", m.Cost.CacheRead)
+			viper.Set(mPrefix+".cost.cacheWrite", m.Cost.CacheWrite)
 		}
 	}
+
+	// Agents
 	viper.Set("agents.defaults.model.primary", cfg.Agents.Defaults.Model.Primary)
 	for i, fb := range cfg.Agents.Defaults.Model.Fallbacks {
 		viper.Set("agents.defaults.model.fallbacks."+strconv.Itoa(i), fb)
 	}
+	viper.Set("agents.subagents", cfg.Agents.SubAgents)
+	viper.Set("agents.debug", cfg.Agents.Debug)
+
+	// Server
 	viper.Set("server.addr", cfg.Server.Addr)
 	viper.Set("server.key", cfg.Server.Key)
+	viper.Set("server.host", cfg.Server.Host)
 	viper.Set("server.admin_user", cfg.Server.AdminUser)
 	viper.Set("server.admin_pass", cfg.Server.AdminPass)
+
+	// Miri Brain
+	viper.Set("miri.brain.embeddings.use_native_embeddings", cfg.Miri.Brain.Embeddings.UseNativeEmbeddings)
 	viper.Set("miri.brain.embeddings.model.type", cfg.Miri.Brain.Embeddings.Model.Type)
 	viper.Set("miri.brain.embeddings.model.api_key", cfg.Miri.Brain.Embeddings.Model.APIKey)
-	viper.Set("miri.brain.embeddings.use_native_embeddings", cfg.Miri.Brain.Embeddings.UseNativeEmbeddings)
+	viper.Set("miri.brain.embeddings.model.model", cfg.Miri.Brain.Embeddings.Model.Model)
+	viper.Set("miri.brain.embeddings.model.url", cfg.Miri.Brain.Embeddings.Model.URL)
+	viper.Set("miri.brain.retrieval.graph_steps", cfg.Miri.Brain.Retrieval.GraphSteps)
+	viper.Set("miri.brain.retrieval.facts_top_k", cfg.Miri.Brain.Retrieval.FactsTopK)
+	viper.Set("miri.brain.retrieval.summaries_top_k", cfg.Miri.Brain.Retrieval.SummariesTopK)
+	viper.Set("miri.brain.max_nodes_per_session", cfg.Miri.Brain.MaxNodesPerSession)
+
+	// Miri KeePass
+	viper.Set("miri.keepass.db_path", cfg.Miri.KeePass.DBPath)
+	viper.Set("miri.keepass.password", cfg.Miri.KeePass.Password)
+
+	// Channels
 	viper.Set("channels.whatsapp.enabled", cfg.Channels.Whatsapp.Enabled)
 	viper.Set("channels.whatsapp.allowlist", cfg.Channels.Whatsapp.Allowlist)
 	viper.Set("channels.whatsapp.blocklist", cfg.Channels.Whatsapp.Blocklist)
@@ -319,7 +346,6 @@ func Save(cfg *Config) error {
 	viper.Set("channels.irc.nickserv.password", cfg.Channels.IRC.NickServ.Password)
 	viper.Set("channels.irc.allowlist", cfg.Channels.IRC.Allowlist)
 	viper.Set("channels.irc.blocklist", cfg.Channels.IRC.Blocklist)
-	viper.Set("storage_dir", cfg.StorageDir)
 
 	configPath := filepath.Join(cfg.StorageDir, "config.yaml")
 	viper.SetConfigType("yaml")

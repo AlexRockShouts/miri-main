@@ -71,6 +71,8 @@ components:
               type: string
             key:
               type: string
+            host:
+              type: string
             admin_user:
               type: string
               default: admin
@@ -167,12 +169,30 @@ components:
       properties:
         brain:
           $ref: '#/components/schemas/BrainConfig'
+        keepass:
+          type: object
+          properties:
+            db_path:
+              type: string
+            password:
+              type: string
 
     BrainConfig:
       type: object
       properties:
         embeddings:
           $ref: '#/components/schemas/EmbeddingConfig'
+        retrieval:
+          type: object
+          properties:
+            graph_steps:
+              type: integer
+            facts_top_k:
+              type: integer
+            summaries_top_k:
+              type: integer
+        max_nodes_per_session:
+          type: integer
 
     EmbeddingConfig:
       type: object

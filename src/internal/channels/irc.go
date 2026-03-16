@@ -134,3 +134,7 @@ func (i *IRC) SetMessageHandler(handler func(target string, message string)) {
 func (i *IRC) Run() error {
 	return i.client.Connect()
 }
+
+func (i *IRC) Stop() {
+	i.client.Close()
+}

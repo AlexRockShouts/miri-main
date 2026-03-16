@@ -254,12 +254,64 @@ func (gw *Gateway) NumSubAgents() int {
 
 func (gw *Gateway) UpdateConfig(newCfg *config.Config) {
 	gw.Config = newCfg
+
+	// 1. Refresh Agents
 	gw.PrimaryAgent.Config = newCfg
 	gw.PrimaryAgent.InitEngine(gw)
 	for _, sub := range gw.SubAgents {
 		sub.Config = newCfg
 		sub.InitEngine(gw)
 	}
+
+	// 2. Refresh Channels
+	// Stop existing
+	for name, ch := range gw.Channels {
+		slog.Info("stopping channel for config update", "channel", name)
+		ch.Stop()
+	}
+	gw.Channels = make(map[string]channels.Channel)
+
+	if newCfg.Channels.Whatsapp.Enabled {
+		ch := channels.NewWhatsapp(newCfg.StorageDir, newCfg.Channels.Whatsapp.Allowlist, newCfg.Channels.Whatsapp.Blocklist)
+		if ch != nil {
+			gw.Channels["whatsapp"] = ch
+			ch.SetMessageHandler(func(device, msg string) {
+				sessionID := session.DefaultSessionID
+				resp, err := gw.PrimaryAgent.DelegatePrompt(sessionID, msg)
+				if err != nil {
+					slog.Error("failed to handle incoming whatsapp msg", "device", device, "error", err)
+					return
+				}
+				if err := gw.ChannelSend("whatsapp", device, resp); err != nil {
+					slog.Error("failed to send auto-response", "device", device, "error", err)
+				}
+			})
+			slog.Info("whatsapp channel re-initialized")
+		}
+	}
+
+	if newCfg.Channels.IRC.Enabled {
+		ch := channels.NewIRC(newCfg.Channels.IRC)
+		if ch != nil {
+			gw.Channels["irc"] = ch
+			ch.SetMessageHandler(func(target, msg string) {
+				sessionID := session.DefaultSessionID
+				resp, err := gw.PrimaryAgent.DelegatePrompt(sessionID, msg)
+				if err != nil {
+					slog.Error("failed to handle incoming irc msg", "target", target, "error", err)
+					return
+				}
+				if err := gw.ChannelSend("irc", target, resp); err != nil {
+					slog.Error("failed to send irc response", "target", target, "error", err)
+				}
+			})
+			slog.Info("irc channel re-initialized")
+		}
+	}
+
+	// 3. Refresh Cron (maintenance)
+	// We don't restart CronManager itself to avoid dropping jobs,
+	// but we could refresh the maintenance schedule if needed.
 }
 
 func (gw *Gateway) SaveHuman(content string) error {

@@ -85,6 +85,13 @@ export interface ApiV1SubagentsIdTranscriptGet200ResponseInner {
 }
 export interface BrainConfig {
     'embeddings'?: EmbeddingConfig;
+    'retrieval'?: BrainConfigRetrieval;
+    'max_nodes_per_session'?: number;
+}
+export interface BrainConfigRetrieval {
+    'graph_steps'?: number;
+    'facts_top_k'?: number;
+    'summaries_top_k'?: number;
 }
 export interface Config {
     'storage_dir'?: string;
@@ -140,6 +147,7 @@ export interface ConfigModels {
 export interface ConfigServer {
     'addr'?: string;
     'key'?: string;
+    'host'?: string;
     'admin_user'?: string;
     'admin_pass'?: string;
 }
@@ -175,6 +183,11 @@ export interface Message {
 }
 export interface MiriSubConfig {
     'brain'?: BrainConfig;
+    'keepass'?: MiriSubConfigKeepass;
+}
+export interface MiriSubConfigKeepass {
+    'db_path'?: string;
+    'password'?: string;
 }
 export interface ModelConfig {
     'id'?: string;

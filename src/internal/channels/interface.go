@@ -11,6 +11,8 @@ type Channel interface {
 	ListDevices(ctx context.Context) ([]string, error)
 	Send(ctx context.Context, deviceID string, msg string) error
 	SendFile(ctx context.Context, deviceID string, filePath string, caption string) error
+	Stop()
+	SetMessageHandler(handler func(string, string))
 }
 
 type Processor interface {
