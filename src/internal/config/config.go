@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"miri-main/src/internal/system"
 	"net"
 	"os"
 	"path/filepath"
@@ -165,7 +166,7 @@ func Load(override string) (*Config, error) {
 	}
 
 	if override != "" {
-		viper.AddConfigPath(".")
+		viper.AddConfigPath(system.GetProjectRoot())
 		viper.SetConfigFile(override)
 		if err := viper.ReadInConfig(); err != nil {
 			if _, ok := err.(viper.ConfigFileNotFoundError); !ok {

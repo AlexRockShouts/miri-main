@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"miri-main/src/internal/engine/tools"
+	"miri-main/src/internal/system"
 	"path/filepath"
 
 	"encoding/json"
@@ -26,7 +27,7 @@ import (
 // and wraps each as a tool callable by the orchestrator LLM.
 
 func getInstruction(role string) string {
-	promptPath := filepath.Join("templates", "subagents", role+".prompt")
+	promptPath := filepath.Join(system.GetProjectRoot(), "templates", "subagents", role+".prompt")
 	data, err := os.ReadFile(promptPath)
 	if err != nil {
 		slog.Warn("failed to load subagent instruction prompt", "role", role, "path", promptPath, "error", err)

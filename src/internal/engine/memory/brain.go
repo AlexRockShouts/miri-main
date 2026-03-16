@@ -6,6 +6,8 @@ import (
 	"miri-main/src/internal/config"
 	"miri-main/src/internal/engine/memory/mole_syn"
 	"miri-main/src/internal/storage"
+	"miri-main/src/internal/system"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -100,7 +102,7 @@ func (b *Brain) sanitize(msgs []*schema.Message) []*schema.Message {
 }
 
 func (b *Brain) syncPrompts() error {
-	const templatesDir = "templates/brain"
+	templatesDir := filepath.Join(system.GetProjectRoot(), "templates", "brain")
 	if err := b.storage.SyncBrainPrompts(templatesDir); err != nil {
 		if strings.Contains(err.Error(), "failed to read source prompts") {
 			slog.Warn("Template prompts directory not found, skipping sync", "dir", templatesDir)

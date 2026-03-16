@@ -95,7 +95,7 @@ func main() {
 	gw := gateway.New(cfg, s)
 
 	// Copy skills from templates
-	templateSkillsPath := filepath.Join(".", "templates", "skills")
+	templateSkillsPath := filepath.Join(system.GetProjectRoot(), "templates", "skills")
 	if err := s.CopySkills(templateSkillsPath); err != nil {
 		slog.Warn("failed to copy skills from templates", "error", err)
 	} else {
