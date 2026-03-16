@@ -1,12 +1,12 @@
 
 # Build dashboard
 FROM node:24-alpine AS dashboard-builder
-RUN apk add --no-cache git make wget
+RUN apk add --no-cache git make
 RUN git clone https://github.com/AlexRockShouts/miri-dashboard.git /tmp/miri-dashboard
 RUN cd /tmp/miri-dashboard
 WORKDIR /tmp/miri-dashboard
 RUN npm install
-run npm run build
+RUN npm run build
 
 # Build Go Backend
 FROM golang:1.25-alpine AS builder
