@@ -41,7 +41,6 @@ func (s *SearchToolWrapper) InvokableRun(ctx context.Context, argumentsInJSON st
 		Query string `json:"query"`
 	}
 	if err := json.Unmarshal([]byte(argumentsInJSON), &args); err != nil {
-		slog.Error("failed to unmarshal web search arguments", "error", err, "arguments", argumentsInJSON)
 		return "", err
 	}
 	results, err := webSearch(ctx, args.Query)
