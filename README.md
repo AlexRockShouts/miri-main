@@ -870,3 +870,8 @@ Some bullets above supersede earlier sections in this README:
 - The binary is `bin/miri-server`, not `miri`.
 - Legacy skill endpoints (`/api/admin/v1/skills/remote`, install via POST) and engine tools (`skill_install`, `skill_list_remote`, `skill_search`) were removed. Use the `learn` skill instead.
 - Single-chat model: the primary chat session is `miri:main:agent`.
+
+
+## License
+
+Licensed under the [Apache License, Version 2.0](LICENSE).
