@@ -1,10 +1,10 @@
-name: Release Miri Dashboard
+name: Release Miri Main & SDK
 
 on:
   push:
     tags:
-      - 'v*'
-  workflow_dispatch:
+      - 'v*' # Trigger on version tags like v1.0.0
+  workflow_dispatch: # Allow manual trigger
     inputs:
       tag_name:
         description: 'Tag name to create (e.g., v1.0.0). If empty, it will increment the current tag.'
@@ -15,22 +15,34 @@ permissions:
   id-token: write
   contents: write
   attestations: write
+  packages: write
+  security-events: write
 
 jobs:
   test:
-    name: Lint and Test Dashboard
+    name: Run Go Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+          cache: true
+      - name: Run tests
+        run: go test -v -race ./...
+
+  security-scan:
+    name: Security Scan
     runs-on: ubuntu-latest
     outputs:
       tag_name: ${{ steps.version.outputs.tag_name }}
     steps:
-      - name: Checkout dashboard
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
-          path: miri-dashboard
           fetch-depth: 0
       - name: Determine version
         id: version
-        working-directory: miri-dashboard
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             if [ -n "${{ github.event.inputs.tag_name }}" ]; then
@@ -54,7 +66,6 @@ jobs:
           fi
       - name: Create and push tag
         if: github.event_name == 'workflow_dispatch'
-        working-directory: miri-dashboard
         run: |
           git config user.name github-actions
           git config user.email github-actions@github.com
@@ -64,83 +75,169 @@ jobs:
           else
             echo "Tag ${{ steps.version.outputs.tag_name }} already exists"
           fi
-      - name: Checkout main (for SDK)
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+      - name: Go Vulnerability Check
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./...
+      - name: Node Security Scan (SDK)
+        run: |
+          cd api/sdk/typescript
+          npm audit --audit-level=high
+      - name: Static Analysis (Gosec)
+        uses: securego/gosec@master
+        with:
+          args: ./...
+
+  build-binaries:
+    name: Build Cross-Platform Standalone Binaries
+    needs: [test, security-scan]
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: [linux, darwin, windows]
+        arch: [amd64, arm64]
+    steps:
+      - name: Checkout main
         uses: actions/checkout@v4
         with:
-          repository: AlexRockShouts/miri-main
           path: miri-main
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-      - name: Build SDK dependency
-        run: |
-          cd miri-main/api/sdk/typescript
-          npm install
-          npm run build
-      - name: Install and Lint
-        run: |
-          cd miri-dashboard
-          sed -i 's|file:../../GolandProjects/miri-main/api/sdk/typescript|file:../miri-main/api/sdk/typescript|' package.json
-          npm install
-          npm run check || echo "Linting failed or check script not fully compatible"
-      - name: Node Security Scan
-        run: |
-          cd miri-dashboard
-          npm audit --audit-level=high
-
-  build:
-    name: Build Dashboard
-    needs: test
-    runs-on: ubuntu-latest
-    steps:
       - name: Checkout dashboard
         uses: actions/checkout@v4
         with:
+          repository: AlexRockShouts/miri-dashboard
           path: miri-dashboard
-
-      - name: Checkout main (for SDK)
-        uses: actions/checkout@v4
-        with:
-          repository: AlexRockShouts/miri-main
-          path: miri-main
-
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-
-      - name: Build SDK dependency
+      - name: Build SDK & Dashboard
         run: |
           cd miri-main/api/sdk/typescript
-          npm install
-          npm run build
-
-      - name: Build Dashboard
-        run: |
-          cd miri-dashboard
-          # Update the local path to match checkout structure
+          npm install && npm run build
+          cd ../../../../miri-dashboard
           sed -i 's|file:../../GolandProjects/miri-main/api/sdk/typescript|file:../miri-main/api/sdk/typescript|' package.json
-          npm install
-          npm run build
-      
-      - name: Package Dashboard Build
+          npm install && npm run build
+          mkdir -p ../miri-main/src/cmd/server/dashboard
+          cp -r build/* ../miri-main/src/cmd/server/dashboard/
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: 'miri-main/go.mod'
+      - name: Build binary
+        working-directory: miri-main
+        env:
+          GOOS: ${{ matrix.os }}
+          GOARCH: ${{ matrix.arch }}
         run: |
-          cd miri-dashboard
-          zip -r ../miri-dashboard.zip build/
-
-      - name: Attest Dashboard Build
+          BINARY_NAME="miri-server-${{ matrix.os }}-${{ matrix.arch }}"
+          if [ "${{ matrix.os }}" = "windows" ]; then
+            BINARY_NAME="${BINARY_NAME}.exe"
+          fi
+          go build -trimpath -ldflags '-s -w' -o "bin/${BINARY_NAME}" ./src/cmd/server/main.go
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: bin-${{ matrix.os }}-${{ matrix.arch }}
+          path: miri-main/bin/
+      - name: Attest Binary
         uses: actions/attest-build-provenance@v2
         if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
         with:
-          subject-path: "miri-dashboard.zip"
+          subject-path: "miri-main/bin/miri-server-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.os == 'windows' && '.exe' || '' }}"
 
+  publish-sdk:
+    name: Publish TS SDK
+    needs: [test, security-scan]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+      - name: Install dependencies and generate SDK
+        run: |
+          npm install -g @openapitools/openapi-generator-cli
+          make ts-sdk-generate
+          make ts-sdk-install
+      - name: Build SDK
+        run: make ts-sdk-build
+      - name: Publish to npm
+        run: make ts-sdk-publish
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  docker:
+    name: Build and Push Docker Image
+    needs: [test, security-scan]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          path: miri-main
+      - name: Checkout dashboard
+        uses: actions/checkout@v4
+        with:
+          repository: AlexRockShouts/miri-dashboard
+          path: miri-dashboard
+      - name: Set up QEMU
+        uses: actions/setup-qemu-action@v3
+      - name: Set up Docker Buildx
+        uses: actions/setup-buildx-action@v3
+      - name: Login to DockerHub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+      - name: Build and push
+        id: push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./miri-main/Dockerfile
+          push: true
+          tags: |
+            ${{ secrets.DOCKER_USERNAME }}/miri-combined:latest
+            ${{ secrets.DOCKER_USERNAME }}/miri-combined:${{ needs.security-scan.outputs.tag_name }}
+      - name: Attest Docker Image
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: index.docker.io/${{ secrets.DOCKER_USERNAME }}/miri-combined
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
+      - name: Container Security Scan (Trivy)
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: '${{ secrets.DOCKER_USERNAME }}/miri-combined:latest'
+          format: 'table'
+          exit-code: '1'
+          ignore-unfixed: true
+          vuln-type: 'os,library'
+          severity: 'CRITICAL,HIGH'
+
+  release:
+    name: Create GitHub Release
+    needs: [build-binaries, publish-sdk, docker, security-scan]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ needs.test.outputs.tag_name }}
-          files: miri-dashboard.zip
+          tag_name: ${{ needs.security-scan.outputs.tag_name }}
+          files: artifacts/*
           draft: false
           prerelease: false
           generate_release_notes: true
-        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
