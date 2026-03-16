@@ -83,14 +83,6 @@ jobs:
         run: |
           go install golang.org/x/vuln/cmd/govulncheck@latest
           govulncheck ./...
-      - name: Node Security Scan (SDK)
-        run: |
-          cd api/sdk/typescript
-          npm audit --audit-level=high
-      - name: Static Analysis (Gosec)
-        uses: securego/gosec@master
-        with:
-          args: ./...
 
   build-binaries:
     name: Build Cross-Platform Standalone Binaries

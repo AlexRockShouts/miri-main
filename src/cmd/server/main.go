@@ -6,6 +6,7 @@ import (
 	"bufio"
 	"context"
 	"embed"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -45,7 +46,7 @@ func main() {
 	defaultConfigPath := filepath.Join(appDir, "config.yaml")
 
 	if resetFlag {
-		if err := os.Remove(defaultConfigPath); err != nil && !os.IsNotExist(err) {
+		if err := os.Remove(defaultConfigPath); err != nil && !errors.Is(err, fs.ErrNotExist) {
 			slog.Error("failed to reset config", "error", err)
 			os.Exit(1)
 		}

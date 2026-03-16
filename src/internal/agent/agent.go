@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"math"
 	"miri-main/src/internal/config"
 	"miri-main/src/internal/engine"
 	"miri-main/src/internal/engine/skills"
@@ -110,7 +111,9 @@ func (a *Agent) DelegatePromptWithOptions(ctx context.Context, sessionID string,
 		return "", err
 	}
 	if usage != nil {
-		session.AddTokens(uint64(usage.PromptTokens), uint64(usage.CompletionTokens), usage.TotalCost)
+		pt := math.Max(0, float64(usage.PromptTokens))
+		ct := math.Max(0, float64(usage.CompletionTokens))
+		session.AddTokens(uint64(pt), uint64(ct), usage.TotalCost)
 	}
 
 	return resp, nil
@@ -176,7 +179,9 @@ func (a *Agent) DelegatePromptStreamWithOptions(ctx context.Context, sessionID s
 				var cost float64
 				_, err := fmt.Sscanf(chunk, "[Usage: %d prompt, %d completion, %d total tokens, %f cost]", &p, &c, &t, &cost)
 				if err == nil {
-					session.AddTokens(uint64(p), uint64(c), cost)
+					pt := math.Max(0, float64(p))
+					ct := math.Max(0, float64(c))
+					session.AddTokens(uint64(pt), uint64(ct), cost)
 				}
 				// Don't pass usage chunk to client if you want it to be hidden
 				continue

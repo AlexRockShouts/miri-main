@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"miri-main/src/internal/tasks"
 	"os"
 	"path/filepath"
@@ -71,47 +72,65 @@ func (s *Storage) CopySkills(srcDir string) error {
 		return nil // Source doesn't exist, nothing to copy
 	}
 
-	return filepath.Walk(srcDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
+	type entry struct {
+		rel   string
+		mode  os.FileMode
+		isDir bool
+	}
+	var entries []entry
 
-		relPath, err := filepath.Rel(srcDir, path)
+	if err := filepath.Walk(srcDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
-		if relPath == "." {
+		if path == srcDir {
 			return nil
 		}
-
-		destPath := filepath.Join(destDir, relPath)
-		if info.IsDir() {
-			return os.MkdirAll(destPath, info.Mode())
+		rel, err := filepath.Rel(srcDir, path)
+		if err != nil {
+			return err
 		}
+		entries = append(entries, entry{
+			rel:   rel,
+			mode:  info.Mode(),
+			isDir: info.IsDir(),
+		})
+		return nil
+	}); err != nil {
+		return err
+	}
 
+	for _, e := range entries {
+		destPath := filepath.Join(destDir, e.rel)
+		if e.isDir {
+			if err := os.MkdirAll(destPath, e.mode); err != nil {
+				return err
+			}
+			continue
+		}
 		// Don't overwrite if exists
 		if _, err := os.Stat(destPath); err == nil {
-			return nil
+			continue
 		}
-
-		srcFile, err := os.Open(path)
+		srcPath := filepath.Join(srcDir, e.rel)
+		srcFile, err := os.Open(srcPath)
 		if err != nil {
 			return err
 		}
 		defer srcFile.Close()
-
 		destFile, err := os.Create(destPath)
 		if err != nil {
 			return err
 		}
 		defer destFile.Close()
-
-		_, err = io.Copy(destFile, srcFile)
-		if err != nil {
+		if _, err := io.Copy(destFile, srcFile); err != nil {
 			return err
 		}
-		return os.Chmod(destPath, info.Mode())
-	})
+		if err := os.Chmod(destPath, e.mode); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // BootstrapSoul ensures that soul.md exists in the storage directory,
@@ -342,7 +361,11 @@ func (s *Storage) DeleteTask(id string) error {
 	defer s.mu.Unlock()
 
 	path := filepath.Join(s.baseDir, "tasks", id+".json")
-	return os.Remove(path)
+	err := os.Remove(path)
+	if err != nil && !os.IsNotExist(err) {
+		slog.Warn("failed to delete task", "path", path, "err", err)
+	}
+	return err
 }
 
 func (s *Storage) SyncBrainPrompts(srcDir string) error {
@@ -409,7 +432,11 @@ func (s *Storage) LoadSubAgentRun(id string) (*SubAgentRun, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	data, err := os.ReadFile(filepath.Join(s.subAgentRunsDir(), id+".json"))
+	safeID := filepath.Base(id)
+	if safeID != id {
+		return nil, fmt.Errorf("invalid run ID %q", id)
+	}
+	data, err := os.ReadFile(filepath.Join(s.subAgentRunsDir(), safeID+".json"))
 	if err != nil {
 		return nil, err
 	}
@@ -459,16 +486,24 @@ func (s *Storage) ListSubAgentRuns(parentSession string) ([]*SubAgentRun, error)
 // run's transcript file (JSONL format).
 func (s *Storage) AppendSubAgentTranscript(runID string, role, content string) error {
 	dir := s.subAgentRunsDir()
+	safeID := filepath.Base(runID)
+	if safeID != runID {
+		return fmt.Errorf("invalid run ID %q", runID)
+	}
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return err
 	}
-	path := filepath.Join(dir, runID+".transcript")
+	path := filepath.Join(dir, safeID+".transcript")
 	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		return err
 	}
 	defer f.Close()
-	line, _ := json.Marshal(map[string]string{"role": role, "content": content})
+	data := map[string]string{
+		"role":    role,
+		"content": content,
+	}
+	line, _ := json.Marshal(data)
 	_, err = fmt.Fprintf(f, "%s\n", line)
 	return err
 }
@@ -478,7 +513,11 @@ func (s *Storage) LoadSubAgentTranscript(runID string) ([]map[string]string, err
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	data, err := os.ReadFile(filepath.Join(s.subAgentRunsDir(), runID+".transcript"))
+	safeRunID := filepath.Base(runID)
+	if safeRunID != runID {
+		return nil, fmt.Errorf("invalid run ID %q", runID)
+	}
+	data, err := os.ReadFile(filepath.Join(s.subAgentRunsDir(), safeRunID+".transcript"))
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil

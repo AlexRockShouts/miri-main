@@ -2,11 +2,13 @@ package engine
 
 import (
 	"context"
+	"errors"
+	"github.com/cloudwego/eino/schema"
+	"io/fs"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sync"
-
-	"github.com/cloudwego/eino/schema"
 )
 
 // FileCheckPointStore implements compose.CheckPointStore by saving data to the filesystem.
@@ -53,10 +55,14 @@ func (s *FileCheckPointStore) Delete(ctx context.Context, checkPointID string) e
 
 	path := filepath.Join(s.baseDir, checkPointID+".json")
 	err := os.Remove(path)
-	if err != nil && os.IsNotExist(err) {
-		return nil
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil
+		}
+		slog.Warn("failed to delete checkpoint", "path", path, "err", err)
+		return err
 	}
-	return err
+	return nil
 }
 
 // engineState represents the resumable state of the EinoEngine ReAct loop.

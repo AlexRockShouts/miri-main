@@ -16,10 +16,8 @@ import (
 
 	"archive/zip"
 	"fmt"
-	"io"
-	"io/fs"
-
 	"github.com/gin-gonic/gin"
+	"io"
 )
 
 func (s *Server) handleGetConfig(c *gin.Context) {
@@ -531,44 +529,62 @@ func (s *Server) handleGetFile(c *gin.Context) {
 			defer tmpZip.Close()
 			defer os.Remove(tmpZip.Name())
 
-			zw := zip.NewWriter(tmpZip)
+			var dirs []string
+			var files []string
 
-			err = filepath.WalkDir(absFile, func(path string, d fs.DirEntry, err error) error {
+			err = filepath.Walk(absFile, func(path string, info os.FileInfo, err error) error {
 				if err != nil {
 					return err
 				}
-				relPath, err := filepath.Rel(absFile, path)
+				if path == absFile {
+					return nil
+				}
+				rel, err := filepath.Rel(absFile, path)
 				if err != nil {
 					return err
 				}
-				if d.IsDir() {
-					_, err := zw.Create(relPath + "/")
-					return err
+				if info.IsDir() {
+					dirs = append(dirs, rel)
+				} else {
+					files = append(files, rel)
 				}
-				f, err := os.Open(path)
-				if err != nil {
-					return err
-				}
-				defer f.Close()
-
-				w, err := zw.Create(relPath)
-				if err != nil {
-					return err
-				}
-
-				_, err = io.Copy(w, f)
-				return err
+				return nil
 			})
 			if err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create zip: " + err.Error()})
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to walk dir: " + err.Error()})
 				return
 			}
-
+			zw := zip.NewWriter(tmpZip)
+			for _, dir := range dirs {
+				_, err := zw.Create(filepath.ToSlash(dir) + "/")
+				if err != nil {
+					zw.Close()
+					c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to add dir to zip: " + err.Error()})
+					return
+				}
+			}
+			for _, rel := range files {
+				srcPath := filepath.Join(absFile, rel)
+				f, err := os.Open(srcPath)
+				if err != nil {
+					c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to open %s: %v", srcPath, err)})
+					return
+				}
+				defer f.Close()
+				w, err := zw.Create(filepath.ToSlash(rel))
+				if err != nil {
+					c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to create zip entry %s: %v", rel, err)})
+					return
+				}
+				if _, err := io.Copy(w, f); err != nil {
+					c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to copy %s to zip: %v", rel, err)})
+					return
+				}
+			}
 			if err := zw.Close(); err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to finalize zip: " + err.Error()})
 				return
 			}
-
 			zipFilename := filepath.Base(cleanSubPath) + ".zip"
 			c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, zipFilename))
 			c.File(tmpZip.Name())
@@ -796,10 +812,15 @@ func (s *Server) handleHumanResponse(c *gin.Context) {
 		s.sendError(c, http.StatusBadRequest, "id required")
 		return
 	}
+	safeID := filepath.Base(id)
+	if safeID != id {
+		s.sendError(c, http.StatusBadRequest, "invalid id (path traversal not allowed)")
+		return
+	}
 
 	gw := c.MustGet("gateway").(*gateway.Gateway)
 	pendingDir := filepath.Join(gw.Config.StorageDir, "human_pending")
-	filePath := filepath.Join(pendingDir, id+".json")
+	filePath := filepath.Join(pendingDir, safeID+".json")
 
 	data, err := os.ReadFile(filePath)
 	if err != nil {

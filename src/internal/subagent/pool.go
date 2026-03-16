@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"math"
 	"miri-main/src/internal/llm"
 	"miri-main/src/internal/session"
 	"miri-main/src/internal/storage"
@@ -118,8 +119,8 @@ func (p *Pool) execute(ctx context.Context, run *storage.SubAgentRun) {
 	}
 
 	if usage != nil {
-		run.PromptTokens = uint64(usage.PromptTokens)
-		run.OutputTokens = uint64(usage.CompletionTokens)
+		run.PromptTokens = uint64(math.Max(0, float64(usage.PromptTokens)))
+		run.OutputTokens = uint64(math.Max(0, float64(usage.CompletionTokens)))
 		run.TotalCost = usage.TotalCost
 	}
 	run.Status = "done"

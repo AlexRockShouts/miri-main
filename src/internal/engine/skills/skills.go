@@ -76,45 +76,65 @@ func (l *SkillLoader) loadSkills() error {
 	// Clear existing skills to allow refresh
 	l.skills = make(map[string]*Skill)
 
-	return filepath.WalkDir(l.SkillsDir, func(path string, d fs.DirEntry, err error) error {
+	var dirs []string
+	var files []string
+
+	err := filepath.WalkDir(l.SkillsDir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
 		if d.IsDir() && path != l.SkillsDir {
-			skill, err := l.parseSkillDir(path)
-			if err != nil {
-				slog.Warn("Failed to parse skill directory", "path", path, "error", err)
-				return nil // Continue walking
-			}
-			if skill != nil {
-				l.skills[skill.Name] = skill
-				// Also index by directory name
-				dirName := filepath.Base(path)
-				if dirName != skill.Name {
-					l.skills[dirName] = skill
-				}
-				slog.Info("Loaded skill from directory", "name", skill.Name, "version", skill.Version)
-			}
-			return filepath.SkipDir // Don't descend into skill subdirectories
+			rel, _ := filepath.Rel(l.SkillsDir, path)
+			dirs = append(dirs, rel)
+			return filepath.SkipDir
 		}
 		if !d.IsDir() && filepath.Ext(path) == ".md" {
-			skill, err := l.parseSkillFile(path)
-			if err != nil {
-				slog.Warn("Failed to parse skill file", "path", path, "error", err)
-				return nil // Continue walking
-			}
-			if skill != nil {
-				l.skills[skill.Name] = skill
-				// Also index by filename
-				fileName := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
-				if fileName != skill.Name {
-					l.skills[fileName] = skill
-				}
-				slog.Info("Loaded skill from file", "name", skill.Name, "version", skill.Version)
-			}
+			rel, _ := filepath.Rel(l.SkillsDir, path)
+			files = append(files, rel)
 		}
 		return nil
 	})
+	if err != nil {
+		return err
+	}
+
+	for _, rel := range dirs {
+		safeDir := filepath.Join(l.SkillsDir, rel)
+		skill, err := l.parseSkillDir(safeDir)
+		if err != nil {
+			slog.Warn("Failed to parse skill directory", "path", safeDir, "error", err)
+			continue
+		}
+		if skill != nil {
+			l.skills[skill.Name] = skill
+			// Also index by directory name
+			dirName := filepath.Base(safeDir)
+			if dirName != skill.Name {
+				l.skills[dirName] = skill
+			}
+			slog.Info("Loaded skill from directory", "name", skill.Name, "version", skill.Version)
+		}
+	}
+
+	for _, rel := range files {
+		safeFile := filepath.Join(l.SkillsDir, rel)
+		skill, err := l.parseSkillFile(safeFile)
+		if err != nil {
+			slog.Warn("Failed to parse skill file", "path", safeFile, "error", err)
+			continue
+		}
+		if skill != nil {
+			l.skills[skill.Name] = skill
+			// Also index by filename
+			fileName := strings.TrimSuffix(filepath.Base(safeFile), filepath.Ext(safeFile))
+			if fileName != skill.Name {
+				l.skills[fileName] = skill
+			}
+			slog.Info("Loaded skill from file", "name", skill.Name, "version", skill.Version)
+		}
+	}
+
+	return nil
 }
 
 func parseFrontmatter(content string) (string, string, error) {

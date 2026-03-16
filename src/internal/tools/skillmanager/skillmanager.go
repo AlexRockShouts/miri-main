@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"log/slog"
 	"net/http"
 	"os"
@@ -26,7 +27,11 @@ func SearchAndInstall(ctx context.Context, skillName, storageDir string) (stdout
 	skillsDir := filepath.Join(storageDir, "skills")
 
 	// Check if already installed
-	if _, err := os.Stat(filepath.Join(skillsDir, skillName)); err == nil {
+	safeSkillName := filepath.Base(skillName)
+	if safeSkillName != skillName {
+		return "", fmt.Sprintf("Invalid skill name %q (path traversal not allowed)", skillName), 1, nil
+	}
+	if _, err := os.Stat(filepath.Join(skillsDir, safeSkillName)); err == nil {
 		return "Skill already installed locally.", "", 0, nil
 	}
 
@@ -116,18 +121,22 @@ func SearchAndInstall(ctx context.Context, skillName, storageDir string) (stdout
 
 	for _, name := range uniqueCandidates {
 		url := fmt.Sprintf("%s/install/%s", BaseURL, name)
-		req, _ := http.NewRequestWithContext(ctx, "HEAD", url, nil)
-		resp, headErr := client.Do(req)
-		if headErr == nil {
-			defer resp.Body.Close()
-			if resp.StatusCode == http.StatusOK {
-				finalURL = url
-				break
-			}
-			lastErr = fmt.Errorf("skill %q not found (404)", name)
-		} else {
-			lastErr = headErr
+		req, err := http.NewRequestWithContext(ctx, "HEAD", url, nil)
+		if err != nil {
+			lastErr = err
+			continue
 		}
+		resp, err := client.Do(req)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode == http.StatusOK {
+			finalURL = url
+			break
+		}
+		lastErr = fmt.Errorf("skill %q not found (404)", name)
 	}
 
 	if finalURL == "" {
@@ -139,12 +148,14 @@ func SearchAndInstall(ctx context.Context, skillName, storageDir string) (stdout
 			slog.Info("agentskill.sh install script not found, trying GitHub fallback", "url", rawURL)
 
 			resp, err := http.Get(rawURL)
-			if err == nil && resp.StatusCode == http.StatusOK {
+			if err == nil {
 				defer resp.Body.Close()
+			}
+			if err == nil && resp.StatusCode == http.StatusOK {
 
 				// Clean name for file
-				safeName := strings.ReplaceAll(ghFallback["name"], "/", "-")
-				safeName = strings.TrimSuffix(safeName, ".md")
+				filename := filepath.Base(ghFallback["name"])
+				safeName := strings.TrimSuffix(filename, ".md")
 
 				// Create flat skill file
 				skillFile := filepath.Join(skillsDir, safeName+".md")
@@ -166,7 +177,9 @@ func SearchAndInstall(ctx context.Context, skillName, storageDir string) (stdout
 					content := string(b)
 					if !strings.HasPrefix(strings.TrimSpace(content), "---") {
 						front := fmt.Sprintf("---\nname: %s\ndescription: Imported from agentskill.sh (no frontmatter at source)\n---\n\n", safeName)
-						_ = os.WriteFile(skillFile, []byte(front+content), 0644)
+						if err := os.WriteFile(skillFile, []byte(front+content), 0644); err != nil {
+							slog.Warn("failed to prepend frontmatter", "path", skillFile, "err", err)
+						}
 					}
 				}
 
@@ -262,8 +275,8 @@ func ListRemoteSkills(ctx context.Context) ([]RemoteSkill, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("failed to fetch remote skills: status %d, body: %s", resp.StatusCode, string(body))
+		body, readErr := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("failed to fetch remote skills: status %d, body: %s (read: %v)", resp.StatusCode, string(body), readErr)
 	}
 
 	body, err := io.ReadAll(resp.Body)
@@ -296,10 +309,14 @@ func RemoveSkill(skillName, storageDir string) error {
 
 	// Helper to remove variations
 	removeVariations := func(name string) {
-		// Flat file
-		os.Remove(filepath.Join(skillsDir, name+".md"))
-		// Resource directory
-		os.RemoveAll(filepath.Join(skillsDir, name))
+		mdPath := filepath.Join(skillsDir, name+".md")
+		if err := os.Remove(mdPath); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			slog.Warn("failed to remove skill md", "path", mdPath, "err", err)
+		}
+		dirPath := filepath.Join(skillsDir, name)
+		if err := os.RemoveAll(dirPath); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			slog.Warn("failed to remove skill dir", "path", dirPath, "err", err)
+		}
 	}
 
 	removeVariations(skillName)
