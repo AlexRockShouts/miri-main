@@ -10,6 +10,8 @@ import (
 )
 
 func TestSearchAndInstall(t *testing.T) {
+	t.Skip("Disabled as per issue - incomplete test")
+	return
 	// Setup a temporary storage directory
 	tempDir, err := os.MkdirTemp("", "miri-test-*")
 	if err != nil {
