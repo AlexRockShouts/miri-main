@@ -1,6 +1,10 @@
-# Miri - Autonomous Agent Service
+# Miri: Your Local AI Companion & Autonomous Agent Framework
 
-Miri is a local autonomous agent written in Go. It integrates the xAI API as backend, saves its state in files under the user's profile directory (`~/.miri` by default, override with `MIRI_STORAGE_DIR`), and exposes a REST API for configuration, storing human information, and delegating prompts to xAI.
+Imagine having a tireless AI assistant that lives on your machine, remembers everything you've ever told it, researches the web, writes and tests code, reviews its own work, and integrates seamlessly with your daily tools like WhatsApp or IRC. That's **Miri** — a fully local, open-source autonomous agent service built in modern Go (1.25+).
+
+Miri powers itself with xAI's Grok models (or any OpenAI-compatible provider), persists its 'brain' in a local vector database (`~/.miri/vector_db`), and exposes a rich REST/WebSocket API for chat, sub-agent orchestration, file management, and admin tasks. No cloud lock-in, no data leaks — everything stays on your machine.
+
+Born from real-world needs: evolving from simple chat → tool-augmented ReAct loops → specialized sub-agents → cognitive self-maintenance with Mole-Syn reasoning graphs. It's production-ready, with daemon support, Prometheus metrics, and an embedded web dashboard.
 
 The agent has its own "soul" defined in `~/.miri/soul.md` (bootstrapped from `templates/soul.md` on first run if missing).
 
@@ -59,17 +63,36 @@ flowchart TD
 - **Checkpointing**: Eino-native graph state persistence via `FileCheckPointStore` — long-running tasks resume from the last successful tool execution.
 - **System Awareness**: LLM is automatically provided with OS, architecture, shell, and package manager context for accurate command generation.
 
-### 🤝 Sub-Agents (Eino ADK)
-- **Eino ADK Integration**: Uses [`github.com/cloudwego/eino/adk`](https://www.cloudwego.io/docs/eino/core_modules/eino_adk/agent_collaboration/) — the orchestrator LLM autonomously delegates complex sub-tasks to specialized agents as native tool calls.
-- **Built-in Specialist Roles**:
-  - `Researcher` — web search, page fetching, and structured summarization.
-  - `Coder` — multi-language (Go/Python/JS/Bash) code gen/test/build via sandboxed shell. Specify lang in goal, e.g. "Write Python CLI to sum numbers, tested". Outputs JSON with results/files.
-  - `Reviewer` — critique, quality-checking, and review of any artifact.
-- **AgentAsTool Pattern**: Each sub-agent is wrapped via `adk.NewAgentTool()` and registered as a regular Eino tool. The orchestrator passes a self-contained goal; the sub-agent runs its own full ReAct loop autonomously and returns the result.
-- **Fresh Task Description**: Sub-agents receive only the delegated goal — not the parent's conversation history — forcing the orchestrator to write complete, unambiguous task descriptions.
-- **Persistent Run History**: Every sub-agent run is persisted under `~/.miri/subagent_runs/` as a JSON record + JSONL transcript. Results are injected as facts into the parent session's Brain.
-- **Dynamic Pool**: Sub-agents can also be spawned programmatically via `POST /api/v1/subagents` with full lifecycle management (status polling, transcript retrieval, cancellation).
-- **Recursive Delegation**: Sub-agents can themselves spawn further sub-agents — e.g. a Coder sub-agent can delegate testing to a Reviewer.
+### 🤝 Sub-Agents: Your Team of Specialists
+
+**The Magic**: Main agent delegates like a CEO — \"Research X, then code it, review\" — gets instant \"Spun off (ID: xxx)\" response. Sub-agent runs async (10min), outputs JSON, injects to Brain.
+
+**Evolution**: Tool wrappers → async API → templated prompts (`templates/subagents/*.prompt`) → multi-lang TDD coder.
+
+#### Roles at a Glance
+| Role | Prompt File | Tools | JSON Out | Goal Example |
+|-----|-------------|-------|----------|--------------|
+| Researcher | templates/subagents/researcher.prompt | web_search (DDG/Brave), fetch, grokipedia | {summary, sources[], confidence} | \"Zoo Knie elephants history\" |
+| Coder | templates/subagents/coder.prompt | sandbox cmd/filemgr (uploads/) | {plan, code_files{}, tests[], cov %, ready} | \"Python max(list) CLI, TDD 100%\" |
+| Reviewer | templates/subagents/reviewer.prompt | search/fetch | {score 1-10, issues[], approved, MD feedback} | \"Review coder output: [JSON]\" |
+
+**Tune Them**: Edit prompts → restart. E.g., coder mandates TDD, JSON for chaining.
+
+#### Summon Options
+1. **Auto (Main Agent)**: \"Use researcher for Zoo info\" → tool call.
+2. **API (Control/Chaining)**:
+   ```bash
+   ID=$(curl POST /api/v1/subagents -H'X-Server-Key:$KEY' -d'{\"role\":\"coder\",\"goal\":\"tested Go CLI\"}' | jq .id)
+   curl GET /api/v1/subagents/$ID -H'X-Server-Key:$KEY'  # status/output
+   curl GET /api/admin/v1/subagents/$ID/transcript -u admin:pass  # full chat
+   ```
+3. **Cancel**: DELETE /api/admin/v1/subagents/$ID
+
+**Chaining Story**: Research → parse JSON → \"Code using $research\" → review → zip downloads from /files.
+
+**Admin List**: GET /api/admin/v1/subagents?session=main
+
+**Pro**: Recursive (coder spawns reviewer), per-run sandbox (uploads/tmp), Brain auto-facts.
 
 ### 🧠 Memory & Cognition
 - **Long-term Memory**: Dual-layer persistent vector store ([chromem-go](https://github.com/philippgille/chromem-go)) with **Facts** (atomic knowledge) and **Summaries** (narrative continuity). See [The Brain](#the-brain-cognitive-architecture).
@@ -118,86 +141,73 @@ flowchart TD
 - **Recurring Tasks**: Cron-scheduled prompts with WebSocket push notifications to active clients.
 - `GET /api/admin/v1/tasks` — list all scheduled tasks.
 
-### 📁 File Management
-- \`FileManagerTool\` — list (\`action:list\`) and share (\`action:share\`) files from storage (e.g. \`generated/\`).
-- **REST API for File Browser**:
-  - \`GET /api/v1/files?path=dir/subdir\` — JSON list: \`[{name, size, modified, isDir}]\`
-  - \`GET /api/v1/files/*filepath\` — download file (add \`?view=true\` for text preview, 1MB limit)
-  - \`GET /api/v1/files/*dir\`?zip=true — download directory as ZIP
-  - \`DELETE /api/v1/files\` — \`{"path": "foo/bar", "recursive": true}\`
-  - \`POST /api/v1/files/upload\` — upload to \`uploads/\`
-- **Channel Media Support**: WhatsApp and IRC send files/links.
-- All paths relative to \`storage_dir\` (~\`/.miri\`); traversal protected.
+### 📁 File Management: Seamless Artifact Handling
 
-**Examples**:
-\`\`\`bash
-curl "/api/v1/files?path=uploads" # list
-curl -X DELETE "/api/v1/files" -d '{"path":"uploads/old.txt"}'
-curl "/api/v1/files/uploads/main.go?view=true" # preview text
-curl "/api/v1/files/uploads/mydir?zip=true" -o mydir.zip # download dir as ZIP
-\`\`\`
-(Use \`X-Server-Key\` header)
+**Story**: Agent codes a CLI → shares `/tmp/main.go` → you download via browser or zip entire project. No more hunting logs!
 
-## The Brain: Cognitive Architecture
+**Integration**:
+- Coder sub-agent writes to `uploads/tmp/` sandbox.
+- `filemanager {"action":"share", "path":"/tmp/project"}` → `/api/v1/files/tmp/project/main.go`.
 
-The **Brain** is Miri's central cognitive maintenance engine. It operates as an asynchronous post-processor, managing long-term knowledge, reasoning quality, and historical context.
+**REST for Clients** (X-Server-Key):
+| Op | URL | Notes |
+|----|-----|-------|
+| List/nav | GET /api/v1/files?path=uploads/dir | `[{name,size,mod,isDir}]` — click folders! |
+| Download | GET /api/v1/files/path/file | Attachment header |
+| Preview | GET /api/v1/files/file?view=true | Text 1MB |
+| ZIP dir | GET /api/v1/files/mydir?zip=true | Recursive |
+| Delete | DELETE /api/v1/files | `{"path":"uploads/tmp","recursive":true}` |
+| Upload | POST /api/v1/files/upload | → uploads/ |
 
-### 🧠 Long-Term Memory (LTM)
-Miri utilizes a dual-layered persistent memory system powered by [chromem-go](https://github.com/philippgille/chromem-go):
-
-- **Memory Layers**:
-  - **Facts**: Atomic pieces of world knowledge, user preferences, and specific events.
-  - **Summaries**: Narrative records of conversation segments, providing continuity.
-- **Persistence**: Data is stored in `~/.miri/vector_db` (or `MIRI_STORAGE_DIR`).
-- **Embeddings**: Supports multiple providers (OpenAI, Mistral, Ollama, Jina, Cohere) or a **Native Mode** for entirely offline operation using a built-in `qwen3` static embedder.
-
-### 🧪 Mole-Syn (Molecular Structure of Thought)
-Advanced reasoning topology framework that models agent thoughts as a graph of interconnected "bonds":
-
-- **Bond Types**:
-  - **D (Deep Reasoning)**: Covalent-like, direct logical deductions.
-  - **R (Self-Reflection)**: Hydrogen-like, consistency checks and error correction.
-  - **E (Self-Exploration)**: Van der Waals-like, hypothesis testing and branching.
-- **Scoring**: Computes stability scores and bond distributions to assess the cognitive quality of reasoning.
-- **Topology Injection**: `topology_injection.prompt` is injected into the system prompt at inference time, guiding the LLM to produce D/R/E-structured reasoning — making post-hoc topology extraction more accurate.
-- **Per-fact importance**: `deep_bond_uses` counter increments when a fact is retrieved during a high-Deep-bond session (ratio ≥ 0.5), giving each fact a genuine per-fact importance signal rather than a uniform session-level score.
-- **Graph pruning**: Per-session node cap (`max_nodes_per_session`, default 500) automatically drops the oldest nodes to prevent unbounded graph growth.
-- **Persistence**: Reasoning traces are stored in a persistent graph for long-term cognitive analysis and behavioral tracking.
-
-### ⚙️ Cognitive Maintenance Loop
-The Brain performs continuous self-optimization to maintain high memory quality and efficient retrieval:
-
-1.  **Fact Extraction**: Automatically promotes salient information from interactions to standalone long-term facts.
-2.  **Self-Reflection**: Periodically reflects on session history to identify core insights or potential contradictions.
-3.  **Compaction & Deduplication**:
-    - Merges similar facts in batches of 30 using LLM-guided semantic analysis (prevents context-window overflow).
-    - Deduplicates summaries in batches of 20 after consolidation.
-    - Re-fetches the fact list after `promoteFacts` so newly promoted facts are included in the dedup pass.
-    - Promotes the 3 **most recent** summaries to facts (not oldest).
-    - Prunes low-confidence memories or old, unused entries to minimize noise.
-4.  **Per-operation timeouts**: Each maintenance step has its own budget (`ExtractFacts` 2 min, `Reflect` 1 min, `analyzeTopology` 2 min, `Summarize` 2 min, `Compact` 5 min) — a slow step cannot starve the rest.
-5.  **Auto-Triggering**: Maintenance runs based on **write** counts (every 100 messages added to buffer), context usage (at 60% window), and system lifecycle events (startup, shutdown, session reset).
-
-### 🔍 Retrieval Strategy (Hybrid)
-The `retriever` node (`engine/eino_graph.go`) prepends context:
-
-- **Graph Backbone**: Mole-Syn `GetStrongPath(sessionID)` — recent reasoning steps (Deep > Reflect > Explore bonds).
-- **Vector Facts**: Top `facts_top_k` (default 5), hybrid-ranked.
-- **Summaries**: Top `summaries_top_k` (default 3).
-- **Ranking**: `distance * boost` where `boost = 1 - min(deep_bond_uses*0.05, 0.5)` — a fact used 10+ times in Deep-bond sessions gets a 50% distance reduction. `topology_score` (birth-quality, never overwritten) acts as a tie-breaker.
-- **Config** (`config.yaml` under `miri.brain`):
-
-```yaml
-miri:
-  brain:
-    retrieval:
-      graph_steps: 5        # reasoning steps from Mole-Syn backbone
-      facts_top_k: 5        # top facts returned by vector search
-      summaries_top_k: 3    # top summaries returned by vector search
-    max_nodes_per_session: 500  # graph pruning cap per session (0 = unlimited)
+**curl Stories**:
+```bash
+curl "/api/v1/files?path=uploads"  # browse
+curl "/api/v1/files/uploads/project?zip=true" -o my-ai-project.zip
+curl -X DELETE "/api/v1/files" -d '{"path":"uploads/tmp","recursive":true}'
 ```
 
-Ensures continuity + relevance without context overflow.
+**Secure**: uploads/ prefix only; no traversal. CORS for DELETE. Dashboard file explorer built-in.
+
+## 🧠 The Brain: Self-Evolving Cognitive Core
+
+**Story**: Chat "Plan trip to Zoo Knie" → extracts facts (elephants, rhinos), reflects ("user loves animals"), compacts → next prompt recalls perfectly. No manual memory mgmt!
+
+**Dual Memory** (chromem-go vector DB):
+- **Facts**: Atomic (\"Zoo Knie has rhinos\") — extracted/reflected/promoted.
+- **Summaries**: Narrative arcs (\"Trip planning session: animals focus\").
+
+**Offline Embed**: Native `qwen3` — zero API calls.
+
+### 🧪 Mole-Syn: Reasoning as Molecules
+Thoughts = graph of **bonds**:
+```
+D (Deep: logic chains) ── R (Reflect: fix errors) ── E (Explore: what-ifs)
+```
+- **Injection**: Prompt guides LLM → parse → score topology.
+- **Fact Boost**: `deep_bond_uses++` if retrieved in Deep-heavy turns → ranks better.
+- **Prune**: 500 nodes/session max.
+
+**Why?** Tracks reasoning *quality* over time — Deep-heavy = solid knowledge.
+
+### 🔄 Auto-Maintenance (Why It Scales)
+Async loop prevents bloat:
+1. Extract/promote facts from chat.
+2. Reflect → insights/contradictions.
+3. **Deduplicate Batches**: 30 facts/20 summaries → LLM merge (5min timeout/step).
+4. Promote recent summaries → facts.
+5. Trigger: 100 writes, 60% ctx, startup/shutdown.
+
+**Config** (miri.brain.retrieval):
+```yaml
+graph_steps: 5     # Mole-Syn backbone
+facts_top_k: 5     # Vector facts
+summaries_top_k: 3 # Narratives
+max_nodes_per_session: 500
+```
+
+**Retrieval**: Graph + vectors (boosted rank) → prepended context. Hybrid magic!
+
+**Monitor**: /api/admin/v1/brain/{facts,summaries,topology} — see evolution.
 
 ## Development & Dashboard
 
@@ -684,29 +694,78 @@ Built with modern Go idioms.
 
 ## Quick Start (Updated)
 
-### CLI Setup Wizard
-On first startup (no `~/.miri/config.yaml`) or with `--setup` / `--reset-config`, Miri launches an interactive CLI wizard:
+## 🚀 Quickstart: From Zero to AI Companion in 60 Seconds
+
+### 1. First Run — Auto-Magic Setup
+Miri detects missing config and launches a **guided CLI wizard**:
 
 ```
-$ ./bin/miri-server
+$ make server && ./bin/miri-server
 === Miri Setup Wizard ===
-LLM Provider (xai/openai/anthropic/groq) [xai]: 
-Enter API Key/Token: xai-...
-Default Model [grok-beta]: 
-Storage Directory [~/.miri]: 
-Server Address [:8080]: 
-Server Key [devkey123]: 
-Admin Username [admin]: 
-Admin Password [admin]: 
-Setup complete! Config saved to /Users/.../.miri/config.yaml
+? LLM Provider (xai/openai/anthropic/groq) › xai
+? Enter API Key/Token › xai-abc123...
+? Default Model › grok-4-1-fast-reasoning
+? Storage Directory › ~/.miri
+? Server Address › :8080
+? Server Key › my-secret-key-123
+? Admin Username › admin
+? Admin Password › super-secure-pass
+
+✅ Setup complete! Config saved to ~/.miri/config.yaml
+Server starting on http://localhost:8080
+Dashboard: http://localhost:8080/dashboard
+Admin API: /api/admin/v1 (Basic Auth: admin/super-secure-pass)
 ```
 
-Configures provider/token/model/server basics. Edit `config.yaml` post-setup.
+**What happened?**
+- Created `~/.miri/config.yaml` with your choices.
+- Bootstrapped soul (`soul.md`), core skills (`learn`, `skill_creator`), and empty brain.
+- Started HTTP server + embedded dashboard.
 
-**Flags:**
-- `--setup`: Force wizard (overwrites config).
-- `--reset-config`: Delete config + wizard.
-- `--config /path/to/custom.yaml`: Load override.
+**Pro Tip**: Env vars override: `XAI_API_KEY=sk-... miri-server`.
+
+### 2. Chat Away!
+```bash
+# Blocking prompt
+curl -X POST http://localhost:8080/api/v1/prompt \
+  -H "Content-Type: application/json" \
+  -H "X-Server-Key: my-secret-key-123" \
+  -d '{"prompt": "Who am I?"}'
+
+# Streaming (SSE)
+curl -N http://localhost:8080/api/v1/prompt/stream?prompt="Plan my day" \
+  -H "X-Server-Key: my-secret-key-123"
+
+# WebSocket (verbose thoughts/tools)
+wscat -c "ws://localhost:8080/ws" \
+  -H "Sec-WebSocket-Protocol: miri-key, my-secret-key-123" \
+  --header "Content-Type: application/json" \
+  -x '{"prompt": "Research latest Go news"}'
+```
+
+### 3. Unlock Superpowers: Sub-Agents
+Spawn a researcher:
+```bash
+ID=$(curl -X POST http://localhost:8080/api/v1/subagents \
+  -H "Content-Type: application/json" \
+  -H "X-Server-Key: my-secret-key-123" \
+  -d '{"role": "researcher", "goal": "Latest advances in Go 1.25"}' | jq -r .id)
+
+# Poll progress
+curl "http://localhost:8080/api/v1/subagents/$ID" \
+  -H "X-Server-Key: my-secret-key-123"
+
+# Full transcript
+curl "http://localhost:8080/api/admin/v1/subagents/$ID/transcript" \
+  -u admin:super-secure-pass
+```
+
+**Story**: Researcher scours web/Grokipedia, synthesizes JSON summary → injects into main Brain. Chain to coder: "Code a CLI using that Go feature".
+
+### Flags for Power Users
+- `--setup`: Re-run wizard (overwrites config).
+- `--reset-config`: Nuke config + wizard.
+- `--config /path/to/custom.yaml`: Load alternative.
 
 Build and run the server binary:
 
