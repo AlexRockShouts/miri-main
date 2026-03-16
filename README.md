@@ -199,6 +199,38 @@ miri:
 
 Ensures continuity + relevance without context overflow.
 
+## Development & Dashboard
+
+Miri includes an embedded web dashboard. You can run it in two ways:
+
+### 1. Using Docker (Recommended)
+The easiest way to run Miri with the dashboard is using the combined Docker image:
+```bash
+docker run -p 8080:8080 -e XAI_API_KEY=your_key alexrockshouts/miri-combined:latest
+```
+Access the dashboard at `http://localhost:8080`.
+
+### 2. Local Development (Building from Source)
+To build the server with the embedded dashboard locally, you need the `miri-dashboard` repository located alongside `miri-main`:
+
+```bash
+# Clone the dashboard if you haven't already
+cd ..
+git clone https://github.com/AlexRockShouts/miri-dashboard.git
+cd miri-main
+
+# Build the dashboard and server together
+make server
+
+# Run the server
+./bin/miri-server
+```
+The `make server` command will automatically:
+1. Build the TypeScript SDK in `miri-main`.
+2. Build the Svelte dashboard in `../miri-dashboard`.
+3. Copy the dashboard assets to `src/cmd/server/dashboard`.
+4. Compile the Go server with the assets embedded.
+
 ## Prerequisites
 
 - Go 1.25 (modern idioms enforced: slices/maps, errors.Is/Join, atomic.Bool, context.WithCancelCause, etc.)

@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"io/fs"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
@@ -21,6 +22,9 @@ import (
 type Server struct {
 	Gateway *gateway.Gateway
 	Engine  *gin.Engine
+
+	// Static assets for the dashboard
+	DashboardFS fs.FS
 
 	// WebSocket session tracking
 	wsMu       sync.RWMutex
@@ -73,9 +77,32 @@ func NewServer(gw *gateway.Gateway) *Server {
 	s.setupRoutesRest()
 	s.setupRoutesWebSocket()
 	s.setupRoutesAdmin()
+	s.setupRoutesStatic()
 	s.Engine.GET("/metrics", gin.WrapH(promhttp.Handler()))
 	s.Gateway.SetTaskReportHandler(s.handleTaskReport)
 	return s
+}
+
+func (s *Server) setupRoutesStatic() {
+	if s.DashboardFS == nil {
+		return
+	}
+
+	s.Engine.NoRoute(func(c *gin.Context) {
+		if !strings.HasPrefix(c.Request.URL.Path, "/api/") && c.Request.URL.Path != "/ws" && c.Request.URL.Path != "/metrics" {
+			c.FileFromFS("index.html", http.FS(s.DashboardFS))
+			return
+		}
+	})
+
+	// Static assets
+	// We need to handle the _app directory and other static files
+	staticFiles := []string{"_app", "favicon.png", "robots.txt"}
+	for _, file := range staticFiles {
+		s.Engine.Any("/"+file+"/*any", func(c *gin.Context) {
+			http.FileServer(http.FS(s.DashboardFS)).ServeHTTP(c.Writer, c.Request)
+		})
+	}
 }
 
 func (s *Server) handleTaskReport(sessionID, taskName, taskID, message string) {

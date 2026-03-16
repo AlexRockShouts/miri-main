@@ -1,4 +1,4 @@
-.PHONY: all server clean test install ts-sdk ts-sdk-generate ts-sdk-install ts-sdk-build ts-sdk-publish run-server build
+.PHONY: all server clean test install ts-sdk ts-sdk-generate ts-sdk-install ts-sdk-build ts-sdk-publish run-server build dashboard-build
 
 BIN_DIR := bin
 SERVER_BIN := $(BIN_DIR)/miri-server
@@ -10,7 +10,7 @@ OPENAPI_SPEC := api/openapi.yaml
 all: server
 build: all
 
-server:
+server: dashboard-build
 	mkdir -p $(BIN_DIR)
 	go build -trimpath -ldflags '-s -w' -o $(SERVER_BIN) ./src/cmd/server/main.go
 
@@ -26,6 +26,21 @@ install: server
 run-server: server
 	./$(SERVER_BIN)
 
+
+# --- Dashboard tasks ---
+# Build the dashboard and copy it to the location for embedding
+DASHBOARD_SRC_DIR := ../miri-dashboard
+DASHBOARD_EMBED_DIR := src/cmd/server/dashboard
+
+dashboard-build:
+	@if [ -d "$(DASHBOARD_SRC_DIR)" ]; then \
+		echo "Building dashboard from $(DASHBOARD_SRC_DIR)..."; \
+		cd $(DASHBOARD_SRC_DIR) && npm install && npm run build; \
+		mkdir -p $(DASHBOARD_EMBED_DIR); \
+		cp -r $(DASHBOARD_SRC_DIR)/build/* $(DASHBOARD_EMBED_DIR)/; \
+	else \
+		echo "Dashboard source not found at $(DASHBOARD_SRC_DIR). Skipping embed."; \
+	fi
 
 # --- TypeScript SDK tasks ---
 # Generate the TypeScript SDK from the OpenAPI spec into a dedicated "generated" folder

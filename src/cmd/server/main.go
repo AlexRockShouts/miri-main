@@ -4,8 +4,10 @@ package main
 
 import (
 	"context"
+	"embed"
 	"flag"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"miri-main/src/internal/api"
 	"miri-main/src/internal/config"
@@ -19,6 +21,9 @@ import (
 	"strings"
 	"syscall"
 )
+
+//go:embed all:dashboard
+var embeddedDashboard embed.FS
 
 func main() {
 	var configFile string
@@ -102,6 +107,12 @@ func main() {
 	system.LogMemoryUsage("post_engine_start")
 
 	server := api.NewServer(gw)
+	dashboardFS, err := fs.Sub(embeddedDashboard, "dashboard")
+	if err == nil {
+		server.DashboardFS = dashboardFS
+	} else {
+		slog.Warn("failed to load embedded dashboard", "error", err)
+	}
 
 	// Setup graceful shutdown
 	sigChan := make(chan os.Signal, 1)
