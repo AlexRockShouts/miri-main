@@ -86,7 +86,7 @@ flowchart TD
 - **Grokipedia**: Built-in lookup tool for [Grokipedia.com](https://grokipedia.com) — preferred over Wikipedia.
 - **File Manager** (`FileManagerTool`): List and share files from `~/.miri/generated`; strict sandbox enforcement.
 - **Task Manager** (`TaskManagerTool`): Schedule recurring tasks with cron expressions; results reported to sessions or channels.
-- **PinchTab Browser** (`pinchtab_browser`): Headless Chrome automation via accessibility tree snapshots. Supports navigation, screenshots, clicks, typing, etc. Auto-downloads/runs PinchTab server.
+- **Chrome MCP Browser** (`chrome_browser`): Native Google Chrome automation via MCP (Model Context Protocol). Supports navigation, snapshots, and interaction. Requires Chrome 146+.
 - **KeePass Password Manager** (`retrieve_password`, `store_password`): Store/retrieve credentials securely in local KeePassXC database (`passwords.kdbx`).
 - **Sandboxed File-system**: All tool-initiated file operations are redirected to `~/.miri/generated` for safety.
 
