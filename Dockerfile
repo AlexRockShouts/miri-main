@@ -1,7 +1,7 @@
 
 # Build dashboard
 FROM node:24-alpine AS dashboard-builder
-RUN apk add --no-cache git make
+RUN apk add --no-cache git make wget
 RUN git clone https://github.com/AlexRockShouts/miri-dashboard.git /tmp/miri-dashboard
 RUN cd /tmp/miri-dashboard
 WORKDIR /tmp/miri-dashboard

@@ -79,9 +79,6 @@ export interface ApiV1PromptPostRequest {
     'temperature'?: number;
     'max_tokens'?: number;
 }
-export interface ApiV1SetupConfigurePost200Response {
-    'status'?: string;
-}
 export interface ApiV1SubagentsIdTranscriptGet200ResponseInner {
     'role'?: string;
     'content'?: string;
@@ -262,19 +259,6 @@ export interface Session {
     'prompt_tokens'?: number;
     'output_tokens'?: number;
     'total_cost'?: number;
-}
-export interface SetupRequest {
-    'admin_user': string;
-    'admin_pass': string;
-    'server_key': string;
-    'provider_name': string;
-    'base_url'?: string;
-    'api_key': string;
-    'model_id': string;
-    'model_name'?: string;
-}
-export interface SetupStatus {
-    'setup_mode'?: boolean;
 }
 export interface Skill {
     'name'?: string;
@@ -667,40 +651,6 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
             let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
             localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
             localVarRequestOptions.data = serializeDataIfNeeded(config, localVarRequestOptions, configuration)
-
-            return {
-                url: toPathString(localVarUrlObj),
-                options: localVarRequestOptions,
-            };
-        },
-        /**
-         * 
-         * @summary Reset configuration (removes config.yaml)
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        apiAdminV1ConfigResetPost: async (options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
-            const localVarPath = `/api/admin/v1/config/reset`;
-            // use dummy base URL string because the URL constructor only accepts absolute URLs.
-            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
-            let baseOptions;
-            if (configuration) {
-                baseOptions = configuration.baseOptions;
-            }
-
-            const localVarRequestOptions = { method: 'POST', ...baseOptions, ...options};
-            const localVarHeaderParameter = {} as any;
-            const localVarQueryParameter = {} as any;
-
-            // authentication BasicAuth required
-            // http basic authentication required
-            setBasicAuthToObject(localVarRequestOptions, configuration)
-
-            localVarHeaderParameter['Accept'] = 'application/json';
-
-            setSearchParams(localVarUrlObj, localVarQueryParameter);
-            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
-            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
 
             return {
                 url: toPathString(localVarUrlObj),
@@ -1692,71 +1642,6 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
         },
         /**
          * 
-         * @summary Initial configuration
-         * @param {SetupRequest} setupRequest 
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        apiV1SetupConfigurePost: async (setupRequest: SetupRequest, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
-            // verify required parameter 'setupRequest' is not null or undefined
-            assertParamExists('apiV1SetupConfigurePost', 'setupRequest', setupRequest)
-            const localVarPath = `/api/v1/setup/configure`;
-            // use dummy base URL string because the URL constructor only accepts absolute URLs.
-            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
-            let baseOptions;
-            if (configuration) {
-                baseOptions = configuration.baseOptions;
-            }
-
-            const localVarRequestOptions = { method: 'POST', ...baseOptions, ...options};
-            const localVarHeaderParameter = {} as any;
-            const localVarQueryParameter = {} as any;
-
-            localVarHeaderParameter['Content-Type'] = 'application/json';
-            localVarHeaderParameter['Accept'] = 'application/json';
-
-            setSearchParams(localVarUrlObj, localVarQueryParameter);
-            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
-            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
-            localVarRequestOptions.data = serializeDataIfNeeded(setupRequest, localVarRequestOptions, configuration)
-
-            return {
-                url: toPathString(localVarUrlObj),
-                options: localVarRequestOptions,
-            };
-        },
-        /**
-         * 
-         * @summary Get setup mode status
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        apiV1SetupStatusGet: async (options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
-            const localVarPath = `/api/v1/setup/status`;
-            // use dummy base URL string because the URL constructor only accepts absolute URLs.
-            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
-            let baseOptions;
-            if (configuration) {
-                baseOptions = configuration.baseOptions;
-            }
-
-            const localVarRequestOptions = { method: 'GET', ...baseOptions, ...options};
-            const localVarHeaderParameter = {} as any;
-            const localVarQueryParameter = {} as any;
-
-            localVarHeaderParameter['Accept'] = 'application/json';
-
-            setSearchParams(localVarUrlObj, localVarQueryParameter);
-            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
-            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
-
-            return {
-                url: toPathString(localVarUrlObj),
-                options: localVarRequestOptions,
-            };
-        },
-        /**
-         * 
          * @summary Get sub-agent run status and result
          * @param {string} id 
          * @param {*} [options] Override http request option.
@@ -2025,18 +1910,6 @@ export const DefaultApiFp = function(configuration?: Configuration) {
             const localVarAxiosArgs = await localVarAxiosParamCreator.apiAdminV1ConfigPost(config, options);
             const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
             const localVarOperationServerBasePath = operationServerMap['DefaultApi.apiAdminV1ConfigPost']?.[localVarOperationServerIndex]?.url;
-            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
-        },
-        /**
-         * 
-         * @summary Reset configuration (removes config.yaml)
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        async apiAdminV1ConfigResetPost(options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<ApiV1SetupConfigurePost200Response>> {
-            const localVarAxiosArgs = await localVarAxiosParamCreator.apiAdminV1ConfigResetPost(options);
-            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
-            const localVarOperationServerBasePath = operationServerMap['DefaultApi.apiAdminV1ConfigResetPost']?.[localVarOperationServerIndex]?.url;
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
         },
         /**
@@ -2371,31 +2244,6 @@ export const DefaultApiFp = function(configuration?: Configuration) {
         },
         /**
          * 
-         * @summary Initial configuration
-         * @param {SetupRequest} setupRequest 
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        async apiV1SetupConfigurePost(setupRequest: SetupRequest, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<ApiV1SetupConfigurePost200Response>> {
-            const localVarAxiosArgs = await localVarAxiosParamCreator.apiV1SetupConfigurePost(setupRequest, options);
-            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
-            const localVarOperationServerBasePath = operationServerMap['DefaultApi.apiV1SetupConfigurePost']?.[localVarOperationServerIndex]?.url;
-            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
-        },
-        /**
-         * 
-         * @summary Get setup mode status
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        async apiV1SetupStatusGet(options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<SetupStatus>> {
-            const localVarAxiosArgs = await localVarAxiosParamCreator.apiV1SetupStatusGet(options);
-            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
-            const localVarOperationServerBasePath = operationServerMap['DefaultApi.apiV1SetupStatusGet']?.[localVarOperationServerIndex]?.url;
-            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
-        },
-        /**
-         * 
          * @summary Get sub-agent run status and result
          * @param {string} id 
          * @param {*} [options] Override http request option.
@@ -2528,15 +2376,6 @@ export const DefaultApiFactory = function (configuration?: Configuration, basePa
          */
         apiAdminV1ConfigPost(config: Config, options?: RawAxiosRequestConfig): AxiosPromise<void> {
             return localVarFp.apiAdminV1ConfigPost(config, options).then((request) => request(axios, basePath));
-        },
-        /**
-         * 
-         * @summary Reset configuration (removes config.yaml)
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        apiAdminV1ConfigResetPost(options?: RawAxiosRequestConfig): AxiosPromise<ApiV1SetupConfigurePost200Response> {
-            return localVarFp.apiAdminV1ConfigResetPost(options).then((request) => request(axios, basePath));
         },
         /**
          * 
@@ -2795,25 +2634,6 @@ export const DefaultApiFactory = function (configuration?: Configuration, basePa
         },
         /**
          * 
-         * @summary Initial configuration
-         * @param {SetupRequest} setupRequest 
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        apiV1SetupConfigurePost(setupRequest: SetupRequest, options?: RawAxiosRequestConfig): AxiosPromise<ApiV1SetupConfigurePost200Response> {
-            return localVarFp.apiV1SetupConfigurePost(setupRequest, options).then((request) => request(axios, basePath));
-        },
-        /**
-         * 
-         * @summary Get setup mode status
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        apiV1SetupStatusGet(options?: RawAxiosRequestConfig): AxiosPromise<SetupStatus> {
-            return localVarFp.apiV1SetupStatusGet(options).then((request) => request(axios, basePath));
-        },
-        /**
-         * 
          * @summary Get sub-agent run status and result
          * @param {string} id 
          * @param {*} [options] Override http request option.
@@ -2934,16 +2754,6 @@ export class DefaultApi extends BaseAPI {
      */
     public apiAdminV1ConfigPost(config: Config, options?: RawAxiosRequestConfig) {
         return DefaultApiFp(this.configuration).apiAdminV1ConfigPost(config, options).then((request) => request(this.axios, this.basePath));
-    }
-
-    /**
-     * 
-     * @summary Reset configuration (removes config.yaml)
-     * @param {*} [options] Override http request option.
-     * @throws {RequiredError}
-     */
-    public apiAdminV1ConfigResetPost(options?: RawAxiosRequestConfig) {
-        return DefaultApiFp(this.configuration).apiAdminV1ConfigResetPost(options).then((request) => request(this.axios, this.basePath));
     }
 
     /**
@@ -3224,27 +3034,6 @@ export class DefaultApi extends BaseAPI {
      */
     public apiV1PromptStreamGet(prompt: string, model?: string, options?: RawAxiosRequestConfig) {
         return DefaultApiFp(this.configuration).apiV1PromptStreamGet(prompt, model, options).then((request) => request(this.axios, this.basePath));
-    }
-
-    /**
-     * 
-     * @summary Initial configuration
-     * @param {SetupRequest} setupRequest 
-     * @param {*} [options] Override http request option.
-     * @throws {RequiredError}
-     */
-    public apiV1SetupConfigurePost(setupRequest: SetupRequest, options?: RawAxiosRequestConfig) {
-        return DefaultApiFp(this.configuration).apiV1SetupConfigurePost(setupRequest, options).then((request) => request(this.axios, this.basePath));
-    }
-
-    /**
-     * 
-     * @summary Get setup mode status
-     * @param {*} [options] Override http request option.
-     * @throws {RequiredError}
-     */
-    public apiV1SetupStatusGet(options?: RawAxiosRequestConfig) {
-        return DefaultApiFp(this.configuration).apiV1SetupStatusGet(options).then((request) => request(this.axios, this.basePath));
     }
 
     /**

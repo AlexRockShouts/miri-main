@@ -10,7 +10,6 @@ All URIs are relative to *http://localhost:8080*
 |[**apiAdminV1ChannelsPost**](#apiadminv1channelspost) | **POST** /api/admin/v1/channels | Perform actions on communication channels|
 |[**apiAdminV1ConfigGet**](#apiadminv1configget) | **GET** /api/admin/v1/config | Get current configuration|
 |[**apiAdminV1ConfigPost**](#apiadminv1configpost) | **POST** /api/admin/v1/config | Update configuration|
-|[**apiAdminV1ConfigResetPost**](#apiadminv1configresetpost) | **POST** /api/admin/v1/config/reset | Reset configuration (removes config.yaml)|
 |[**apiAdminV1HealthGet**](#apiadminv1healthget) | **GET** /api/admin/v1/health | Check health of the admin API|
 |[**apiAdminV1HumanGet**](#apiadminv1humanget) | **GET** /api/admin/v1/human | Get the human information (Markdown)|
 |[**apiAdminV1HumanPost**](#apiadminv1humanpost) | **POST** /api/admin/v1/human | Save human information (Markdown)|
@@ -36,8 +35,6 @@ All URIs are relative to *http://localhost:8080*
 |[**apiV1InteractionPost**](#apiv1interactionpost) | **POST** /api/v1/interaction | Manage sessions or check global status|
 |[**apiV1PromptPost**](#apiv1promptpost) | **POST** /api/v1/prompt | Send a prompt to the agent|
 |[**apiV1PromptStreamGet**](#apiv1promptstreamget) | **GET** /api/v1/prompt/stream | Stream a prompt response via SSE|
-|[**apiV1SetupConfigurePost**](#apiv1setupconfigurepost) | **POST** /api/v1/setup/configure | Initial configuration|
-|[**apiV1SetupStatusGet**](#apiv1setupstatusget) | **GET** /api/v1/setup/status | Get setup mode status|
 |[**apiV1SubagentsIdGet**](#apiv1subagentsidget) | **GET** /api/v1/subagents/{id} | Get sub-agent run status and result|
 |[**apiV1SubagentsIdTranscriptGet**](#apiv1subagentsidtranscriptget) | **GET** /api/v1/subagents/{id}/transcript | Get full message transcript of a sub-agent run|
 |[**apiV1SubagentsPost**](#apiv1subagentspost) | **POST** /api/v1/subagents | Spawn a new sub-agent run|
@@ -342,49 +339,6 @@ void (empty response body)
 | Status code | Description | Response headers |
 |-------------|-------------|------------------|
 |**200** | Config updated |  -  |
-
-[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
-
-# **apiAdminV1ConfigResetPost**
-> ApiV1SetupConfigurePost200Response apiAdminV1ConfigResetPost()
-
-
-### Example
-
-```typescript
-import {
-    DefaultApi,
-    Configuration
-} from './api';
-
-const configuration = new Configuration();
-const apiInstance = new DefaultApi(configuration);
-
-const { status, data } = await apiInstance.apiAdminV1ConfigResetPost();
-```
-
-### Parameters
-This endpoint does not have any parameters.
-
-
-### Return type
-
-**ApiV1SetupConfigurePost200Response**
-
-### Authorization
-
-[BasicAuth](../README.md#BasicAuth)
-
-### HTTP request headers
-
- - **Content-Type**: Not defined
- - **Accept**: application/json
-
-
-### HTTP response details
-| Status code | Description | Response headers |
-|-------------|-------------|------------------|
-|**200** | Reset successful |  -  |
 
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
 
@@ -1654,100 +1608,6 @@ const { status, data } = await apiInstance.apiV1PromptStreamGet(
 | Status code | Description | Response headers |
 |-------------|-------------|------------------|
 |**200** | SSE stream of response chunks |  -  |
-
-[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
-
-# **apiV1SetupConfigurePost**
-> ApiV1SetupConfigurePost200Response apiV1SetupConfigurePost(setupRequest)
-
-
-### Example
-
-```typescript
-import {
-    DefaultApi,
-    Configuration,
-    SetupRequest
-} from './api';
-
-const configuration = new Configuration();
-const apiInstance = new DefaultApi(configuration);
-
-let setupRequest: SetupRequest; //
-
-const { status, data } = await apiInstance.apiV1SetupConfigurePost(
-    setupRequest
-);
-```
-
-### Parameters
-
-|Name | Type | Description  | Notes|
-|------------- | ------------- | ------------- | -------------|
-| **setupRequest** | **SetupRequest**|  | |
-
-
-### Return type
-
-**ApiV1SetupConfigurePost200Response**
-
-### Authorization
-
-No authorization required
-
-### HTTP request headers
-
- - **Content-Type**: application/json
- - **Accept**: application/json
-
-
-### HTTP response details
-| Status code | Description | Response headers |
-|-------------|-------------|------------------|
-|**200** | Setup successful |  -  |
-
-[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
-
-# **apiV1SetupStatusGet**
-> SetupStatus apiV1SetupStatusGet()
-
-
-### Example
-
-```typescript
-import {
-    DefaultApi,
-    Configuration
-} from './api';
-
-const configuration = new Configuration();
-const apiInstance = new DefaultApi(configuration);
-
-const { status, data } = await apiInstance.apiV1SetupStatusGet();
-```
-
-### Parameters
-This endpoint does not have any parameters.
-
-
-### Return type
-
-**SetupStatus**
-
-### Authorization
-
-No authorization required
-
-### HTTP request headers
-
- - **Content-Type**: Not defined
- - **Accept**: application/json
-
-
-### HTTP response details
-| Status code | Description | Response headers |
-|-------------|-------------|------------------|
-|**200** | Setup status |  -  |
 
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
 
