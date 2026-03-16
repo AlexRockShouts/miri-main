@@ -29,6 +29,7 @@ jobs:
         mkdir -p ../miri-main/src/cmd/server/dashboard
         touch ../miri-main/src/cmd/server/dashboard/.gitkeep
 
+
     - name: Build-Server
       working-directory: miri-main
       run: go build -trimpath -ldflags '-s -w' -o miri-server ./src/cmd/server/main.go
