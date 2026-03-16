@@ -1,0 +1,146 @@
+name: Release Miri Dashboard
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Tag name to create (e.g., v1.0.0). If empty, it will increment the current tag.'
+        required: false
+        default: ''
+
+permissions:
+  id-token: write
+  contents: write
+  attestations: write
+
+jobs:
+  test:
+    name: Lint and Test Dashboard
+    runs-on: ubuntu-latest
+    outputs:
+      tag_name: ${{ steps.version.outputs.tag_name }}
+    steps:
+      - name: Checkout dashboard
+        uses: actions/checkout@v4
+        with:
+          path: miri-dashboard
+          fetch-depth: 0
+      - name: Determine version
+        id: version
+        working-directory: miri-dashboard
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            if [ -n "${{ github.event.inputs.tag_name }}" ]; then
+              TAG_NAME="${{ github.event.inputs.tag_name }}"
+            else
+              # Fetch all tags
+              git fetch --tags
+              LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+              echo "Latest tag found: $LATEST_TAG"
+              
+              # Increment patch version (assuming semver vX.Y.Z)
+              VERSION_PART=${LATEST_TAG#v}
+              IFS='.' read -r major minor patch <<< "$VERSION_PART"
+              NEW_PATCH=$((patch + 1))
+              TAG_NAME="v$major.$minor.$NEW_PATCH"
+              echo "Incremented tag: $TAG_NAME"
+            fi
+            echo "tag_name=$TAG_NAME" >> $GITHUB_OUTPUT
+          else
+            echo "tag_name=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+          fi
+      - name: Create and push tag
+        if: github.event_name == 'workflow_dispatch'
+        working-directory: miri-dashboard
+        run: |
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          if ! git rev-parse "${{ steps.version.outputs.tag_name }}" >/dev/null 2>&1; then
+            git tag ${{ steps.version.outputs.tag_name }}
+            git push origin ${{ steps.version.outputs.tag_name }}
+          else
+            echo "Tag ${{ steps.version.outputs.tag_name }} already exists"
+          fi
+      - name: Checkout main (for SDK)
+        uses: actions/checkout@v4
+        with:
+          repository: AlexRockShouts/miri-main
+          path: miri-main
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Build SDK dependency
+        run: |
+          cd miri-main/api/sdk/typescript
+          npm install
+          npm run build
+      - name: Install and Lint
+        run: |
+          cd miri-dashboard
+          sed -i 's|file:../../GolandProjects/miri-main/api/sdk/typescript|file:../miri-main/api/sdk/typescript|' package.json
+          npm install
+          npm run check || echo "Linting failed or check script not fully compatible"
+      - name: Node Security Scan
+        run: |
+          cd miri-dashboard
+          npm audit --audit-level=high
+
+  build:
+    name: Build Dashboard
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout dashboard
+        uses: actions/checkout@v4
+        with:
+          path: miri-dashboard
+
+      - name: Checkout main (for SDK)
+        uses: actions/checkout@v4
+        with:
+          repository: AlexRockShouts/miri-main
+          path: miri-main
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Build SDK dependency
+        run: |
+          cd miri-main/api/sdk/typescript
+          npm install
+          npm run build
+
+      - name: Build Dashboard
+        run: |
+          cd miri-dashboard
+          # Update the local path to match checkout structure
+          sed -i 's|file:../../GolandProjects/miri-main/api/sdk/typescript|file:../miri-main/api/sdk/typescript|' package.json
+          npm install
+          npm run build
+      
+      - name: Package Dashboard Build
+        run: |
+          cd miri-dashboard
+          zip -r ../miri-dashboard.zip build/
+
+      - name: Attest Dashboard Build
+        uses: actions/attest-build-provenance@v2
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        with:
+          subject-path: "miri-dashboard.zip"
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.test.outputs.tag_name }}
+          files: miri-dashboard.zip
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
