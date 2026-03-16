@@ -504,6 +504,43 @@ You can also specify an optional tag:
 make ts-sdk-publish NPM_TOKEN=your_npm_token NPM_TAG=next
 ```
 
+### Local Development Linking
+
+**Dual Mode Setup**: Local dev uses `npm link` (fast iteration); GitHub/CI/Docker uses published npm package.
+
+#### Quick Start
+1. Clone dashboard sibling:  
+   ```
+   git clone https://github.com/AlexRockShouts/miri-dashboard ../miri-dashboard
+   ```
+
+2. **Link Local**:  
+   ```
+   make ts-sdk-build-link    # Build + global link SDK
+   make dashboard-link       # Link + install in dashboard
+   ```
+
+3. **Build & Run**:  
+   ```
+   make dashboard-build      # Builds using local SDK
+   make server
+   ```
+
+#### Switch to Prod (npm)
+```
+make dashboard-unlink      # Unlink SDK, use npm version
+make dashboard-build
+```
+
+#### How It Works
+- **Local**: Global `npm link` symlinks SDK `dist/` into dashboard `node_modules`.
+- **Prod/CI**: `npm install` pulls `@alexrockshouts/miri-sdk` from registry.
+  - Release.yaml: `publish-sdk` job first, binaries use local `file:` (patched).
+  - Docker: Fresh clone + `npm ci` → published SDK.
+- **Iterate**: Edit SDK → `make ts-sdk-build-link` → restart server.
+
+**Troubleshoot**: Ensure Node 20+, clean `node_modules` if issues (`rm -rf ../miri-dashboard/node_modules`).
+
 ## Configuration
 
 Miri uses a YAML configuration file located at `~/.miri/config.yaml`.

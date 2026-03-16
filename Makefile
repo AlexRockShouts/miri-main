@@ -90,3 +90,37 @@ ts-sdk: ts-sdk-generate ts-sdk-install ts-sdk-build
 
 # Full release: generate, install, build, and publish
 ts-sdk-release: ts-sdk ts-sdk-publish
+
+# --- Local Development Linking ---
+.PHONY: ts-sdk-build-link ts-sdk-unlink dashboard-link dashboard-unlink
+
+# Build SDK and create global npm link
+ts-sdk-build-link:
+	cd $(TS_SDK_DIR) && npm run build && npm link
+
+# Link dashboard to local SDK (assumes ../miri-dashboard)
+dashboard-link:
+	@if [ -d "../miri-dashboard" ]; then \
+		cd ../miri-dashboard && \
+		npm link @alexrockshouts/miri-sdk && \
+		npm install; \
+		echo "✅ Dashboard linked to local SDK!"; \
+	else \
+		echo "❌ Clone https://github.com/AlexRockShouts/miri-dashboard to ../miri-dashboard first."; \
+		exit 1; \
+	fi
+
+# Unlink dashboard from local SDK
+dashboard-unlink:
+	@if [ -d "../miri-dashboard" ]; then \
+		cd ../miri-dashboard && \
+		npm unlink @alexrockshouts/miri-sdk && \
+		npm install; \
+		echo "✅ Dashboard unlinked (uses npm version)."; \
+	else \
+		echo "No ../miri-dashboard found."; \
+	fi
+
+# Remove global SDK link
+ts-sdk-unlink:
+	cd $(TS_SDK_DIR) && npm unlink
