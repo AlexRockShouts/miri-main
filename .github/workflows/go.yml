@@ -14,15 +14,41 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+    - name: Checkout main
+      uses: actions/checkout@v4
+      with:
+        path: miri-main
+
+    - name: Checkout dashboard
+      uses: actions/checkout@v4
+      with:
+        repository: AlexRockShouts/miri-dashboard
+        path: miri-dashboard
 
     - name: Set up Go
       uses: actions/setup-go@v4
       with:
         go-version: '1.25.6'
 
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+
+    - name: Build Dashboard
+      run: |
+        cd miri-main/api/sdk/typescript
+        npm install && npm run build
+        cd ../../../../miri-dashboard
+        sed -i 's|file:../../GolandProjects/miri-main/api/sdk/typescript|file:../miri-main/api/sdk/typescript|' package.json
+        npm install && npm run build
+        mkdir -p ../miri-main/src/cmd/server/dashboard
+        cp -r build/* ../miri-main/src/cmd/server/dashboard/
+
     - name: Build-Server
+      working-directory: miri-main
       run: go build -trimpath -ldflags '-s -w' -o miri-server ./src/cmd/server/main.go
 
     - name: Test
+      working-directory: miri-main
       run: go test ./...
