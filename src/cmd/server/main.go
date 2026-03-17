@@ -85,7 +85,8 @@ func main() {
 	if pidBytes, err := os.ReadFile(pidPath); err == nil {
 		pidStr := strings.TrimSpace(string(pidBytes))
 		if pid, err := strconv.Atoi(pidStr); err == nil && pid > 0 {
-			if syscall.Kill(pid, 0) == nil {
+			p, _ := os.FindProcess(pid)
+			if p.Signal(syscall.Signal(0)) == nil {
 				slog.Error("miri already running", "pid", pid, "pidfile", pidPath)
 				os.Exit(1)
 			}
