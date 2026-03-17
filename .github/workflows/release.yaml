@@ -103,14 +103,14 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
       - name: Build SDK & Dashboard
         run: |
           VERSION="${{ needs.security-scan.outputs.tag_name }}"
           VERSION="${VERSION#v}"
           cd miri-dashboard
           sed -i "s/\"@alexrockshouts\\/miri-sdk\": \"[^\"]*\"/\"@alexrockshouts\\/miri-sdk\": \"$VERSION\"/g" package.json
-          npm ci && npm run build
+          npm install && npm run build
           mkdir -p ../miri-main/src/cmd/server/dashboard
           cp -r build/* ../miri-main/src/cmd/server/dashboard/
       - name: Set up Go
