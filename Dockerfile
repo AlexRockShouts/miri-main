@@ -13,6 +13,11 @@ FROM golang:1.25-alpine AS builder
 WORKDIR /app
 # Install build tools
 RUN apk add --no-cache make git gcc musl-dev
+
+# Cache Go modules
+COPY go.mod go.sum ./
+RUN go mod download
+
 # Copy the source code
 COPY . .
 
@@ -21,8 +26,7 @@ COPY --from=dashboard-builder /tmp/miri-dashboard/build/* src/cmd/server/dashboa
 
 
 # Build the server binary explicitly (matches GitHub release.yaml)
-RUN go mod download && \
-    CGO_ENABLED=0 go build -trimpath -ldflags '-s -w' -o bin/miri-server ./src/cmd/server/main.go
+RUN CGO_ENABLED=0 go build -trimpath -ldflags '-s -w' -o bin/miri-server ./src/cmd/server/main.go
 
 # Final image
 FROM alpine:latest
