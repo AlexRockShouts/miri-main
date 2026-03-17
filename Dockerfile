@@ -20,8 +20,9 @@ COPY . .
 COPY --from=dashboard-builder /tmp/miri-dashboard/build/* src/cmd/server/dashboard/
 
 
-# Build the server using the Makefile
-RUN make server
+# Build the server binary explicitly (matches GitHub release.yaml)
+RUN go mod download && \
+    CGO_ENABLED=0 go build -trimpath -ldflags '-s -w' -o bin/miri-server ./src/cmd/server/main.go
 
 # Final image
 FROM alpine:latest
