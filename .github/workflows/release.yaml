@@ -84,7 +84,7 @@ jobs:
 
   build-binaries:
     name: Build Cross-Platform Standalone Binaries
-    needs: [test, security-scan]
+    needs: [test, security-scan, publish-sdk]
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -106,11 +106,11 @@ jobs:
           node-version: '20'
       - name: Build SDK & Dashboard
         run: |
-          cd miri-main/api/sdk/typescript
-          npm install && npm run build
-          cd ../../../../miri-dashboard
-          sed -i 's|file:../../GolandProjects/miri-main/api/sdk/typescript|file:../miri-main/api/sdk/typescript|' package.json
-          npm install && npm run build
+          VERSION="${{ needs.security-scan.outputs.tag_name }}"
+          VERSION="${VERSION#v}"
+          cd miri-dashboard
+          sed -i "s/\"@alexrockshouts\\/miri-sdk\": \"[^\"]*\"/\"@alexrockshouts\\/miri-sdk\": \"$VERSION\"/g" package.json
+          npm ci && npm run build
           mkdir -p ../miri-main/src/cmd/server/dashboard
           cp -r build/* ../miri-main/src/cmd/server/dashboard/
       - name: Set up Go
@@ -150,21 +150,26 @@ jobs:
         with:
           node-version: '24'
           registry-url: 'https://registry.npmjs.org'
+          scope: '@alexrockshouts'
       - name: Install dependencies and generate SDK
         run: |
           npm install -g @openapitools/openapi-generator-cli
           make ts-sdk-generate
           make ts-sdk-install
+      - name: Update SDK version to match release tag
+        run: |
+          VERSION="${{ needs.security-scan.outputs.tag_name }}"
+          VERSION="${VERSION#v}"
+          sed -i "s/\"version\": \"[^\"]*\"/\"version\": \"$VERSION\"/" api/sdk/typescript/package.json
+          echo "Updated SDK version to $VERSION"
       - name: Build SDK
         run: make ts-sdk-build
       - name: Publish to npm
-        run: make ts-sdk-publish
-        env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: cd api/sdk/typescript && npm publish
 
   docker:
     name: Build and Push Docker Image
-    needs: [test, security-scan]
+    needs: [test, security-scan, publish-sdk]
     runs-on: ubuntu-latest
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     steps:
