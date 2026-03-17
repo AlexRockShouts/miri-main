@@ -30,9 +30,9 @@ WORKDIR /app
 RUN apk add --no-cache ca-certificates libc6-compat
 # Copy the binary from the builder
 COPY --from=builder /app/bin/miri-server /app/miri-server
-# Copy default templates and config if needed (adjust as necessary)
-COPY templates /app/templates
-COPY config.yaml /app/config.yaml
+# Copy default templates and config from builder stage
+COPY --from=builder /app/templates /app/templates
+COPY --from=builder /app/config.yaml /app/config.yaml
 # Expose port (default for Gin is 8080)
 EXPOSE 8080
 # Command to run the server
