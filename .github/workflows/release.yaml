@@ -195,7 +195,7 @@ jobs:
         id: push
         uses: docker/build-push-action@v6
         with:
-          context: .
+          context: ./miri-main
           file: ./miri-main/Dockerfile
           push: true
           tags: |
