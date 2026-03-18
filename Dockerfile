@@ -31,6 +31,8 @@ FROM alpine:latest
 WORKDIR /app
 # Install common utilities
 RUN apk add --no-cache ca-certificates libc6-compat
+#trivy patch
+RUN apk add --no-cache zlib=1.3.2-r0
 # Copy the binary from the builder
 COPY --from=builder /app/bin/miri-server /app/miri-server
 # Copy default templates and config from builder stage
