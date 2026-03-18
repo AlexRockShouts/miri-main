@@ -229,24 +229,48 @@ jobs:
         with:
           path: artifacts
           merge-multiple: true
-      - name: Package binaries for release
-        shell: bash
-        run: |
-          for artifact_dir in artifacts/bin-*; do
-            if [ -d "$artifact_dir" ]; then
-              platform=$(basename "$artifact_dir")
-              binaries=("$artifact_dir"/*)
-              binary="${binaries[0]}"
-              if [ -f "$binary" ]; then
-                tar czf "miri-server-${platform}.tar.gz" -C "$(dirname "$binary")" "$(basename "$binary")"
-              fi
-            fi
-          done
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.security-scan.outputs.tag_name }}
-          files: miri-server-*.tar.gz
+          files: |
+            artifacts/bin-linux-amd64/miri-server-linux-amd64
+            artifacts/bin-linux-arm64/miri-server-linux-arm64
+            artifacts/bin-darwin-amd64/miri-server-darwin-amd64
+            artifacts/bin-darwin-arm64/miri-server-darwin-arm64
+            artifacts/bin-windows-amd64/miri-server-windows-amd64.exe
+            artifacts/bin-windows-arm64/miri-server-windows-arm64.exe
           draft: false
           prerelease: false
-          generate_release_notes: true
+          generate_release_notes: false
+          body: |
+            # Miri ${{ needs.security-scan.outputs.tag_name }}
+
+            ## Binaries
+            Choose your platform:
+
+            - [Linux AMD64](https://github.com/${{ github.repository }}/releases/download/${{ needs.security-scan.outputs.tag_name }}/miri-server-linux-amd64)
+            - [Linux ARM64](https://github.com/${{ github.repository }}/releases/download/${{ needs.security-scan.outputs.tag_name }}/miri-server-linux-arm64)
+            - [macOS AMD64 / Intel](https://github.com/${{ github.repository }}/releases/download/${{ needs.security-scan.outputs.tag_name }}/miri-server-darwin-amd64)
+            - [macOS ARM64 / Apple Silicon](https://github.com/${{ github.repository }}/releases/download/${{ needs.security-scan.outputs.tag_name }}/miri-server-darwin-arm64)
+            - [Windows AMD64 / x64](https://github.com/${{ github.repository }}/releases/download/${{ needs.security-scan.outputs.tag_name }}/miri-server-windows-amd64.exe)
+            - [Windows ARM64](https://github.com/${{ github.repository }}/releases/download/${{ needs.security-scan.outputs.tag_name }}/miri-server-windows-arm64.exe)
+
+            ## Docker Images
+            - `docker pull alexrockshouts/miri-combined:${{ needs.security-scan.outputs.tag_name }}`
+            - `docker pull alexrockshouts/miri-combined:latest`
+
+            ## NPM SDK
+            - `@alexrockshouts/miri-sdk@${{ replace(needs.security-scan.outputs.tag_name, 'v', '') }}`
+
+            ## Key Features
+            - Local autonomous AI agent with Eino ReAct engine.
+            - Subagents (researcher, coder, reviewer).
+            - Brain: Vector DB + Mole-Syn graph memory.
+            - Sandboxed tools, skills system, channels (WhatsApp/IRC).
+            - Embedded dashboard.
+
+            See [README.md](https://github.com/${{ github.repository }}/blob/${{ needs.security-scan.outputs.tag_name }}/README.md) for full docs.
+
+            ## Changes
+            See CHANGELOG.md or recent commits.
