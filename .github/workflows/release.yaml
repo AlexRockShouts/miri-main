@@ -229,6 +229,13 @@ jobs:
         with:
           path: artifacts
           merge-multiple: true
+      - name: Compute SDK version
+        id: versions
+        shell: bash
+        run: |
+          TAG_NAME="${{ needs.security-scan.outputs.tag_name }}"
+          SDK_VERSION="${TAG_NAME#v}"
+          echo "sdk_version=$SDK_VERSION" >> $GITHUB_OUTPUT
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
@@ -261,7 +268,7 @@ jobs:
             - `docker pull alexrockshouts/miri-combined:latest`
 
             ## NPM SDK
-            - `@alexrockshouts/miri-sdk@${{ replace(needs.security-scan.outputs.tag_name, 'v', '') }}`
+            - `@alexrockshouts/miri-sdk@${{ steps.versions.outputs.sdk_version }}`
 
             ## Key Features
             - Local autonomous AI agent with Eino ReAct engine.
