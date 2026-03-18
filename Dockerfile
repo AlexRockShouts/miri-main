@@ -1,9 +1,8 @@
 
 # Build dashboard
 FROM node:24-alpine AS dashboard-builder
-RUN apk add --no-cache git make
+RUN apk add --no-cache git
 RUN git clone https://github.com/AlexRockShouts/miri-dashboard.git /tmp/miri-dashboard
-RUN cd /tmp/miri-dashboard
 WORKDIR /tmp/miri-dashboard
 RUN npm install
 RUN npm run build
@@ -11,8 +10,6 @@ RUN npm run build
 # Build Go Backend
 FROM golang:1.25-alpine AS builder
 WORKDIR /app
-# Install build tools
-RUN apk add --no-cache make git gcc musl-dev
 
 # Cache Go modules
 COPY go.mod go.sum ./
@@ -24,6 +21,7 @@ COPY . .
 # Copy built dashboard from node stage
 COPY --from=dashboard-builder /tmp/miri-dashboard/build/* src/cmd/server/dashboard/
 
+RUN ls -al src/cmd/server/dashboard/
 
 # Build the server binary explicitly (matches GitHub release.yaml)
 RUN CGO_ENABLED=0 go build -trimpath -ldflags '-s -w' -o bin/miri-server ./src/cmd/server/main.go
@@ -41,4 +39,4 @@ COPY --from=builder /app/config.yaml /app/config.yaml
 # Expose port (default for Gin is 8080)
 EXPOSE 8080
 # Command to run the server
-ENTRYPOINT ["/app/miri-server"]
+ENTRYPOINT ["/app/miri-server", "-config", "config.yaml"]
