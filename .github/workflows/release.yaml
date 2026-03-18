@@ -128,13 +128,14 @@ jobs:
             BINARY_NAME="${BINARY_NAME}.exe"
           fi
           go build -trimpath -ldflags '-s -w' -o "bin/${BINARY_NAME}" ./src/cmd/server/main.go
+
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: bin-${{ matrix.os }}-${{ matrix.arch }}
           path: miri-main/bin/miri-server-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.os == 'windows' && '.exe' || '' }}
       - name: Attest Binary
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@v4
         if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
         with:
           subject-path: "miri-main/bin/miri-server-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.os == 'windows' && '.exe' || '' }}"
@@ -187,13 +188,13 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
       - name: Login to DockerHub
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
       - name: Build and push
         id: push
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: ./miri-main
           file: ./miri-main/Dockerfile
@@ -202,13 +203,13 @@ jobs:
             ${{ secrets.DOCKER_USERNAME }}/miri-combined:latest
             ${{ secrets.DOCKER_USERNAME }}/miri-combined:${{ needs.security-scan.outputs.tag_name }}
       - name: Attest Docker Image
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@v4
         with:
           subject-name: index.docker.io/${{ secrets.DOCKER_USERNAME }}/miri-combined
           subject-digest: ${{ steps.push.outputs.digest }}
           push-to-registry: true
       - name: Container Security Scan (Trivy)
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@v0.0.10
         with:
           image-ref: '${{ secrets.DOCKER_USERNAME }}/miri-combined:latest'
           format: 'table'
@@ -224,7 +225,7 @@ jobs:
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     steps:
       - name: Download all artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: artifacts
           merge-multiple: true
