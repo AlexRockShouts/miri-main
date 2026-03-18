@@ -23,9 +23,9 @@ jobs:
     name: Run Go Tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6.0.2
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6.3.0
         with:
           go-version-file: 'go.mod'
           cache: true
@@ -36,7 +36,7 @@ jobs:
     outputs:
       tag_name: ${{ steps.version.outputs.tag_name }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6.0.2
         with:
           fetch-depth: 0
       - name: Determine version
@@ -74,7 +74,7 @@ jobs:
             echo "Tag ${{ steps.version.outputs.tag_name }} already exists"
           fi
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6.3.0
         with:
           go-version-file: 'go.mod'
       - name: Go Vulnerability Check
@@ -92,16 +92,16 @@ jobs:
         arch: [amd64, arm64]
     steps:
       - name: Checkout main
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6.0.2
         with:
           path: miri-main
       - name: Checkout dashboard
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6.0.2
         with:
           repository: AlexRockShouts/miri-dashboard
           path: miri-dashboard
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6.3.0
         with:
           node-version: '24'
       - name: Build SDK & Dashboard
@@ -114,7 +114,7 @@ jobs:
           mkdir -p ../miri-main/src/cmd/server/dashboard
           cp -r build/* ../miri-main/src/cmd/server/dashboard/
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6.3.0
         with:
           go-version-file: 'miri-main/go.mod'
       - name: Build binary
@@ -145,9 +145,9 @@ jobs:
     needs: [test, security-scan]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6.0.2
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6.3.0
         with:
           node-version: '24'
           registry-url: 'https://registry.npmjs.org'
@@ -175,11 +175,11 @@ jobs:
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     steps:
       - name: Checkout main
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6.0.2
         with:
           path: miri-main
       - name: Checkout dashboard
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6.0.2
         with:
           repository: AlexRockShouts/miri-dashboard
           path: miri-dashboard
