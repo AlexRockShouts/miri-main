@@ -18,7 +18,7 @@ clean:
 	rm -rf $(BIN_DIR)
 
 test:
-	go test ./...
+	go test -race -bench=. ./...
 
 install: server
 	cp $(SERVER_BIN) /usr/local/bin/
@@ -124,3 +124,12 @@ dashboard-unlink:
 # Remove global SDK link
 ts-sdk-unlink:
 	cd $(TS_SDK_DIR) && npm unlink
+
+shadow:
+	mkdir -p tmp
+	go build -trimpath -ldflags '-s -w' -o tmp/miri-server-shadow ./src/cmd/server/main.go
+
+deploy:
+	make test && cp bin/miri-server bin/miri-server.bak && mv tmp/miri-server-shadow bin/miri-server
+
+.PHONY += shadow deploy

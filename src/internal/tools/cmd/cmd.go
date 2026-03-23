@@ -9,7 +9,7 @@ import (
 )
 
 func Execute(ctx context.Context, command string, dir string) (stdout, stderr string, exitCode int, err error) {
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 90*time.Second)
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, "sh", "-c", command)
