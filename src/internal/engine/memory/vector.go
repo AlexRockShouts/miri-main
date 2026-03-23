@@ -89,6 +89,21 @@ func NewVectorMemory(cfg *config.Config, collectionName string) (*VectorMemory, 
 	}
 	slog.Info("using vector collection", "name", collectionName, "count", col.Count())
 
+	// Test if data retrievable (detect embedder incompatibility/mismatch)
+	ctx := context.Background()
+	testCount := col.Count()
+	testResults, testErr := col.Query(ctx, " ", testCount, nil, nil)
+	if testErr == nil && len(testResults) == 0 && testCount > 0 {
+		slog.Warn("Test query returned no results despite count > 0; possible embedding incompatibility. Clearing collection.", "collection", collectionName, "count", testCount)
+		if clearErr := col.Delete(ctx, nil, nil); clearErr != nil {
+			slog.Error("Failed to clear incompatible collection", "collection", collectionName, "error", clearErr)
+		} else {
+			slog.Info("Cleared incompatible collection for compatibility", "collection", collectionName)
+		}
+	} else if testErr != nil {
+		slog.Warn("Test query failed", "collection", collectionName, "error", testErr)
+	}
+
 	system.LogMemoryUsage("vector_memory_init")
 
 	return &VectorMemory{

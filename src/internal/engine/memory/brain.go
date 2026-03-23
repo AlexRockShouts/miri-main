@@ -134,8 +134,8 @@ func (b *Brain) AddToBuffer(sessionID string, msg *schema.Message) {
 		b.buffer[sessionID] = b.buffer[sessionID][len(b.buffer[sessionID])-maxBuffer:]
 	}
 
-	// Trigger maintenance every 100 writes
-	if count > 0 && count%100 == 0 {
+	// Trigger maintenance every 5 writes (faster population, persists across restarts not needed as maintenance uses VMs)
+	if count > 0 && count%5 == 0 {
 		go b.TriggerMaintenance(TriggerInteraction)
 	}
 }
