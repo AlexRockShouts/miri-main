@@ -2,7 +2,12 @@ package engine
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"github.com/cloudwego/eino/schema"
+	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/cloudwego/eino/components/tool"
 
@@ -91,4 +96,68 @@ func (e *EinoEngine) GetSkill(name string) (*skills.Skill, error) {
 		return nil, fmt.Errorf("skill %q not found", name)
 	}
 	return skill, nil
+}
+
+// LocalInstallSkill installs a local skill from content.
+func (e *EinoEngine) LocalInstallSkill(ctx context.Context, name, content string) error {
+	dir := filepath.Join(e.storageBaseDir, "skills")
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return err
+	}
+	safeName := filepath.Base(name)
+	if safeName != name || strings.ContainsAny(safeName, "./\\") {
+		return fmt.Errorf("invalid skill name %q", name)
+	}
+	path := filepath.Join(dir, safeName+".md")
+	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		return err
+	}
+	if e.skillLoader != nil {
+		e.skillLoader.Load()
+	}
+	return nil
+}
+
+type LocalInstallTool struct {
+	e *EinoEngine
+}
+
+func NewLocalInstallTool(e *EinoEngine) tool.InvokableTool {
+	return &LocalInstallTool{e}
+}
+
+func (t *LocalInstallTool) Info(_ context.Context) (*schema.ToolInfo, error) {
+	return &schema.ToolInfo{
+		Name: "skill_local_install",
+		Desc: "Install a new local skill from raw MD content with YAML frontmatter. Enables hot-swap self-modification without restart. Params: name (string), content (string, full markdown with --- frontmatter ---).",
+		ParamsOneOf: schema.NewParamsOneOfByParams(map[string]*schema.ParameterInfo{
+			"name": {
+				Type:     schema.String,
+				Desc:     "Unique skill name (no path, safe basename). Required.",
+				Required: true,
+			},
+			"content": {
+				Type:     schema.String,
+				Desc:     "Full skill markdown content with YAML frontmatter (--- ... ---). Required.",
+				Required: true,
+			},
+		}),
+	}, nil
+}
+
+func (t *LocalInstallTool) InvokableRun(ctx context.Context, argumentsInJSON string, _ ...tool.Option) (string, error) {
+	var args struct {
+		Name    string `json:"name"`
+		Content string `json:"content"`
+	}
+	if err := json.Unmarshal([]byte(argumentsInJSON), &args); err != nil {
+		return "", fmt.Errorf("invalid JSON args: %w", err)
+	}
+	if args.Name == "" || args.Content == "" {
+		return "", fmt.Errorf("name and content required")
+	}
+	if err := t.e.LocalInstallSkill(ctx, args.Name, args.Content); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("✅ Skill '%s' installed and reloaded. New tools available mid-chat.", args.Name), nil
 }

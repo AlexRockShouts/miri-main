@@ -561,3 +561,18 @@ func (s *Storage) GetBrainPrompt(name string) (string, error) {
 
 	return prompt, nil
 }
+
+// WriteSkill writes a new flat skill file to the skills/ directory, overwriting if exists.
+// Supports flat .md skills; for directory skills use skillmanager.
+func (s *Storage) WriteSkill(name, content string) error {
+	dir := filepath.Join(s.baseDir, "skills")
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return err
+	}
+	safeName := filepath.Base(name)
+	if safeName != name || strings.ContainsAny(safeName, "./\\") {
+		return fmt.Errorf("invalid skill name %q", name)
+	}
+	path := filepath.Join(dir, safeName+".md")
+	return os.WriteFile(path, []byte(content), 0644)
+}

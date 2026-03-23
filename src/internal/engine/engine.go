@@ -40,6 +40,8 @@ type SkillManager interface {
 	InstallSkill(ctx context.Context, name string) (string, error)
 	RemoveSkill(name string) error
 	GetSkill(name string) (*skills.Skill, error)
+
+	LocalInstallSkill(ctx context.Context, name, content string) error
 }
 
 // MemoryManager handles memory and history operations.
