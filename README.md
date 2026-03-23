@@ -127,6 +127,7 @@ flowchart TD
   - `GET /api/v1/subagents/{id}/transcript` — retrieve full message transcript.
   - `GET /api/admin/v1/subagents` — list all runs (filter by `?session=`).
   - `DELETE /api/admin/v1/subagents/{id}` — cancel a running sub-agent.
+- `POST /api/v1/dream` — Offline "dream mode": `{"goal": "Optimize my workflow", "paths": 20}` → simulates parallel CoT paths, scores (structural richness + reasoning depth), persists best plan to memory, returns full report.
 - `GET /api/v1/prompt/stream` — SSE streaming for real-time output.
 - `GET /ws` — full-duplex WebSocket with auth (`Sec-WebSocket-Protocol: miri-key, <key>` or `?token=`), ping/pong heartbeats (54 s interval), and graceful close.
 - **Verbose Streaming**: WebSocket emits `[Thought: ...]`, `[Tool: name(args)]`, and `[ToolResult: ...]` events inline before the final answer — detect these prefixes to render a verbose chat view.
