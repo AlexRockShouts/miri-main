@@ -557,6 +557,38 @@ func (mg *MemoryGraph) pruneSessionLocked(sessionID string) {
 	}
 
 	excess := len(nodes) - mg.maxNodesPerSession
+	if excess > 0 {
+		// Cycle-aware pruning
+		sessionNodes := make(map[string]struct{})
+		for _, nt := range nodes {
+			sessionNodes[nt.id] = struct{}{}
+		}
+		sg := graph.New(graph.StringHash, graph.Directed())
+		for id := range sessionNodes {
+			_ = sg.AddVertex(id)
+		}
+		for edgeKey := range mg.edgeData {
+			parts := strings.Split(edgeKey, "->")
+			if len(parts) == 2 {
+				from, to := parts[0], parts[1]
+				if _, ok1 := sessionNodes[from]; ok1 {
+					if _, ok2 := sessionNodes[to]; ok2 {
+						_ = sg.AddEdge(from, to)
+					}
+				}
+			}
+		}
+		_, topoErr := graph.TopologicalSort(sg)
+		if topoErr != nil {
+			extra := len(nodes) / 10
+			if extra < 5 {
+				extra = 5
+			}
+			excess += extra
+			slog.Debug("Mole-Syn: cycles in session graph, pruning extra nodes", "session", sessionID, "extra", extra)
+		}
+	}
+
 	if excess <= 0 {
 		return
 	}

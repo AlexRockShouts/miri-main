@@ -187,3 +187,11 @@ func (b *Brain) checkFactDuplicate(ctx context.Context, fact string) (bool, stri
 	}
 	return false, ""
 }
+
+func (b *Brain) AddReasoningTrace(ctx context.Context, sessionID, trace string) error {
+	analysis, err := b.analyzeTopology(ctx, trace)
+	if err != nil {
+		return err
+	}
+	return b.Graph.AddStepsFromAnalysis(sessionID, analysis)
+}

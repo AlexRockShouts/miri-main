@@ -211,6 +211,13 @@ func NewEinoEngine(cfg *config.Config, st *storage.Storage, providerName, modelN
 		}
 	})
 
+	skillListTool := &tools.SkillRemoteListToolWrapper{}
+	skillInstallTool := tools.NewSkillInstallTool(cfg, func() {
+		if ee.skillLoader != nil {
+			_ = ee.skillLoader.Load()
+		}
+	})
+
 	// Add skill tools
 	skillsDir := filepath.Join(cfg.StorageDir, "skills")
 	scriptsDir := "scripts" // default scripts directory
@@ -222,7 +229,7 @@ func NewEinoEngine(cfg *config.Config, st *storage.Storage, providerName, modelN
 	skillUseTool := skills.NewUseTool(ee.skillLoader)
 
 	// Update tools node with all tools
-	allTools := []tool.BaseTool{searchTool, fetchTool, grokipediaTool, cmdTool, skillRemoveTool, skillUseTool, fileManagerTool, retrievePasswordTool, storePasswordTool, chromeMCPTool}
+	allTools := []tool.BaseTool{searchTool, fetchTool, grokipediaTool, cmdTool, skillRemoveTool, skillListTool, skillInstallTool, skillUseTool, fileManagerTool, retrievePasswordTool, storePasswordTool, chromeMCPTool}
 	allTools = append(allTools, ee.skillLoader.GetExtraTools()...)
 
 	// Add Eino ADK sub-agent tools (Researcher, Coder, Reviewer)

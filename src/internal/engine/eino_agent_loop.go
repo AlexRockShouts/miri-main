@@ -107,6 +107,14 @@ func (e *EinoEngine) agentInvoke(ctx context.Context, input *graphInput) (out *g
 			if e.brain != nil {
 				e.brain.UpdateContextUsage(ctx, assistant.ResponseMeta.Usage.TotalTokens)
 			}
+
+			// Parse reasoning trace into Mole-Syn graph
+			if e.brain != nil && input.SessionID != "" {
+				trace := fmt.Sprintf("Agent step %d:\\n%s", i, assistant.Content)
+				if terr := e.brain.AddReasoningTrace(ctx, input.SessionID, trace); terr != nil {
+					slog.Warn("Failed to add reasoning to Mole-Syn graph", "session", input.SessionID, "step", i, "error", terr)
+				}
+			}
 		}
 
 		if len(assistant.ToolCalls) == 0 {

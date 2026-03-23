@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"math"
@@ -13,6 +14,8 @@ import (
 	"miri-main/src/internal/storage"
 	"miri-main/src/internal/system"
 	"strings"
+	"sync"
+	"time"
 )
 
 type Agent struct {
@@ -249,4 +252,94 @@ func (a *Agent) TriggerMaintenance(ctx context.Context) {
 
 func (a *Agent) SpawnSubAgent(ctx context.Context, role, query string) (string, error) {
 	return a.Eng.SpawnSubAgent(ctx, role, query)
+}
+
+func (a *Agent) waitForSubAgent(ctx context.Context, id string) (*storage.SubAgentRun, error) {
+	ticker := time.NewTicker(500 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-ticker.C:
+			run, err := a.Storage.LoadSubAgentRun(id)
+			if err != nil {
+				continue
+			}
+			if run.Status == "completed" {
+				return run, nil
+			}
+			if run.Status == "failed" {
+				if run.Error != "" {
+					return nil, errors.New(run.Error)
+				}
+				return nil, fmt.Errorf("subagent %s failed", id)
+			}
+			if run.Status == "cancelled" {
+				return nil, fmt.Errorf("subagent %s cancelled", id)
+			}
+		}
+	}
+}
+
+func (a *Agent) DelegateResearcher(ctx context.Context, query string) (string, error) {
+	id, err := a.SpawnSubAgent(ctx, "researcher", query)
+	if err != nil {
+		return "", err
+	}
+	run, err := a.waitForSubAgent(ctx, id)
+	if err != nil {
+		return "", err
+	}
+	return run.Output, nil
+}
+
+func (a *Agent) DelegateCoder(ctx context.Context, query string) (string, error) {
+	id, err := a.SpawnSubAgent(ctx, "coder", query)
+	if err != nil {
+		return "", err
+	}
+	run, err := a.waitForSubAgent(ctx, id)
+	if err != nil {
+		return "", err
+	}
+	return run.Output, nil
+}
+
+func (a *Agent) DelegateParallelResearchCoder(ctx context.Context, researchQuery, codeQuery string) (string, string, error) {
+	type Result struct {
+		Out string
+		Err error
+	}
+	resCh := make(chan Result, 1)
+	codeCh := make(chan Result, 1)
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	go func() {
+		defer wg.Done()
+		out, err := a.DelegateResearcher(ctx, researchQuery)
+		resCh <- Result{Out: out, Err: err}
+	}()
+
+	go func() {
+		defer wg.Done()
+		out, err := a.DelegateCoder(ctx, codeQuery)
+		codeCh <- Result{Out: out, Err: err}
+	}()
+
+	wg.Wait()
+	close(resCh)
+	close(codeCh)
+
+	res := <-resCh
+	if res.Err != nil {
+		return "", "", res.Err
+	}
+	code := <-codeCh
+	if code.Err != nil {
+		return "", "", code.Err
+	}
+	return res.Out, code.Out, nil
 }
