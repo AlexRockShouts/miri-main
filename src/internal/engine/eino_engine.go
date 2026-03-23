@@ -144,18 +144,24 @@ func NewEinoEngine(cfg *config.Config, st *storage.Storage, providerName, modelN
 	}
 
 	// Initialize Vector Memory
-	factsVM, err := memory.NewVectorMemory(cfg, "miri_facts")
-	if err != nil {
+	var factsVM memory.MemorySystem
+	if vm, err := memory.NewVectorMemory(cfg, "miri_facts"); err == nil {
+		factsVM = vm
+	} else {
 		slog.Warn("failed to initialize facts vector memory", "error", err)
 	}
 
-	summariesVM, err := memory.NewVectorMemory(cfg, "miri_summaries")
-	if err != nil {
+	var summariesVM memory.MemorySystem
+	if vm, err := memory.NewVectorMemory(cfg, "miri_summaries"); err == nil {
+		summariesVM = vm
+	} else {
 		slog.Warn("failed to initialize summaries vector memory", "error", err)
 	}
 
-	stepsVM, err := memory.NewVectorMemory(cfg, "miri_steps")
-	if err != nil {
+	var stepsVM memory.MemorySystem
+	if vm, err := memory.NewVectorMemory(cfg, "miri_steps"); err == nil {
+		stepsVM = vm
+	} else {
 		slog.Warn("failed to initialize steps vector memory", "error", err)
 	}
 
