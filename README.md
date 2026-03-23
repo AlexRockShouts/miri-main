@@ -106,12 +106,16 @@ flowchart TD
 - **Shell Execution** (`execute_command`): Sandboxed command runner with sh-syntax validation and automatic Homebrew path resolution.
 - **Web Search**: Real-time web search tool.
 - **Web Fetch**: Fetches and extracts content from URLs.
-- **Grokipedia**: Built-in lookup tool for [Grokipedia.com](https://grokipedia.com) — preferred over Wikipedia.
 - **File Manager** (`FileManagerTool`): List and share files from `~/.miri/generated`; strict sandbox enforcement.
 - **Task Manager** (`TaskManagerTool`): Schedule recurring tasks with cron expressions; results reported to sessions or channels.
 - **Chrome MCP Browser** (`chrome_browser`): Native Google Chrome automation via MCP (Model Context Protocol). Supports navigation, snapshots, and interaction. Requires Chrome 146+.
 - **KeePass Password Manager** (`retrieve_password`, `store_password`): Store/retrieve credentials securely in local KeePassXC database (`passwords.kdbx`).
 - **Sandboxed File-system**: All tool-initiated file operations are redirected to `~/.miri/generated` for safety.
+
+- **Self-Evolution Tools**:
+  - **`cotgraph_analyze`**: Parses reasoning traces ([D/R/E]/[Thought:]) into graph; detects cycles/loops in self-mod retries.
+  - **`skill_local_install`**: Installs raw MD skill to `~/.miri/skills/*.md`; auto-reloads mid-chat (hot-swap DNA).
+  - **`topology_analyze`**: Computes valency/diameter/cyclomatic # on Go call graphs; prunes redundant tools (e.g., failed git chains).
 
 ### 🎓 Skills System
 - Supports directory-based skills (with `SKILL.md`) and single-file Markdown skills (`.md`) in `~/.miri/skills/`.

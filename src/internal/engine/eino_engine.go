@@ -162,13 +162,12 @@ func NewEinoEngine(cfg *config.Config, st *storage.Storage, providerName, modelN
 	// Define tools
 	searchTool := &tools.SearchToolWrapper{}
 	fetchTool := &tools.FetchToolWrapper{}
-	grokipediaTool := tools.CreateGrokipediaTool()
+	// pruned: grokipediaTool := tools.CreateGrokipediaTool() // redundant with search/fetch
 	uploadsDir := filepath.Join(cfg.StorageDir, "uploads")
 	cmdTool := tools.NewCmdTool(uploadsDir)
 	fileManagerTool := tools.NewFileManagerTool(cfg.StorageDir, nil) // Will be properly set if gateway is available
 	retrievePasswordTool := tools.NewRetrievePasswordTool(cfg.Miri.KeePass.DBPath, cfg.Miri.KeePass.Password)
 	storePasswordTool := tools.NewStorePasswordTool(cfg.Miri.KeePass.DBPath, cfg.Miri.KeePass.Password)
-	chromeMCPTool := tools.NewChromeMCPTool()
 
 	cpStore, err := NewFileCheckPointStore(cfg.StorageDir)
 	if err != nil {
@@ -205,6 +204,12 @@ func NewEinoEngine(cfg *config.Config, st *storage.Storage, providerName, modelN
 		}
 	}
 
+	// Tools requiring ee
+	chromeMCPTool := tools.NewChromeMCPTool()
+	cotGraphTool := NewCotGraphTool()
+	localInstallTool := NewLocalInstallTool(ee)
+	topologyTool := NewTopologyTool()
+
 	skillRemoveTool := tools.NewSkillRemoveTool(cfg, func() {
 		if ee.skillLoader != nil {
 			_ = ee.skillLoader.Load()
@@ -229,7 +234,7 @@ func NewEinoEngine(cfg *config.Config, st *storage.Storage, providerName, modelN
 	skillUseTool := skills.NewUseTool(ee.skillLoader)
 
 	// Update tools node with all tools
-	allTools := []tool.BaseTool{searchTool, fetchTool, grokipediaTool, cmdTool, skillRemoveTool, skillListTool, skillInstallTool, skillUseTool, fileManagerTool, retrievePasswordTool, storePasswordTool, chromeMCPTool}
+	allTools := []tool.BaseTool{searchTool, fetchTool /* pruned: grokipediaTool (redundant with search/fetch) */, cmdTool, skillRemoveTool, skillListTool, skillInstallTool, skillUseTool, fileManagerTool, retrievePasswordTool, storePasswordTool, chromeMCPTool, cotGraphTool, localInstallTool, topologyTool}
 	allTools = append(allTools, ee.skillLoader.GetExtraTools()...)
 
 	// Add Eino ADK sub-agent tools (Researcher, Coder, Reviewer)
@@ -260,10 +265,7 @@ func NewEinoEngine(cfg *config.Config, st *storage.Storage, providerName, modelN
 		fetchTool.GetInfo(),
 		cmdTool.GetInfo(),
 		skillRemoveTool.GetInfo(),
-		func() *schema.ToolInfo {
-			info, _ := grokipediaTool.Info(context.Background())
-			return info
-		}(),
+		// pruned grokipediaTool - redundant info retrieval tool (search/fetch suffice)
 		fileManagerTool.GetInfo(),
 		retrievePasswordTool.GetInfo(),
 		storePasswordTool.GetInfo(),

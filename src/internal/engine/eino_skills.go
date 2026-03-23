@@ -12,10 +12,12 @@ import (
 	"github.com/cloudwego/eino/components/tool"
 
 	"miri-main/src/internal/config"
+	"miri-main/src/internal/cotgraph"
 	"miri-main/src/internal/engine/skills"
 	"miri-main/src/internal/engine/tools"
 	"miri-main/src/internal/session"
 	"miri-main/src/internal/tools/skillmanager"
+	"miri-main/src/internal/topology"
 )
 
 func (e *EinoEngine) ListSkills() []*skills.Skill {
@@ -160,4 +162,78 @@ func (t *LocalInstallTool) InvokableRun(ctx context.Context, argumentsInJSON str
 		return "", err
 	}
 	return fmt.Sprintf("✅ Skill '%s' installed and reloaded. New tools available mid-chat.", args.Name), nil
+}
+
+type CotGraphTool struct{}
+
+func NewCotGraphTool() tool.InvokableTool {
+	return &CotGraphTool{}
+}
+
+func (t *CotGraphTool) Info(_ context.Context) (*schema.ToolInfo, error) {
+	return &schema.ToolInfo{
+		Name: "cotgraph_analyze",
+		Desc: "Parse CoT reasoning ([D][R][E]/[Thought:]) → graph (nodes=thoughts, edges=transitions). Detect cycles/loops in self-mod (retry fails).",
+		ParamsOneOf: schema.NewParamsOneOfByParams(map[string]*schema.ParameterInfo{
+			"input": {
+				Type:     schema.String,
+				Desc:     "Recent reasoning/memory text with tags.",
+				Required: true,
+			},
+		}),
+	}, nil
+}
+
+func (t *CotGraphTool) InvokableRun(ctx context.Context, argumentsInJSON string, _ ...tool.Option) (string, error) {
+	var args struct {
+		Input string `json:"input"`
+	}
+	if err := json.Unmarshal([]byte(argumentsInJSON), &args); err != nil {
+		return "", fmt.Errorf("invalid JSON: %w", err)
+	}
+	if args.Input == "" {
+		return "", fmt.Errorf("input required")
+	}
+	result, err := cotgraph.Analyze(ctx, args.Input)
+	if err != nil {
+		return fmt.Sprintf("Error: %v", err), nil
+	}
+	return result, nil
+}
+
+type TopologyTool struct{}
+
+func NewTopologyTool() tool.InvokableTool {
+	return &TopologyTool{}
+}
+
+func (t *TopologyTool) Info(_ context.Context) (*schema.ToolInfo, error) {
+	return &schema.ToolInfo{
+		Name: "topology_analyze",
+		Desc: "Compute topology metrics (valency/degrees, diameter, cyclomatic #) on Go code call graphs. Prune redundant complex tool paths e.g. failed git chains.",
+		ParamsOneOf: schema.NewParamsOneOfByParams(map[string]*schema.ParameterInfo{
+			"dir": {
+				Type:     schema.String,
+				Desc:     "Go directory to analyze (e.g. 'src/internal/engine/tools').",
+				Required: true,
+			},
+		}),
+	}, nil
+}
+
+func (t *TopologyTool) InvokableRun(ctx context.Context, argumentsInJSON string, _ ...tool.Option) (string, error) {
+	var args struct {
+		Dir string `json:"dir"`
+	}
+	if err := json.Unmarshal([]byte(argumentsInJSON), &args); err != nil {
+		return "", fmt.Errorf("invalid JSON args: %w", err)
+	}
+	if args.Dir == "" {
+		return "", fmt.Errorf("dir required")
+	}
+	result, err := topology.Analyze(ctx, args.Dir)
+	if err != nil {
+		return fmt.Sprintf("Error: %v", err), nil
+	}
+	return result, nil
 }
