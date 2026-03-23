@@ -15,7 +15,7 @@ func Execute(ctx context.Context, command string, dir string) (stdout, stderr st
 	backoffBase := 200 * time.Millisecond
 
 	for attempt := 0; attempt <= maxRetries; attempt++ {
-		timeoutCtx, timeoutCancel := context.WithTimeout(ctx, 20*time.Second)
+		timeoutCtx, timeoutCancel := context.WithTimeout(ctx, 10*time.Second)
 		defer timeoutCancel()
 
 		cmd := exec.CommandContext(timeoutCtx, "sh", "-c", command)
