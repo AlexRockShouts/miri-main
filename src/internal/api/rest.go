@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"miri-main/src/internal/config"
+	"miri-main/src/internal/dream"
 	"miri-main/src/internal/engine"
 	"miri-main/src/internal/gateway"
 	"miri-main/src/internal/session"
@@ -16,8 +17,9 @@ import (
 
 	"archive/zip"
 	"fmt"
-	"github.com/gin-gonic/gin"
 	"io"
+
+	"github.com/gin-gonic/gin"
 )
 
 func (s *Server) handleGetConfig(c *gin.Context) {
@@ -938,6 +940,32 @@ func (s *Server) handleCancelSubAgentRun(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"status": "canceled"})
+}
+
+// handleDream POST /api/v1/dream
+// Runs n offline chain-of-thought simulations for the given goal,
+// scores each path, persists the best plan to memory, and returns a report.
+func (s *Server) handleDream(c *gin.Context) {
+	gw := c.MustGet("gateway").(*gateway.Gateway)
+	var req struct {
+		Goal  string `json:"goal" binding:"required"`
+		Paths int    `json:"paths"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		s.sendError(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	if req.Paths <= 0 {
+		req.Paths = 10
+	}
+	sim := dream.New(gw.PrimaryAgent.Config, gw.PrimaryAgent.Storage)
+	report, err := sim.Run(c.Request.Context(), req.Goal, req.Paths)
+	if err != nil {
+		slog.Error("dream simulation failed", "goal", req.Goal, "error", err)
+		s.sendError(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	c.JSON(http.StatusOK, report)
 }
 
 func (s *Server) handleListFiles(c *gin.Context) {

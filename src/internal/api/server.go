@@ -225,6 +225,8 @@ func (s *Server) setupRoutesRest() {
 		v1.POST("/subagents", s.handleSpawnSubAgent)
 		v1.GET("/subagents/:id", s.handleGetSubAgentRun)
 		v1.GET("/subagents/:id/transcript", s.handleGetSubAgentTranscript)
+		// Dream mode: offline CoT simulation
+		v1.POST("/dream", s.handleDream)
 	}
 }
 

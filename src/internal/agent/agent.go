@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -305,6 +306,107 @@ func (a *Agent) DelegateCoder(ctx context.Context, query string) (string, error)
 		return "", err
 	}
 	return run.Output, nil
+}
+
+func (a *Agent) DelegateReviewer(ctx context.Context, query string) (string, error) {
+	id, err := a.SpawnSubAgent(ctx, "reviewer", query)
+	if err != nil {
+		return "", err
+	}
+	run, err := a.waitForSubAgent(ctx, id)
+	if err != nil {
+		return "", err
+	}
+	return run.Output, nil
+}
+
+func (a *Agent) DelegateSwarm(ctx context.Context, query string) (string, error) {
+	const decompFmt = `Decompose the following complex task into 2-5 small, atomic (molecular) subtasks. 
+Assign each to exactly one specialist: "researcher" for fact-finding/search, "coder" for coding/planning/implementation, "reviewer" for validation/critique.
+
+Respond with ONLY a valid JSON array of objects, no other text or explanation:
+
+[
+  {"role": "researcher", "task": "precise description of subtask"},
+  {"role": "coder", "task": "precise description of subtask"},
+  ...
+]
+
+Task: %s`
+	decompPrompt := fmt.Sprintf(decompFmt, query)
+	decompOut, err := a.DelegatePromptWithOptions(ctx, "swarm_decomp", decompPrompt, engine.Options{})
+	if err != nil {
+		return "", err
+	}
+
+	type SubTask struct {
+		Role string `json:"role"`
+		Task string `json:"task"`
+	}
+	var subtasks []SubTask
+	if err := json.Unmarshal([]byte(decompOut), &subtasks); err != nil || len(subtasks) == 0 || len(subtasks) > 5 {
+		return fmt.Sprintf(`{"error": "Decomposition failed", "raw": %q}`, decompOut), nil
+	}
+
+	type SubResult struct {
+		Role string `json:"role"`
+		Out  string `json:"out"`
+	}
+	resultsCh := make(chan SubResult, len(subtasks))
+	var wg sync.WaitGroup
+
+	for _, st := range subtasks {
+		wg.Add(1)
+		go func(role, task string) {
+			defer wg.Done()
+			var out string
+			var subErr error
+			switch role {
+			case "researcher":
+				out, subErr = a.DelegateResearcher(ctx, task)
+			case "coder":
+				out, subErr = a.DelegateCoder(ctx, task)
+			case "reviewer":
+				out, subErr = a.DelegateReviewer(ctx, task)
+			default:
+				subErr = fmt.Errorf("unknown role: %s", role)
+				out = ""
+			}
+			if subErr != nil {
+				out = fmt.Sprintf("ERROR in %s: %v", role, subErr)
+			}
+			resultsCh <- SubResult{Role: role, Out: out}
+		}(st.Role, st.Task)
+	}
+
+	wg.Wait()
+	close(resultsCh)
+
+	var results []SubResult
+	for res := range resultsCh {
+		results = append(results, res)
+	}
+
+	type SwarmResult struct {
+		Subtasks []SubTask   `json:"subtasks"`
+		Outputs  []SubResult `json:"outputs"`
+		Summary  string      `json:"summary,omitempty"`
+	}
+	sr := SwarmResult{
+		Subtasks: subtasks,
+		Outputs:  results,
+	}
+
+	// Optional summary
+	summaryPrompt := fmt.Sprintf("Original task: %s\nSubtasks: %s\nOutputs: %v\nProvide a concise summary of the swarm results.", query, decompOut, results)
+	summaryOut, _ := a.DelegatePromptWithOptions(ctx, "swarm_summary", summaryPrompt, engine.Options{})
+	sr.Summary = summaryOut
+
+	b, err := json.MarshalIndent(sr, "", "  ")
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
 }
 
 func (a *Agent) DelegateParallelResearchCoder(ctx context.Context, researchQuery, codeQuery string) (string, string, error) {
