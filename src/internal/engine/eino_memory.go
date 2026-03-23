@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"strings"
+	"sync"
 
 	"time"
 
@@ -182,9 +183,16 @@ func (e *EinoEngine) StreamRespond(ctx context.Context, sess *session.Session, p
 		}
 
 		verboseCh := make(chan string, 64)
+		var wg sync.WaitGroup
+		wg.Add(1)
 		go func() {
+			defer wg.Done()
 			for ev := range verboseCh {
-				out <- ev
+				select {
+				case out <- ev:
+				default:
+					return
+				}
 			}
 		}()
 		input := &graphInput{
@@ -201,6 +209,7 @@ func (e *EinoEngine) StreamRespond(ctx context.Context, sess *session.Session, p
 		stream, err := e.compiledGraph.Stream(subctx, input, compose.WithCheckPointID(sess.ID))
 		if err != nil {
 			close(verboseCh)
+			wg.Wait()
 			callbacks.OnError(ctx, err)
 			// Check for persistent 503 error
 			if strings.Contains(err.Error(), "503") || strings.Contains(err.Error(), "Service Unavailable") {
@@ -219,6 +228,7 @@ func (e *EinoEngine) StreamRespond(ctx context.Context, sess *session.Session, p
 					break
 				}
 				close(verboseCh)
+				wg.Wait()
 				callbacks.OnError(ctx, err)
 				out <- fmt.Sprintf("[Stream Error: %v]\n", err)
 				return
@@ -226,6 +236,7 @@ func (e *EinoEngine) StreamRespond(ctx context.Context, sess *session.Session, p
 			lastOutput = chunk
 		}
 		close(verboseCh)
+		wg.Wait()
 		if lastOutput != nil {
 			out <- lastOutput.Answer
 			callbacks.OnEnd(ctx, lastOutput.Answer)
