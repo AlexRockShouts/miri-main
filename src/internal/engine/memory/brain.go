@@ -84,6 +84,22 @@ func (w *memorySystemWrapper) ListAll(ctx context.Context) ([]mole_syn.SearchRes
 	return out, nil
 }
 
+func (w *memorySystemWrapper) Count(ctx context.Context) (int, error) {
+	return w.ms.Count(ctx)
+}
+
+func (w *memorySystemWrapper) BulkAdd(ctx context.Context, docs []Document) error {
+	return w.ms.BulkAdd(ctx, docs)
+}
+
+func (w *memorySystemWrapper) ExportJSON(ctx context.Context) ([]byte, error) {
+	return w.ms.ExportJSON(ctx)
+}
+
+func (w *memorySystemWrapper) ImportJSON(ctx context.Context, data []byte) error {
+	return w.ms.ImportJSON(ctx, data)
+}
+
 func (b *Brain) SetSanitizeFunc(f func([]*schema.Message) []*schema.Message) {
 	b.mu.Lock()
 	defer b.mu.Unlock()

@@ -10,6 +10,12 @@ type SearchResult struct {
 	Distance float32           `json:"distance"`
 }
 
+type Document struct {
+	ID       string            `json:"id,omitempty"`
+	Content  string            `json:"content"`
+	Metadata map[string]string `json:"metadata"`
+}
+
 type MemorySystem interface {
 	// Add adds a new memory entry.
 	Add(ctx context.Context, content string, metadata map[string]string) error
@@ -23,6 +29,14 @@ type MemorySystem interface {
 	Delete(ctx context.Context, id string) error
 	// Update updates an existing memory entry.
 	Update(ctx context.Context, id string, content string, metadata map[string]string) error
+	// Count returns the number of documents in the collection.
+	Count(ctx context.Context) (int, error)
+	// BulkAdd adds multiple documents.
+	BulkAdd(ctx context.Context, docs []Document) error
+	// ExportJSON exports all documents as JSON array of Document.
+	ExportJSON(ctx context.Context) ([]byte, error)
+	// ImportJSON imports documents from JSON array of Document.
+	ImportJSON(ctx context.Context, data []byte) error
 	// Close closes the memory system.
 	Close() error
 }

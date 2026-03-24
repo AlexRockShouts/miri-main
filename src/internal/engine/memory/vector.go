@@ -3,15 +3,16 @@ package memory
 import (
 	"context"
 	_ "embed"
+	"encoding/json"
 	"fmt"
 	"log/slog"
+	"maps"
 	"math"
 	"miri-main/src/internal/config"
 	"miri-main/src/internal/system"
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 
 	"github.com/google/uuid"
 	"github.com/philippgille/chromem-go"
@@ -20,7 +21,6 @@ import (
 type VectorMemory struct {
 	db         *chromem.DB
 	collection *chromem.Collection
-	mu         sync.Mutex
 }
 
 //go:embed static_qwen3_embedding_0.6b_pca384.msgpack
@@ -113,14 +113,12 @@ func NewVectorMemory(cfg *config.Config, collectionName string) (*VectorMemory, 
 }
 
 func (v *VectorMemory) Add(ctx context.Context, content string, metadata map[string]string) error {
-	v.mu.Lock()
-	defer v.mu.Unlock()
 	id := uuid.New().String()
 	// If ID is provided in metadata, use it
 	if providedID, ok := metadata["id"]; ok {
 		id = providedID
-		delete(metadata, "id")
 	}
+	metadata["id"] = id
 
 	doc := chromem.Document{
 		ID:       id,
@@ -138,8 +136,6 @@ func (v *VectorMemory) Add(ctx context.Context, content string, metadata map[str
 }
 
 func (v *VectorMemory) Search(ctx context.Context, query string, limit int, filter map[string]string) ([]SearchResult, error) {
-	v.mu.Lock()
-	defer v.mu.Unlock()
 
 	slog.Debug("searching vector memory", "query", query, "limit", limit, "filter", filter)
 
@@ -161,7 +157,7 @@ func (v *VectorMemory) Search(ctx context.Context, query string, limit int, filt
 	var searchResults []SearchResult
 	for _, r := range results {
 		// Include ID in metadata for deletion/update
-		meta := r.Metadata
+		meta := maps.Clone(r.Metadata)
 		if meta == nil {
 			meta = make(map[string]string)
 		}
@@ -190,8 +186,6 @@ func (v *VectorMemory) Search(ctx context.Context, query string, limit int, filt
 }
 
 func (v *VectorMemory) ListAll(ctx context.Context) ([]SearchResult, error) {
-	v.mu.Lock()
-	defer v.mu.Unlock()
 	// chromem-go doesn't have a direct ListAll, but we can query with a dummy string or use the underlying store.
 	// Querying with a very large limit and a wildcard-like behavior.
 	// If query is empty, chromem-go currently fails.
@@ -207,7 +201,7 @@ func (v *VectorMemory) ListAll(ctx context.Context) ([]SearchResult, error) {
 	var searchResults []SearchResult
 	for _, r := range results {
 		// Include ID in metadata for deletion/update
-		meta := r.Metadata
+		meta := maps.Clone(r.Metadata)
 		if meta == nil {
 			meta = make(map[string]string)
 		}
@@ -228,39 +222,27 @@ func (v *VectorMemory) ListAll(ctx context.Context) ([]SearchResult, error) {
 }
 
 func (v *VectorMemory) GetByID(ctx context.Context, id string) (*SearchResult, error) {
-	v.mu.Lock()
-	defer v.mu.Unlock()
-	// chromem-go doesn't have a GetByID by default, but we can use Query with ID filtering if supported
-	// or ListAll and filter manually.
-	// For now, we'll list all and filter, or we can use the internal collection store if available.
-	// Actually, chromem-go doesn't have a direct "GetByID" API exposed on the collection easily.
-	// Let's list all and find it (slow, but fine for small collections like our current state).
-	all, err := v.ListAll(ctx)
+	filter := map[string]string{"id": id}
+	results, err := v.Search(ctx, " ", 1, filter)
 	if err != nil {
 		return nil, err
 	}
-	for _, r := range all {
-		if r.Metadata["id"] == id {
-			return &r, nil
-		}
+	if len(results) == 0 {
+		return nil, nil
 	}
-	return nil, nil
+	return &results[0], nil
 }
 
 func (v *VectorMemory) Delete(ctx context.Context, id string) error {
-	v.mu.Lock()
-	defer v.mu.Unlock()
 	return v.collection.Delete(ctx, nil, nil, id)
 }
 
 func (v *VectorMemory) Update(ctx context.Context, id string, content string, metadata map[string]string) error {
-	v.mu.Lock()
-	defer v.mu.Unlock()
 	// If ID is in metadata, remove it so it's not stored twice (once as ID, once in metadata)
 	// but chromem-go actually stores both if we don't.
 	// Actually, let's just make sure we use the provided id.
 	// We'll clone metadata to avoid side effects if needed, but for now we'll just delete if present.
-	delete(metadata, "id")
+	metadata["id"] = id
 
 	// In chromem-go, AddDocument with the same ID will replace the existing one
 	doc := chromem.Document{
@@ -278,9 +260,55 @@ func (v *VectorMemory) Update(ctx context.Context, id string, content string, me
 	return nil
 }
 
+func (v *VectorMemory) Count(ctx context.Context) (int, error) {
+	return v.collection.Count(), nil
+}
+
+func (v *VectorMemory) BulkAdd(ctx context.Context, docs []Document) error {
+	for _, doc := range docs {
+		id := doc.ID
+		if id == "" {
+			id = uuid.New().String()
+		}
+		cdoc := chromem.Document{
+			ID:       id,
+			Content:  doc.Content,
+			Metadata: doc.Metadata,
+		}
+		if err := v.collection.AddDocument(ctx, cdoc); err != nil {
+			slog.Error("failed to add document in bulk", "id", id, "error", err)
+			return err
+		}
+	}
+	return nil
+}
+
+func (v *VectorMemory) ExportJSON(ctx context.Context) ([]byte, error) {
+	results, err := v.ListAll(ctx)
+	if err != nil {
+		return nil, err
+	}
+	docs := make([]Document, 0, len(results))
+	for _, r := range results {
+		meta := maps.Clone(r.Metadata)
+		docs = append(docs, Document{
+			ID:       meta["id"],
+			Content:  r.Content,
+			Metadata: meta,
+		})
+	}
+	return json.Marshal(docs)
+}
+
+func (v *VectorMemory) ImportJSON(ctx context.Context, data []byte) error {
+	var docs []Document
+	if err := json.Unmarshal(data, &docs); err != nil {
+		return fmt.Errorf("json unmarshal: %w", err)
+	}
+	return v.BulkAdd(ctx, docs)
+}
+
 func (v *VectorMemory) Close() error {
-	v.mu.Lock()
-	defer v.mu.Unlock()
 	// Persistent DB handles its own state
 	return nil
 }
