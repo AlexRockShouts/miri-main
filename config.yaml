@@ -20,7 +20,7 @@ miri:
       graph_steps: 8           # number of recent graph reasoning steps to include
       facts_top_k: 20           # top-K facts to retrieve from vector store
       summaries_top_k: 5        # top-K summaries to retrieve from vector store
-    max_nodes_per_session: 500  # max graph nodes per session; oldest are pruned when exceeded (0 = unlimited)
+    max_nodes_per_session: 2000  # max graph nodes per session; oldest are pruned when exceeded (0 = unlimited)
   keepass:
     db_path: "~/.miri/passwords.kdbx"          # absolute path to your .kdbx file, e.g. ~/.miri/passwords.kdbx
     password: "$KEYPASS_MIRI_PASSWORD"         # master password; use $ENV_VAR syntax to read from environment

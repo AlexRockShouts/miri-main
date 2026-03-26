@@ -247,7 +247,9 @@ func (b *Brain) promoteFacts(ctx context.Context, summaries []SearchResult) erro
 	for _, s := range summaries[start:] {
 		fullPrompt := strings.Replace(string(prompt), "{summary_text}", s.Content, 1)
 		sanitized := b.sanitize([]*schema.Message{schema.UserMessage(fullPrompt)})
-		resp, err := b.chat.Generate(ctx, sanitized)
+		chatCtx, cancel := context.WithTimeout(ctx, 10*time.Minute)
+		defer cancel()
+		resp, err := b.chat.Generate(chatCtx, sanitized)
 		if err != nil {
 			slog.Error("Generate promotion facts failed", "error", err, "prompt", sanitized[0].Content)
 			continue
@@ -437,34 +439,32 @@ func (b *Brain) consolidateSummaries(ctx context.Context, summaries []SearchResu
 		if len(batch) < 2 {
 			continue
 		}
-
-		var sb strings.Builder
-		for _, s := range batch {
-			sb.WriteString(fmt.Sprintf("- %s\n", s.Content))
-		}
-
-		fullPrompt := strings.Replace(string(prompt), "{summaries_list}", sb.String(), 1)
-		sanitized := b.sanitize([]*schema.Message{schema.UserMessage(fullPrompt)})
-		resp, err := b.chat.Generate(ctx, sanitized)
-		if err != nil {
-			slog.Error("Generate consolidated summaries failed", "error", err, "prompt", sanitized[0].Content)
-			continue
-		}
-
-		// Add consolidated summary
-		metadata := b.prepareMetadata(map[string]string{
-			"type":    "summary",
-			"subtype": "consolidated",
-		})
-		_ = b.summaryMemory.Add(ctx, resp.Content, metadata)
-
-		// Delete old summaries
-		for _, s := range batch {
-			id := s.Metadata["id"]
-			if id != "" {
-				_ = b.summaryMemory.Delete(ctx, id)
+		go func(batch []SearchResult) {
+			var sb strings.Builder
+			for _, s := range batch {
+				sb.WriteString(fmt.Sprintf("- %s\n", s.Content))
 			}
-		}
+			fullPrompt := strings.Replace(string(prompt), "{summaries_list}", sb.String(), 1)
+			sanitized := b.sanitize([]*schema.Message{schema.UserMessage(fullPrompt)})
+			bgCtx, bgCancel := context.WithTimeout(context.Background(), 10*time.Minute)
+			defer bgCancel()
+			resp, err := b.chat.Generate(bgCtx, sanitized)
+			if err != nil {
+				slog.Error("Generate consolidated summaries failed (bg)", "error", err, "prompt", sanitized[0].Content)
+				return
+			}
+			metadata := b.prepareMetadata(map[string]string{
+				"type":    "summary",
+				"subtype": "consolidated",
+			})
+			_ = b.summaryMemory.Add(bgCtx, resp.Content, metadata)
+			for _, s := range batch {
+				id := s.Metadata["id"]
+				if id != "" {
+					_ = b.summaryMemory.Delete(bgCtx, id)
+				}
+			}
+		}(batch)
 	}
 
 	return nil
