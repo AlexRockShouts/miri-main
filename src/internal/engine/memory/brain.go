@@ -145,7 +145,7 @@ func (b *Brain) AddToBuffer(sessionID string, msg *schema.Message) {
 	count := b.interactionCount
 
 	// Short-term buffer: Keep last N turns (e.g., 100 messages = ~10-50 turns)
-	const maxBuffer = 100
+	const maxBuffer = 200
 	if len(b.buffer[sessionID]) > maxBuffer {
 		b.buffer[sessionID] = b.buffer[sessionID][len(b.buffer[sessionID])-maxBuffer:]
 	}
