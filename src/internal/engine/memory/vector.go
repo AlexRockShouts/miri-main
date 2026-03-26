@@ -238,13 +238,21 @@ func (v *VectorMemory) Delete(ctx context.Context, id string) error {
 }
 
 func (v *VectorMemory) Update(ctx context.Context, id string, content string, metadata map[string]string) error {
-	// If ID is in metadata, remove it so it's not stored twice (once as ID, once in metadata)
-	// but chromem-go actually stores both if we don't.
-	// Actually, let's just make sure we use the provided id.
-	// We'll clone metadata to avoid side effects if needed, but for now we'll just delete if present.
 	metadata["id"] = id
 
-	// In chromem-go, AddDocument with the same ID will replace the existing one
+	// If no content provided, fetch the existing document to preserve its content
+	// (chromem-go requires either content or embedding to be set).
+	if content == "" {
+		existing, err := v.GetByID(ctx, id)
+		if err != nil {
+			slog.Error("failed to fetch existing document for metadata-only update", "id", id, "error", err)
+			return err
+		}
+		if existing != nil {
+			content = existing.Content
+		}
+	}
+
 	doc := chromem.Document{
 		ID:       id,
 		Content:  content,
