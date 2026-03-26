@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"miri-main/src/internal/config"
 	"miri-main/src/internal/engine/memory/mole_syn"
+	"miri-main/src/internal/resilience"
 	"miri-main/src/internal/storage"
 	"miri-main/src/internal/system"
 	"path/filepath"
@@ -15,6 +16,14 @@ import (
 	"github.com/cloudwego/eino/components/model"
 	"github.com/cloudwego/eino/schema"
 )
+
+// generateWithRetry wraps chat.Generate with exponential back-off retry for
+// transient provider errors (429, 502, 503, 504, timeouts, etc.).
+func (b *Brain) generateWithRetry(ctx context.Context, msgs []*schema.Message) (*schema.Message, error) {
+	return resilience.Retry(ctx, func(rctx context.Context) (*schema.Message, error) {
+		return b.chat.Generate(rctx, msgs)
+	}, resilience.RetryOpts{})
+}
 
 type Brain struct {
 	chat              model.BaseChatModel

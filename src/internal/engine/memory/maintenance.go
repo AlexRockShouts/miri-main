@@ -250,7 +250,7 @@ func (b *Brain) promoteFacts(ctx context.Context, summaries []SearchResult) erro
 		sanitized := b.sanitize([]*schema.Message{schema.UserMessage(fullPrompt)})
 		chatCtx, cancel := context.WithTimeout(ctx, 10*time.Minute)
 		defer cancel()
-		resp, err := b.chat.Generate(chatCtx, sanitized)
+		resp, err := b.generateWithRetry(chatCtx, sanitized)
 		if err != nil {
 			slog.Error("Generate promotion facts failed", "error", err, "prompt", sanitized[0].Content)
 			continue
@@ -327,7 +327,7 @@ func (b *Brain) deduplicateFactsBatch(ctx context.Context, prompt string, facts 
 	sanitized := b.sanitize([]*schema.Message{schema.UserMessage(fullPrompt)})
 	chatCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
-	resp, err := b.chat.Generate(chatCtx, sanitized)
+	resp, err := b.generateWithRetry(chatCtx, sanitized)
 	if err != nil {
 		slog.Error("Generate deduplicate facts failed", "error", err, "prompt", sanitized[0].Content)
 		return err
@@ -399,7 +399,7 @@ func (b *Brain) deduplicateSummariesBatch(ctx context.Context, prompt string, su
 	sanitized := b.sanitize([]*schema.Message{schema.UserMessage(fullPrompt)})
 	chatCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
-	resp, err := b.chat.Generate(chatCtx, sanitized)
+	resp, err := b.generateWithRetry(chatCtx, sanitized)
 	if err != nil {
 		slog.Error("Generate deduplicate summaries failed", "error", err, "prompt", sanitized[0].Content)
 		return err
@@ -464,7 +464,7 @@ func (b *Brain) consolidateSummaries(ctx context.Context, summaries []SearchResu
 			sanitized := b.sanitize([]*schema.Message{schema.UserMessage(fullPrompt)})
 			bgCtx, bgCancel := context.WithTimeout(ctx, 10*time.Minute)
 			defer bgCancel()
-			resp, err := b.chat.Generate(bgCtx, sanitized)
+			resp, err := b.generateWithRetry(bgCtx, sanitized)
 			if err != nil {
 				slog.Error("Generate consolidated summaries failed (bg)", "error", err, "prompt", sanitized[0].Content)
 				return

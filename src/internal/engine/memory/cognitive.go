@@ -32,7 +32,7 @@ func (b *Brain) ExtractFacts(ctx context.Context, messages []*schema.Message) er
 	fullPrompt = strings.Replace(fullPrompt, "{conversation_text_or_last_N_messages}", conv.String(), 1)
 
 	sanitized := b.sanitize([]*schema.Message{schema.UserMessage(fullPrompt)})
-	resp, err := b.chat.Generate(ctx, sanitized)
+	resp, err := b.generateWithRetry(ctx, sanitized)
 	if err != nil {
 		slog.Error("Generate facts failed", "error", err, "prompt", sanitized[0].Content)
 		return fmt.Errorf("generate facts: %w", err)
@@ -101,7 +101,7 @@ func (b *Brain) Reflect(ctx context.Context, messages []*schema.Message) error {
 	fullPrompt := strings.Replace(string(prompt), "{context + your_previous_output}", conv.String(), 1)
 
 	sanitized := b.sanitize([]*schema.Message{schema.UserMessage(fullPrompt)})
-	resp, err := b.chat.Generate(ctx, sanitized)
+	resp, err := b.generateWithRetry(ctx, sanitized)
 	if err != nil {
 		slog.Error("Generate reflection failed", "error", err, "prompt", sanitized[0].Content)
 		return fmt.Errorf("generate reflection: %w", err)
@@ -138,7 +138,7 @@ func (b *Brain) Summarize(ctx context.Context, messages []*schema.Message) error
 	fullPrompt := strings.Replace(string(prompt), "{full_or_recent_conversation_text}", conv.String(), 1)
 
 	sanitized := b.sanitize([]*schema.Message{schema.UserMessage(fullPrompt)})
-	resp, err := b.chat.Generate(ctx, sanitized)
+	resp, err := b.generateWithRetry(ctx, sanitized)
 	if err != nil {
 		slog.Error("Generate summary failed", "error", err, "prompt", sanitized[0].Content)
 		return fmt.Errorf("generate summary: %w", err)
@@ -164,7 +164,7 @@ func (b *Brain) analyzeTopology(ctx context.Context, trace string) (*mole_syn.To
 	sanitized := b.sanitize([]*schema.Message{
 		schema.UserMessage(fullPrompt),
 	})
-	resp, err := b.chat.Generate(ctx, sanitized)
+	resp, err := b.generateWithRetry(ctx, sanitized)
 	if err != nil {
 		slog.Error("Generate topology analysis failed", "error", err, "prompt", sanitized[0].Content)
 		return nil, err
