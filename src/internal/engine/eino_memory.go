@@ -314,7 +314,7 @@ func (e *EinoEngine) GetBrainTopology(ctx context.Context, sessionID string) (*m
 func (e *EinoEngine) Shutdown(ctx context.Context) {
 	if e.brain != nil {
 		slog.Info("Triggering final brain maintenance before shutdown")
-		e.brain.TriggerMaintenance(memory.TriggerShutdown)
+		e.brain.TriggerMaintenance(ctx, memory.TriggerShutdown)
 	}
 }
 
@@ -326,7 +326,7 @@ func (e *EinoEngine) CompactMemory(ctx context.Context, sessionID string) {
 		_ = e.brain.IngestMetadata(ctx, human, soul)
 
 		// Synchronous maintenance to ensure buffer is processed before clearing
-		e.brain.TriggerMaintenance(memory.TriggerNewSession)
+		e.brain.TriggerMaintenance(ctx, memory.TriggerNewSession)
 	}
 }
 
@@ -337,7 +337,7 @@ func (e *EinoEngine) TriggerMaintenance(ctx context.Context) {
 			human, _ := e.storage.GetHuman()
 			soul, _ := e.storage.GetSoul()
 			_ = e.brain.IngestMetadata(ctx, human, soul)
-			e.brain.TriggerMaintenance(memory.TriggerScheduled)
+			e.brain.TriggerMaintenance(ctx, memory.TriggerScheduled)
 		}()
 	}
 }

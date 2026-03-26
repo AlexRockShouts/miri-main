@@ -25,15 +25,16 @@ const (
 	TriggerScheduled    MaintenanceTrigger = "scheduled"
 )
 
-func (b *Brain) TriggerMaintenance(trigger MaintenanceTrigger) {
+func (b *Brain) TriggerMaintenance(ctx context.Context, trigger MaintenanceTrigger) {
 	slog.Info("Brain maintenance triggered", "reason", trigger)
 
-	// withTimeout runs fn with its own deadline so a slow operation cannot
-	// starve the operations that follow it.
+	// withTimeout runs fn with its own deadline derived from the parent context
+	// so a slow operation cannot starve the operations that follow it, while
+	// still respecting cancellation from the caller.
 	withTimeout := func(d time.Duration, name string, fn func(context.Context) error) {
-		ctx, cancel := context.WithTimeout(context.Background(), d)
+		tCtx, cancel := context.WithTimeout(ctx, d)
 		defer cancel()
-		if err := fn(ctx); err != nil {
+		if err := fn(tCtx); err != nil {
 			slog.Error("Maintenance operation failed", "op", name, "error", err)
 		}
 	}
@@ -88,7 +89,7 @@ func (b *Brain) TriggerMaintenance(trigger MaintenanceTrigger) {
 			b.lastDeepBondRatio = float32(analysis.BondDistribution.D)
 			b.mu.Unlock()
 			if b.Graph != nil {
-				_ = b.Graph.AddStepsFromAnalysis(sid, analysis)
+				_ = b.Graph.AddStepsFromAnalysis(ctx, sid, analysis)
 				slog.Info("Updated memory graph with topology analysis", "session_id", sid, "steps", len(analysis.Steps), "score", analysis.TopologyScore)
 			}
 			return nil
@@ -348,9 +349,18 @@ func (b *Brain) deduplicateFactsBatch(ctx context.Context, prompt string, facts 
 		return err
 	}
 
+	// Atomic dedup: soft-mark duplicates as deprecated before hard-deleting.
+	// This prevents a race where retrieval could return a fact that is about
+	// to be deleted while the primary hasn't been confirmed yet.
 	for _, d := range dups {
 		for _, dupID := range d.DuplicateIDs {
-			slog.Info("Deleting duplicate fact", "id", dupID)
+			slog.Info("Soft-deleting duplicate fact", "id", dupID, "primary", d.PrimaryID)
+			_ = b.factMemory.Update(ctx, dupID, "", map[string]string{"deprecated": "true"})
+		}
+	}
+	// Hard-delete after all duplicates are marked
+	for _, d := range dups {
+		for _, dupID := range d.DuplicateIDs {
 			_ = b.factMemory.Delete(ctx, dupID)
 		}
 	}
@@ -411,9 +421,15 @@ func (b *Brain) deduplicateSummariesBatch(ctx context.Context, prompt string, su
 		return err
 	}
 
+	// Atomic dedup: soft-mark then hard-delete (see deduplicateFactsBatch).
 	for _, d := range dups {
 		for _, dupID := range d.DuplicateIDs {
-			slog.Info("Deleting duplicate summary", "id", dupID)
+			slog.Info("Soft-deleting duplicate summary", "id", dupID, "primary", d.PrimaryID)
+			_ = b.summaryMemory.Update(ctx, dupID, "", map[string]string{"deprecated": "true"})
+		}
+	}
+	for _, d := range dups {
+		for _, dupID := range d.DuplicateIDs {
 			_ = b.summaryMemory.Delete(ctx, dupID)
 		}
 	}
@@ -446,7 +462,7 @@ func (b *Brain) consolidateSummaries(ctx context.Context, summaries []SearchResu
 			}
 			fullPrompt := strings.Replace(string(prompt), "{summaries_list}", sb.String(), 1)
 			sanitized := b.sanitize([]*schema.Message{schema.UserMessage(fullPrompt)})
-			bgCtx, bgCancel := context.WithTimeout(context.Background(), 10*time.Minute)
+			bgCtx, bgCancel := context.WithTimeout(ctx, 10*time.Minute)
 			defer bgCancel()
 			resp, err := b.chat.Generate(bgCtx, sanitized)
 			if err != nil {

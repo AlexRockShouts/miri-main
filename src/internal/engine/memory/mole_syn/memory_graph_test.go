@@ -48,7 +48,7 @@ func TestMemoryGraph_AddStep(t *testing.T) {
 	mg := New(nil, st, ms, 0)
 	sessionID := "test-session"
 
-	id1, err := mg.AddStep(sessionID, "Step 1", "")
+	id1, err := mg.AddStep(t.Context(), sessionID, "Step 1", "")
 	if err != nil {
 		t.Fatalf("AddStep failed: %v", err)
 	}
@@ -56,7 +56,7 @@ func TestMemoryGraph_AddStep(t *testing.T) {
 		t.Fatal("id1 is empty")
 	}
 
-	id2, err := mg.AddStep(sessionID, "Step 2", id1)
+	id2, err := mg.AddStep(t.Context(), sessionID, "Step 2", id1)
 	if err != nil {
 		t.Fatalf("AddStep failed: %v", err)
 	}
@@ -108,7 +108,7 @@ func TestMemoryGraph_AddStepsFromAnalysis(t *testing.T) {
 		},
 	}
 
-	err := mg.AddStepsFromAnalysis(sessionID, analysis)
+	err := mg.AddStepsFromAnalysis(t.Context(), sessionID, analysis)
 	if err != nil {
 		t.Fatalf("AddStepsFromAnalysis failed: %v", err)
 	}
@@ -136,8 +136,8 @@ func TestMemoryGraph_Persistence(t *testing.T) {
 	mg := New(nil, st, ms, 0)
 	sessionID := "test-session"
 
-	id1, _ := mg.AddStep(sessionID, "Step 1", "")
-	_, _ = mg.AddStep(sessionID, "Step 2", id1)
+	id1, _ := mg.AddStep(t.Context(), sessionID, "Step 1", "")
+	_, _ = mg.AddStep(t.Context(), sessionID, "Step 2", id1)
 
 	// Create new instance loading from same mockMS
 	mg2 := New(nil, st, ms, 0)
@@ -196,7 +196,7 @@ func TestMemoryGraph_GetStrongPath(t *testing.T) {
 		},
 	}
 
-	_ = mg.AddStepsFromAnalysis(sessionID, analysis)
+	_ = mg.AddStepsFromAnalysis(t.Context(), sessionID, analysis)
 
 	// Test depth 2
 	path2 := mg.GetStrongPath(sessionID, 5)
@@ -240,7 +240,7 @@ func TestMemoryGraph_Pruning(t *testing.T) {
 	var ids []string
 	prev := ""
 	for i := range 5 {
-		id, err := mg.AddStep(sessionID, "step", prev)
+		id, err := mg.AddStep(t.Context(), sessionID, "step", prev)
 		if err != nil {
 			t.Fatalf("AddStep %d failed: %v", i, err)
 		}

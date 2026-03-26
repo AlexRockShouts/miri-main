@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"miri-main/src/internal/engine/memory/mole_syn"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -45,7 +46,7 @@ func (b *Brain) RetrieveDocuments(ctx context.Context, sessionID, query string) 
 
 	// Also trigger if context usage is already known to be high
 	if window > 0 && float64(usage)/float64(window) >= 0.6 {
-		go b.TriggerMaintenance(TriggerContextUsage)
+		go b.TriggerMaintenance(ctx, TriggerContextUsage)
 	}
 
 	var finalDocs []*schema.Document
@@ -81,19 +82,37 @@ func (b *Brain) RetrieveDocuments(ctx context.Context, sessionID, query string) 
 	summaries, _ := b.summaryMemory.Search(ctx, query, summariesTopK, nil)
 
 	results := append(facts, summaries...)
+
+	// Filter out entries soft-marked as deprecated during deduplication.
+	results = slices.DeleteFunc(results, func(r SearchResult) bool {
+		return r.Metadata["deprecated"] == "true"
+	})
+
 	if len(results) == 0 && len(finalDocs) == 0 {
 		return nil, nil
 	}
 
 	// 3. Hybrid ranking (weighted score)
-	// Primary signal: deep_bond_uses — how often this fact fed into core (Deep-bond) reasoning.
-	// Each use in a Deep-bond session reduces effective distance by 5%, capped at 50%.
+	// Combines three signals:
+	//   a) cosine distance (lower = more similar)
+	//   b) deep_bond_uses — how often this fact fed into core (Deep-bond) reasoning
+	//   c) importance — node importance from Mole-Syn (0.0–1.0)
+	// Formula: effective_distance = distance × dbu_boost × (1.0 - 0.4 × importance)
 	// Tie-breaker: topology_score (birth-quality of the session that created the fact).
 	sort.SliceStable(results, func(i, j int) bool {
-		getScore := func(r SearchResult) float32 {
+		getScore := func(r SearchResult) float64 {
 			dbu, _ := strconv.Atoi(r.Metadata["deep_bond_uses"])
-			boost := 1.0 - min(float32(dbu)*0.05, 0.5)
-			return r.Distance * boost
+			dbuBoost := 1.0 - min(float64(dbu)*0.05, 0.5)
+
+			imp, _ := strconv.ParseFloat(r.Metadata["importance"], 64)
+			if imp < 0 {
+				imp = 0
+			} else if imp > 1 {
+				imp = 1
+			}
+			impBoost := 1.0 - 0.4*imp
+
+			return float64(r.Distance) * dbuBoost * impBoost
 		}
 
 		scoreI := getScore(results[i])

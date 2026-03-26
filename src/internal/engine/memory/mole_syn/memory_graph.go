@@ -49,14 +49,32 @@ func mapBondType(s string) BondType {
 	}
 }
 
+// BondWeight returns the default numeric weight for a bond type.
+// Deep reasoning bonds carry the most weight, followed by self-reflection,
+// then exploratory steps.
+func BondWeight(b BondType) float64 {
+	switch b {
+	case Deep:
+		return 1.0
+	case Reflect:
+		return 0.7
+	case Explore:
+		return 0.3
+	default:
+		return 0.3
+	}
+}
+
 type Node struct {
-	ID      string         `json:"id"`
-	Content string         `json:"content"`
-	Meta    map[string]any `json:"meta,omitempty"`
+	ID         string         `json:"id"`
+	Content    string         `json:"content"`
+	Meta       map[string]any `json:"meta,omitempty"`
+	Importance float64        `json:"importance"`
 }
 
 type EdgeData struct {
-	Bond BondType `json:"bond"`
+	Bond   BondType `json:"bond"`
+	Weight float64  `json:"weight"`
 }
 
 type MemoryGraph struct {
@@ -85,12 +103,12 @@ func New(chat model.BaseChatModel, st *storage.Storage, ms MemorySystem, maxNode
 		st:                 st,
 		ms:                 ms,
 	}
-	mg.loadFromMemorySystem()
+	mg.loadFromMemorySystem(context.Background())
 	return mg
 }
 
 // AddStep – single step addition
-func (mg *MemoryGraph) AddStep(sessionID, content string, parentID string) (string, error) {
+func (mg *MemoryGraph) AddStep(ctx context.Context, sessionID, content string, parentID string) (string, error) {
 	mg.mu.Lock()
 	defer mg.mu.Unlock()
 
@@ -102,19 +120,23 @@ func (mg *MemoryGraph) AddStep(sessionID, content string, parentID string) (stri
 	}
 
 	bond := Explore
+	importance := 0.5 // default importance for single-step additions
 	metadata := map[string]string{
-		"session":   sessionID,
-		"parent_id": parentID,
-		"bond":      string(bond),
-		"timestamp": time.Now().Format(time.RFC3339Nano),
-		"id":        id,
+		"session":    sessionID,
+		"parent_id":  parentID,
+		"bond":       string(bond),
+		"weight":     fmt.Sprintf("%.2f", BondWeight(bond)),
+		"importance": fmt.Sprintf("%.2f", importance),
+		"timestamp":  time.Now().Format(time.RFC3339Nano),
+		"id":         id,
 	}
 
 	// Store rich node data separately
 	node := Node{
-		ID:      id,
-		Content: content,
-		Meta:    map[string]any{"session": sessionID, "parent_id": parentID, "bond": string(bond), "timestamp": metadata["timestamp"]},
+		ID:         id,
+		Content:    content,
+		Meta:       map[string]any{"session": sessionID, "parent_id": parentID, "bond": string(bond), "timestamp": metadata["timestamp"]},
+		Importance: importance,
 	}
 	mg.vertexData[id] = node
 
@@ -123,24 +145,24 @@ func (mg *MemoryGraph) AddStep(sessionID, content string, parentID string) (stri
 			return "", fmt.Errorf("add edge failed: %w", err)
 		}
 		edgeKey := parentID + "->" + id
-		mg.edgeData[edgeKey] = EdgeData{Bond: bond}
+		mg.edgeData[edgeKey] = EdgeData{Bond: bond, Weight: BondWeight(bond)}
 	}
 
 	mg.lastNode[sessionID] = id
-	mg.pruneSessionLocked(sessionID)
+	mg.pruneSessionLocked(ctx, sessionID)
 
 	// Save to vector memory
 	if mg.ms != nil {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		saveCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 		defer cancel()
-		_ = mg.ms.Add(ctx, content, metadata)
+		_ = mg.ms.Add(saveCtx, content, metadata)
 	}
 
 	return id, nil
 }
 
 // Batch insert from Mole-Syn topology analysis
-func (mg *MemoryGraph) AddStepsFromAnalysis(sessionID string, analysis *TopologyAnalysis) error {
+func (mg *MemoryGraph) AddStepsFromAnalysis(ctx context.Context, sessionID string, analysis *TopologyAnalysis) error {
 	mg.mu.Lock()
 	defer mg.mu.Unlock()
 
@@ -159,11 +181,12 @@ func (mg *MemoryGraph) AddStepsFromAnalysis(sessionID string, analysis *Topology
 			return fmt.Errorf("add vertex %s failed: %w", id, err)
 		}
 
-		// Store node data
+		// Store node data with default importance for analysis-derived steps
 		mg.vertexData[id] = Node{
-			ID:      id,
-			Content: step.Content,
-			Meta:    map[string]any{"analysis_step_id": step.ID, "session": sessionID, "timestamp": ts},
+			ID:         id,
+			Content:    step.Content,
+			Meta:       map[string]any{"analysis_step_id": step.ID, "session": sessionID, "timestamp": ts},
+			Importance: 0.6,
 		}
 		stepIDMap[step.ID] = id
 	}
@@ -173,7 +196,7 @@ func (mg *MemoryGraph) AddStepsFromAnalysis(sessionID string, analysis *Topology
 		firstNewID := stepIDMap[analysis.Steps[0].ID]
 		if err := mg.g.AddEdge(lastNodeID, firstNewID); err == nil {
 			edgeKey := lastNodeID + "->" + firstNewID
-			mg.edgeData[edgeKey] = EdgeData{Bond: Explore}
+			mg.edgeData[edgeKey] = EdgeData{Bond: Explore, Weight: BondWeight(Explore)}
 		}
 	}
 
@@ -193,7 +216,7 @@ func (mg *MemoryGraph) AddStepsFromAnalysis(sessionID string, analysis *Topology
 
 		edgeKey := fromID + "->" + toID
 		bondType := mapBondType(b.Type)
-		mg.edgeData[edgeKey] = EdgeData{Bond: bondType}
+		mg.edgeData[edgeKey] = EdgeData{Bond: bondType, Weight: BondWeight(bondType)}
 
 		// Update node metadata with bond and parent
 		node := mg.vertexData[toID]
@@ -212,7 +235,7 @@ func (mg *MemoryGraph) AddStepsFromAnalysis(sessionID string, analysis *Topology
 	if len(analysis.Steps) > 0 {
 		// Update tail to the last step in the slice
 		mg.lastNode[sessionID] = stepIDMap[analysis.Steps[len(analysis.Steps)-1].ID]
-		mg.pruneSessionLocked(sessionID)
+		mg.pruneSessionLocked(ctx, sessionID)
 	}
 
 	// Save to vector memory
@@ -233,15 +256,17 @@ func (mg *MemoryGraph) AddStepsFromAnalysis(sessionID string, analysis *Topology
 
 			nodeTS, _ := node.Meta["timestamp"].(string)
 			metadata := map[string]string{
-				"session":   sessionID,
-				"timestamp": nodeTS,
-				"id":        id,
+				"session":    sessionID,
+				"timestamp":  nodeTS,
+				"id":         id,
+				"importance": fmt.Sprintf("%.2f", node.Importance),
 			}
 			if pid, ok := node.Meta["parent_id"].(string); ok {
 				metadata["parent_id"] = pid
 			}
 			if b, ok := node.Meta["bond"].(string); ok {
 				metadata["bond"] = b
+				metadata["weight"] = fmt.Sprintf("%.2f", BondWeight(mapBondType(b)))
 			}
 
 			// Capture values for closure
@@ -249,14 +274,10 @@ func (mg *MemoryGraph) AddStepsFromAnalysis(sessionID string, analysis *Topology
 			ccontent := node.Content
 			cmeta := metadata
 			go func() {
-				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				saveCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 				defer cancel()
-				// We use Update to ensure we can set the ID if the MemorySystem supports it
-				// But our Add uses chromem-go AddDocument which takes ID.
-				// Our interface Add doesn't take ID, it generates one if not present in metadata.
-				// Wait, I should probably use a specialized Add that takes ID or put ID in metadata.
 				cmeta["id"] = cid
-				_ = mg.ms.Add(ctx, ccontent, cmeta)
+				_ = mg.ms.Add(saveCtx, ccontent, cmeta)
 			}()
 		}
 	}
@@ -304,32 +325,26 @@ func (mg *MemoryGraph) GetStrongPath(sessionID string, maxDepth int) []string {
 			break
 		}
 
-		// Prefer Deep bond first, then Reflect, then Explore
+		// Select predecessor with highest edge weight (combines bond type + importance)
 		var bestPred string
+		var bestScore float64
 		for pred := range preds {
 			edgeKey := pred + "->" + current
 			data, ok := mg.edgeData[edgeKey]
 			if !ok {
+				if bestPred == "" {
+					bestPred = pred
+				}
 				continue
 			}
-
-			if bestPred == "" {
-				bestPred = pred
-				continue
+			// Score = edge weight + predecessor node importance
+			score := data.Weight
+			if predNode, ok := mg.vertexData[pred]; ok {
+				score += predNode.Importance * 0.4
 			}
-
-			bestBond := mg.edgeData[bestPred+"->"+current].Bond
-			if data.Bond == Deep && bestBond != Deep {
+			if bestPred == "" || score > bestScore {
 				bestPred = pred
-			} else if data.Bond == Reflect && (bestBond != Deep && bestBond != Reflect) {
-				bestPred = pred
-			}
-		}
-
-		if bestPred == "" {
-			for p := range preds {
-				bestPred = p
-				break
+				bestScore = score
 			}
 		}
 		current = bestPred
@@ -368,9 +383,10 @@ type TopologyData struct {
 }
 
 type GraphEdge struct {
-	From string   `json:"from"`
-	To   string   `json:"to"`
-	Bond BondType `json:"bond"`
+	From   string   `json:"from"`
+	To     string   `json:"to"`
+	Bond   BondType `json:"bond"`
+	Weight float64  `json:"weight"`
 }
 
 // GetTopology returns a serializable representation of the graph
@@ -417,9 +433,10 @@ func (mg *MemoryGraph) GetTopology(sessionID string) (*TopologyData, error) {
 		}
 
 		res.Edges = append(res.Edges, GraphEdge{
-			From: from,
-			To:   to,
-			Bond: data.Bond,
+			From:   from,
+			To:     to,
+			Bond:   data.Bond,
+			Weight: data.Weight,
 		})
 	}
 
@@ -442,12 +459,12 @@ func (mg *MemoryGraph) prevBondFromMap(pm map[string]map[string]graph.Edge[strin
 	return Explore
 }
 
-func (mg *MemoryGraph) loadFromMemorySystem() {
+func (mg *MemoryGraph) loadFromMemorySystem(ctx context.Context) {
 	if mg.ms == nil {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
 	results, err := mg.ms.ListAll(ctx)
@@ -468,11 +485,16 @@ func (mg *MemoryGraph) loadFromMemorySystem() {
 			continue
 		}
 
-		// Reconstruct Node
+		// Reconstruct Node with importance
+		var importance float64
+		if impStr, ok := res.Metadata["importance"]; ok {
+			fmt.Sscanf(impStr, "%f", &importance)
+		}
 		node := Node{
-			ID:      id,
-			Content: res.Content,
-			Meta:    make(map[string]any),
+			ID:         id,
+			Content:    res.Content,
+			Meta:       make(map[string]any),
+			Importance: importance,
 		}
 		for k, v := range res.Metadata {
 			node.Meta[k] = v
@@ -518,7 +540,7 @@ func (mg *MemoryGraph) loadFromMemorySystem() {
 				bond = mapBondType(fmt.Sprintf("%v", b))
 			}
 			edgeKey := parentID + "->" + id
-			mg.edgeData[edgeKey] = EdgeData{Bond: bond}
+			mg.edgeData[edgeKey] = EdgeData{Bond: bond, Weight: BondWeight(bond)}
 
 			// Update transition stats using the pre-built predecessor map.
 			prevBond := mg.prevBondFromMap(loadPM, parentID)
@@ -534,7 +556,7 @@ func (mg *MemoryGraph) loadFromMemorySystem() {
 
 // pruneSessionLocked removes the oldest nodes for a session when the node count exceeds
 // maxNodesPerSession. It must be called with mg.mu held for writing.
-func (mg *MemoryGraph) pruneSessionLocked(sessionID string) {
+func (mg *MemoryGraph) pruneSessionLocked(ctx context.Context, sessionID string) {
 	if mg.maxNodesPerSession <= 0 {
 		return
 	}
@@ -611,18 +633,11 @@ func (mg *MemoryGraph) pruneSessionLocked(sessionID string) {
 		if mg.ms != nil {
 			rid := n.id
 			go func() {
-				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				delCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 				defer cancel()
-				_ = mg.ms.Delete(ctx, rid)
+				_ = mg.ms.Delete(delCtx, rid)
 			}()
 		}
 	}
 	slog.Debug("mole_syn: pruned old nodes", "session", sessionID, "removed", excess)
 }
-
-// Simple async save (obsolete, keeping for compatibility if needed, but does nothing now)
-func (mg *MemoryGraph) saveToDisk() {}
-
-func (mg *MemoryGraph) saveToDiskLocked() {}
-
-func (mg *MemoryGraph) loadFromDisk() {}

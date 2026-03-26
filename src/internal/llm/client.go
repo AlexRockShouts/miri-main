@@ -93,33 +93,7 @@ func ChatCompletion(cfg *config.Config, modelStr string, messages []Message) (st
 		return "", nil, err
 	}
 
-	if resp.StatusCode == http.StatusServiceUnavailable {
-		// Retry once for 503
-		slog.Warn("LLM API 503 error, retrying once", "provider", provider)
-		time.Sleep(2 * time.Second) // Wait 2s before retry
-
-		// Redo the request
-		req2, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
-		if err != nil {
-			return "", nil, err
-		}
-		req2.Header.Set("Content-Type", "application/json")
-		if prov.APIKey != "" {
-			req2.Header.Set("Authorization", "Bearer "+prov.APIKey)
-		}
-		resp2, err := client.Do(req2)
-		if err != nil {
-			return "", nil, err
-		}
-		defer resp2.Body.Close()
-		body, err = io.ReadAll(resp2.Body)
-		if err != nil {
-			return "", nil, err
-		}
-		if resp2.StatusCode != http.StatusOK {
-			return "", nil, fmt.Errorf("%s API error after retry: %d - %s", provider, resp2.StatusCode, string(body))
-		}
-	} else if resp.StatusCode != http.StatusOK {
+	if resp.StatusCode != http.StatusOK {
 		return "", nil, fmt.Errorf("%s API error: %d - %s", provider, resp.StatusCode, string(body))
 	}
 

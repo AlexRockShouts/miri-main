@@ -6,12 +6,12 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
-	"time"
 
 	"github.com/cloudwego/eino/schema"
 
 	"miri-main/src/internal/engine/tools"
 	"miri-main/src/internal/llm"
+	"miri-main/src/internal/resilience"
 	"miri-main/src/internal/session"
 )
 
@@ -71,16 +71,9 @@ func (e *EinoEngine) agentInvoke(ctx context.Context, input *graphInput) (out *g
 
 		// Sanitize messages before sending to LLM to avoid safety triggers (e.g. Grok data leakage check)
 		sanitizedMsgs := e.sanitizeMessages(msgs)
-		assistant, err := e.chat.Generate(ctx, sanitizedMsgs, input.CallOpts...)
-		if err != nil {
-			// Check for 503 error to retry
-			if strings.Contains(err.Error(), "503") || strings.Contains(err.Error(), "Service Unavailable") {
-				slog.Warn("Chat generate failed with 503, retrying once", "step", i)
-				time.Sleep(2 * time.Second)
-				assistant, err = e.chat.Generate(ctx, sanitizedMsgs, input.CallOpts...)
-			}
-		}
-
+		assistant, err := resilience.Retry(ctx, func(rctx context.Context) (*schema.Message, error) {
+			return e.chat.Generate(rctx, sanitizedMsgs, input.CallOpts...)
+		}, resilience.RetryOpts{})
 		if err != nil {
 			var sb strings.Builder
 			for _, m := range sanitizedMsgs {

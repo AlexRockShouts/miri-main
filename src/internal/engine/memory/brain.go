@@ -151,7 +151,7 @@ func (b *Brain) AddToBuffer(sessionID string, msg *schema.Message) {
 	}
 
 	if count > 0 && count%50 == 0 {
-		go b.TriggerMaintenance(TriggerInteraction)
+		go b.TriggerMaintenance(context.Background(), TriggerInteraction)
 	}
 }
 
@@ -208,5 +208,5 @@ func (b *Brain) AddReasoningTrace(ctx context.Context, sessionID, trace string) 
 	if err != nil {
 		return err
 	}
-	return b.Graph.AddStepsFromAnalysis(sessionID, analysis)
+	return b.Graph.AddStepsFromAnalysis(ctx, sessionID, analysis)
 }

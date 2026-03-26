@@ -80,6 +80,6 @@ func (b *Brain) UpdateContextUsage(ctx context.Context, usage int) {
 	percent := float64(usage) / float64(b.contextWindow)
 	if percent >= 0.6 {
 		slog.Info("Context window usage high, triggering brain maintenance", "usage", usage, "window", b.contextWindow, "percent", fmt.Sprintf("%.2f%%", percent*100))
-		go b.TriggerMaintenance(TriggerContextUsage)
+		go b.TriggerMaintenance(ctx, TriggerContextUsage)
 	}
 }

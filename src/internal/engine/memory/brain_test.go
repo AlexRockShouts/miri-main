@@ -393,7 +393,7 @@ func TestBrain_TriggerMaintenanceScheduled(t *testing.T) {
 	brain := NewBrain(chat, vm, vm, vm, 1000, st, config.RetrievalConfig{}, 0)
 
 	// Trigger scheduled maintenance
-	brain.TriggerMaintenance(TriggerScheduled)
+	brain.TriggerMaintenance(t.Context(), TriggerScheduled)
 
 	if brain.lastMaintenance.IsZero() {
 		t.Errorf("lastMaintenance should have been updated")
@@ -449,7 +449,7 @@ func TestBrain_HybridRetrieve(t *testing.T) {
 			{From: 1, To: 2, Type: "D", Explanation: "Deep dive"},
 		},
 	}
-	_ = brain.Graph.AddStepsFromAnalysis(sessionID, analysis)
+	_ = brain.Graph.AddStepsFromAnalysis(t.Context(), sessionID, analysis)
 
 	// 3. Retrieve
 	res, err := brain.Retrieve(ctx, sessionID, "reasoning")
