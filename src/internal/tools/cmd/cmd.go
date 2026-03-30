@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
+	"reflect"
 	"runtime"
 	"syscall"
 	"time"
@@ -28,8 +29,11 @@ func Execute(ctx context.Context, command string, dir string) (stdout, stderr st
 		cmd.Stdout = stdoutB
 		cmd.Stderr = stderrB
 		sysProcAttr := &syscall.SysProcAttr{}
-		if runtime.GOOS != "darwin" {
-			sysProcAttr.Setpgid = true
+		if runtime.GOOS != "darwin" && runtime.GOOS != "windows" {
+			field := reflect.ValueOf(sysProcAttr).Elem().FieldByName("Setpgid")
+			if field.IsValid() && field.CanSet() {
+				field.SetBool(true)
+			}
 		}
 		cmd.SysProcAttr = sysProcAttr
 
