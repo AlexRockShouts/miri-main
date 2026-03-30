@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
+	"runtime"
 	"syscall"
 	"time"
 )
@@ -26,7 +27,11 @@ func Execute(ctx context.Context, command string, dir string) (stdout, stderr st
 		stderrB := &bytes.Buffer{}
 		cmd.Stdout = stdoutB
 		cmd.Stderr = stderrB
-		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+		sysProcAttr := &syscall.SysProcAttr{}
+		if runtime.GOOS != "darwin" {
+			sysProcAttr.Setpgid = true
+		}
+		cmd.SysProcAttr = sysProcAttr
 
 		err = cmd.Run()
 		exitCode = 0

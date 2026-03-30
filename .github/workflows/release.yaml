@@ -209,7 +209,7 @@ jobs:
           subject-digest: ${{ steps.push.outputs.digest }}
           push-to-registry: true
       - name: Container Security Scan (Trivy)
-        uses: aquasecurity/trivy-action@v0.0.10
+        uses: aquasecurity/trivy-action@v0.35.0
         with:
           image-ref: '${{ secrets.DOCKER_USERNAME }}/miri-combined:latest'
           format: 'table'
