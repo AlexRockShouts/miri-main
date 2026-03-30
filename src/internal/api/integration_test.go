@@ -433,15 +433,14 @@ func TestAPI_WebSocket(t *testing.T) {
 	u.RawQuery = q.Encode()
 
 	dialer := websocket.DefaultDialer
-	conn, resp, err := dialer.Dial(u.String(), nil)
+	conn, _, err := dialer.Dial(u.String(), nil)
 	if err != nil {
 		t.Fatalf("WebSocket dial failed: %v", err)
 	}
 	defer conn.Close()
 
-	if resp.StatusCode != http.StatusSwitchingProtocols {
-		t.Errorf("WebSocket expected 101, got %d", resp.StatusCode)
-	}
+	// Wait for registration
+	time.Sleep(100 * time.Millisecond)
 
 	// Test task reporting
 	done := make(chan bool)
@@ -512,6 +511,9 @@ func TestAPI_TaskDefaultReporting(t *testing.T) {
 		t.Fatalf("WebSocket dial failed: %v", err)
 	}
 	defer conn.Close()
+
+	// Wait for registration
+	time.Sleep(100 * time.Millisecond)
 
 	// Test task reporting to default
 	done := make(chan bool)

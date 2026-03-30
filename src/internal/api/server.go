@@ -108,17 +108,22 @@ func (s *Server) handleTaskReport(sessionID, taskName, taskID, message string) {
 		sessionID = session.DefaultSessionID
 	}
 
-	s.wsMu.RLock()
+	s.wsMu.Lock()
 	conns, ok := s.wsSessions[sessionID]
-	s.wsMu.RUnlock()
-
 	if !ok || len(conns) == 0 {
+		s.wsMu.Unlock()
 		return
 	}
 
 	slog.Info("Broadcasting task report to session", "session_id", sessionID, "task_id", taskID, "conns", len(conns))
 
-	for _, conn := range conns {
+	// Copy the slice so we can safely iterate and modify the local version
+	connsCopy := make([]*websocket.Conn, len(conns))
+	copy(connsCopy, conns)
+	s.wsMu.Unlock()
+
+	var activeConns []*websocket.Conn
+	for _, conn := range connsCopy {
 		err := conn.WriteJSON(gin.H{
 			"response":   message,
 			"source":     "task",
@@ -127,9 +132,21 @@ func (s *Server) handleTaskReport(sessionID, taskName, taskID, message string) {
 			"session_id": sessionID,
 		})
 		if err != nil {
-			slog.Warn("Failed to send task report to websocket", "session_id", sessionID, "error", err)
+			slog.Warn("Failed to send task report to websocket, closing connection", "session_id", sessionID, "error", err)
+			conn.Close()
+		} else {
+			activeConns = append(activeConns, conn)
 		}
 	}
+
+	// Update the session map with active connections only
+	s.wsMu.Lock()
+	if len(activeConns) == 0 {
+		delete(s.wsSessions, sessionID)
+	} else {
+		s.wsSessions[sessionID] = activeConns
+	}
+	s.wsMu.Unlock()
 }
 
 func (s *Server) corsMiddleware() gin.HandlerFunc {
